@@ -1,5 +1,6 @@
 const db = require('../../db');
 const priceService = require('../price-table/service');
+const fcm = require('../../services/fcm');
 
 const CANAIS_VALIDOS = ['whatsapp', 'balcao', 'telefone', 'site', 'vendedor'];
 const STATUS_VALIDOS = [
@@ -68,12 +69,36 @@ async function atualizarStatus(id, novoStatus) {
   if (!STATUS_VALIDOS.includes(novoStatus))
     return { erro: [`Status inválido. Válidos: ${STATUS_VALIDOS.join(', ')}`] };
   const r = await db.query(
-    'UPDATE orders SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+    'UPDATE orders SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING id, numero_os, status, vendedor_id, produto, cliente_id',
     [novoStatus, id]
   );
   if (!r.rows[0]) return { erro: ['OS não encontrada'] };
+  const updatedOrder = r.rows[0];
   if (global.io) global.io.emit('order_status_update', { orderId: id, status: novoStatus });
-  return { order: r.rows[0] };
+  // FCM push to vendedor
+  if (updatedOrder.vendedor_id) {
+    const statusLabels = {
+      em_producao: 'Em produção 🖨️',
+      concluido: 'Concluído ✅',
+      entregue: 'Entregue 🎉',
+      cancelado: 'Cancelado ❌',
+      arte_aprovada_cliente: 'Arte aprovada pelo cliente 👍',
+      arte_reprovada_cliente: 'Arte reprovada pelo cliente ⚠️',
+    };
+    const label = statusLabels[novoStatus];
+    if (label) {
+      fcm.sendToUser(updatedOrder.vendedor_id, {
+        title: `OS #${updatedOrder.numero_os} — ${label}`,
+        body: updatedOrder.produto ? `Produto: ${updatedOrder.produto}` : 'Pedido atualizado',
+        data: {
+          order_id: updatedOrder.id,
+          numero_os: String(updatedOrder.numero_os),
+          status: novoStatus,
+        },
+      }).catch(() => {});
+    }
+  }
+  return { order: updatedOrder };
 }
 
 async function listar({ page = 1, limit = 20, status, cliente_id, origin_channel, vendedorId } = {}) {

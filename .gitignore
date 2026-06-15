@@ -1,0 +1,36 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
+acessoschatbotlkl.env
+*.pfx
+*.crt
+*.key
+*.p12
+
+# Uploads (arquivos de clientes — não versionar)
+uploads/
+
+# Logs
+*.log
+logs/
+
+# PM2
+.pm2/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build / temp
+dist/
+tmp/

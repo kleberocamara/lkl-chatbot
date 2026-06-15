@@ -14,6 +14,7 @@ const webhookRoutes = require('./webhook/routes');
 const apiRoutes = require('./dashboard/api');
 const db = require('./db');
 const { startScheduler } = require('./services/followup');
+const modulesRouter = require('./modules/index');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,6 +39,8 @@ app.use(cookieParser());
 // ── ROTAS ─────────────────────────────────────────────────────────────────────
 app.use('/webhook', webhookRoutes);
 app.use('/api', apiRoutes);
+app.use('/api/v2', rateLimit({ windowMs: 60000, max: 200 }));
+app.use('/api/v2', modulesRouter);
 
 // Endpoint de info do usuário logado
 app.get('/api/me', (req, res) => {

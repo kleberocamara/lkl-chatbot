@@ -15,6 +15,7 @@ const apiRoutes = require('./dashboard/api');
 const db = require('./db');
 const { startScheduler } = require('./services/followup');
 const modulesRouter = require('./modules/index');
+const fcm = require('./services/fcm');
 
 const app = express();
 const server = http.createServer(app);
@@ -86,6 +87,7 @@ async function start() {
   }
 
   startScheduler();
+  fcm.init();
 
   server.listen(PORT, () => {
     console.log(`🚀 LKL Chatbot rodando na porta ${PORT}`);

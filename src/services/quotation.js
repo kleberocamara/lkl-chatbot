@@ -1,7 +1,6 @@
 /**
  * Quotation service — calculates order budget.
  */
-const db = require('../db');
 
 /**
  * @param {object} orderDetails

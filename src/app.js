@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -38,7 +37,8 @@ app.get('/api/me', (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
   try {
-    res.json(jwt.verify(token, process.env.JWT_SECRET));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    res.json({ id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role });
   } catch {
     res.status(401).json({ error: 'Token inválido' });
   }

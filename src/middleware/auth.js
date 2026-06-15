@@ -31,4 +31,20 @@ function requireAuthApi(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin, requireAuthApi };
+function requireRole(...roles) {
+  return (req, res, next) => {
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Não autenticado' });
+    try {
+      req.user = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+      if (!roles.includes(req.user.role)) {
+        return res.status(403).json({ error: 'Acesso negado para este perfil' });
+      }
+      next();
+    } catch {
+      res.status(401).json({ error: 'Token inválido' });
+    }
+  };
+}
+
+module.exports = { requireAuth, requireAdmin, requireAuthApi, requireRole };

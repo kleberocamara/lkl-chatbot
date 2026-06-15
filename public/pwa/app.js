@@ -30,8 +30,12 @@ async function api(method, path, body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 401) { logout(); return; }
-  return res.json();
+  if (res.status === 401) { logout(); return null; }
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 async function initFCM() {

@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const fs = require('fs');
 const db = require('../db');
 
 let initialized = false;
@@ -11,7 +12,8 @@ function init() {
     return;
   }
   try {
-    admin.initializeApp({ credential: admin.credential.cert(require(path)) });
+    const serviceAccount = JSON.parse(fs.readFileSync(path, 'utf8'));
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     initialized = true;
   } catch (e) {
     console.error('[FCM] Falha ao inicializar firebase-admin:', e.message);

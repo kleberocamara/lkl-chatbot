@@ -110,9 +110,15 @@ app.use('/webhooks/c6bank', c6WebhookRouter)  ← NOVO
 - `clientes_lkl` — cadastro completo, vinculado a `contacts` via `phone`
 - `fornecedores` — 281 registros importados do SisGraph
 - `materiais` — insumos de produção
+- `funcionarios` — cadastro de funcionários da gráfica (RH/pessoal), vinculado opcionalmente a `users`
 - `price_table` — produtos × quantidade × acabamento × preço (construída com o dono)
 - `orders` — OS unificada (todos os canais)
 - `order_items` — itens de cada OS
+
+**Tabela `funcionarios` — campos:**
+`id` (UUID PK), `user_id` (FK → users, opcional), `nome`, `cpf` (único), `rg`, `data_nascimento`, `cargo`, `salario`, `data_admissao`, `telefone`, `celular`, `email`, `status` (ativo/inativo/afastado), `created_at`, `updated_at`
+
+Regra: `user_id` é opcional — funcionários sem acesso ao sistema ficam com `user_id = NULL`. O M9 (folha de pagamento) filtra `status = 'ativo'` para lançamentos mensais.
 
 **Sprint 2**
 - `order_stages` — pipeline 9 etapas por OS

@@ -321,7 +321,11 @@ async function criarPedido() {
   btn.disabled = false;
   btn.textContent = 'Criar Pedido';
 
-  if (!data || data.error) { showNovErr(data && data.error ? data.error : 'Erro ao criar pedido.'); return; }
+  if (!data || data.error || data.errors) {
+    const msg = (data && data.error) || (data && data.errors && data.errors[0]) || 'Erro ao criar pedido.';
+    showNovErr(msg);
+    return;
+  }
 
   const ok = document.getElementById('novo-ok');
   ok.textContent = `✅ OS #${data.numero_os} criada com sucesso!`;

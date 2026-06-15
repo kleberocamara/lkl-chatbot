@@ -1,4 +1,5 @@
-const admin = require('firebase-admin');
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
+const { getMessaging } = require('firebase-admin/messaging');
 const fs = require('fs');
 const db = require('../db');
 
@@ -13,7 +14,9 @@ function init() {
   }
   try {
     const serviceAccount = JSON.parse(fs.readFileSync(path, 'utf8'));
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    if (!getApps().length) {
+      initializeApp({ credential: cert(serviceAccount) });
+    }
     initialized = true;
   } catch (e) {
     console.error('[FCM] Falha ao inicializar firebase-admin:', e.message);
@@ -36,7 +39,8 @@ async function sendToUser(userId, { title, body, data = {} }) {
   };
 
   try {
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const messaging = getMessaging();
+    const response = await messaging.sendEachForMulticast(message);
     const invalid = [];
     response.responses.forEach((r, i) => {
       if (!r.success && r.error?.code === 'messaging/registration-token-not-registered') {

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1a237e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>LKL Gráfica — Login</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: linear-gradient(160deg, #1a237e 0%, #0d47a1 100%);
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 40px 28px 32px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.35);
+  }
+  .logo { text-align: center; margin-bottom: 32px; }
+  .logo img { width: 80px; height: 80px; object-fit: contain; }
+  .logo h1 { font-size: 22px; font-weight: 700; color: #1a237e; margin-top: 10px; }
+  .logo p { font-size: 13px; color: #888; margin-top: 4px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+  input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    font-size: 16px;
+    margin-bottom: 18px;
+    transition: border-color .2s;
+    outline: none;
+  }
+  input:focus { border-color: #1a237e; }
+  button {
+    width: 100%;
+    padding: 15px;
+    background: #1a237e;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+    margin-top: 4px;
+  }
+  button:active { transform: scale(.98); }
+  button:disabled { background: #9fa8da; cursor: not-allowed; }
+  .error {
+    background: #fce4ec;
+    color: #c62828;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .version { text-align: center; font-size: 11px; color: #bbb; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <img src="/logo.png" alt="LKL Gráfica" onerror="this.style.display='none'">
+    <h1>LKL Gráfica</h1>
+    <p>Sistema de Pedidos</p>
+  </div>
+  <div class="error" id="err"></div>
+  <label for="email">E-mail</label>
+  <input type="email" id="email" placeholder="seu@email.com" autocomplete="email" inputmode="email">
+  <label for="pass">Senha</label>
+  <input type="password" id="pass" placeholder="••••••••" autocomplete="current-password">
+  <button id="btn" onclick="doLogin()">Entrar</button>
+  <p class="version">LKL v1.0 · Sprint 1-C</p>
+</div>
+
+<script src="/js/firebase/firebase-app-compat.js"></script>
+<script src="/js/firebase/firebase-messaging-compat.js"></script>
+<script src="/pwa/app.js"></script>
+<script>
+  if (getToken()) window.location.href = '/pwa/pedidos.html';
+
+  async function doLogin() {
+    const email = document.getElementById('email').value.trim();
+    const pass = document.getElementById('pass').value;
+    const btn = document.getElementById('btn');
+    const err = document.getElementById('err');
+
+    if (!email || !pass) { showErr('Preencha e-mail e senha.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Entrando…';
+    err.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showErr(data.error || 'Credenciais inválidas.'); return; }
+
+      localStorage.setItem('lkl_token', data.token);
+      localStorage.setItem('lkl_user', JSON.stringify(data.user));
+
+      await initFCM();
+      window.location.href = '/pwa/pedidos.html';
+    } catch {
+      showErr('Sem conexão com o servidor.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+    }
+  }
+
+  function showErr(msg) {
+    const err = document.getElementById('err');
+    err.textContent = msg;
+    err.style.display = 'block';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+</script>
+</body>
+</html>

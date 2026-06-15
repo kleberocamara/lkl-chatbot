@@ -7,13 +7,16 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { page, limit, status, cliente_id, origin_channel } = req.query;
-    res.json(await service.listar({
+    const opts = {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       status,
       cliente_id,
       origin_channel,
-    }));
+    };
+    if (req.user.role === 'vendedor') opts.vendedorId = req.user.id;
+    const result = await service.listar(opts);
+    res.json({ data: result.orders, total: result.total, page: result.page, limit: result.limit });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 

@@ -14,7 +14,6 @@ async function criarOrder(dados, userId) {
     erros.push(`origin_channel deve ser: ${CANAIS_VALIDOS.join(', ')}`);
   if (!dados.produto) erros.push('produto é obrigatório');
   if (!dados.quantidade || dados.quantidade < 1) erros.push('quantidade deve ser maior que zero');
-  if (!dados.cliente_id) erros.push('cliente_id é obrigatório');
   if (erros.length > 0) return { erro: erros };
 
   let valor_orcamento = dados.valor_orcamento || null;
@@ -77,13 +76,14 @@ async function atualizarStatus(id, novoStatus) {
   return { order: r.rows[0] };
 }
 
-async function listar({ page = 1, limit = 20, status, cliente_id, origin_channel } = {}) {
+async function listar({ page = 1, limit = 20, status, cliente_id, origin_channel, vendedorId } = {}) {
   const offset = (page - 1) * limit;
   const params = [];
   let where = 'WHERE 1=1';
   if (status) { params.push(status); where += ` AND o.status = $${params.length}`; }
   if (cliente_id) { params.push(cliente_id); where += ` AND o.cliente_id = $${params.length}`; }
   if (origin_channel) { params.push(origin_channel); where += ` AND o.origin_channel = $${params.length}`; }
+  if (vendedorId) { params.push(vendedorId); where += ` AND o.vendedor_id = $${params.length}`; }
   const [rows, count] = await Promise.all([
     db.query(
       `SELECT o.*, c.nome as cliente_nome FROM orders o

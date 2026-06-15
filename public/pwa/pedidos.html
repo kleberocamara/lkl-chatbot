@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1a237e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>LKL — Pedidos</title>
+<link rel="manifest" href="/manifest.json">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f5f6fa; min-height: 100dvh; }
+
+  .header {
+    background: #1a237e;
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .header-title { font-size: 18px; font-weight: 600; }
+  .header-user { font-size: 12px; opacity: .8; margin-top: 2px; }
+  .logout-btn {
+    background: rgba(255,255,255,.15);
+    border: none;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 2px solid #e8e8e8;
+    position: sticky;
+    top: 57px;
+    z-index: 9;
+  }
+  .tab {
+    flex: 1;
+    padding: 14px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all .2s;
+  }
+  .tab.active { color: #1a237e; border-bottom-color: #1a237e; }
+
+  .content { padding: 16px; max-width: 600px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 13px 14px;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    font-size: 15px;
+    background: #fff;
+    outline: none;
+    transition: border-color .2s;
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: #1a237e; }
+  textarea { resize: vertical; min-height: 80px; }
+
+  .submit-btn {
+    width: 100%;
+    padding: 15px;
+    background: #1a237e;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .submit-btn:disabled { background: #9fa8da; }
+
+  .success-msg {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    display: none;
+  }
+  .error-msg {
+    background: #fce4ec;
+    color: #c62828;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    display: none;
+  }
+
+  .search-results {
+    background: #fff;
+    border: 2px solid #1a237e;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+    margin-top: -14px;
+  }
+  .search-result-item {
+    padding: 12px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+  }
+  .search-result-item:hover { background: #e8eaf6; }
+  .search-result-item .sub { font-size: 12px; color: #888; }
+
+  .order-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .order-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .order-os { font-weight: 700; color: #1a237e; font-size: 15px; }
+  .order-produto { font-size: 14px; color: #333; margin-top: 4px; }
+  .order-info { font-size: 12px; color: #888; margin-top: 6px; }
+
+  .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .badge-criada { background: #e3f2fd; color: #1565c0; }
+  .badge-em_producao { background: #fff3e0; color: #e65100; }
+  .badge-concluido { background: #e8f5e9; color: #2e7d32; }
+  .badge-entregue { background: #1b5e20; color: #fff; }
+  .badge-cancelado { background: #fce4ec; color: #c62828; }
+  .badge-default { background: #f5f5f5; color: #555; }
+
+  .empty { text-align: center; padding: 48px 20px; color: #aaa; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .loading { text-align: center; padding: 32px; color: #aaa; font-size: 14px; }
+
+  .checkbox-group { display: flex; align-items: center; gap: 10px; }
+  .checkbox-group input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
+  .checkbox-group label { margin: 0; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">LKL Gráfica</div>
+    <div class="header-user" id="header-user">—</div>
+  </div>
+  <button class="logout-btn" onclick="logout()">Sair</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-novo" onclick="switchTab('novo')">➕ Novo Pedido</div>
+  <div class="tab" id="tab-carteira" onclick="switchTab('carteira')">📋 Meus Pedidos</div>
+</div>
+
+<div class="content">
+
+  <!-- NOVO PEDIDO -->
+  <div id="panel-novo" class="panel active">
+    <div class="success-msg" id="novo-ok"></div>
+    <div class="error-msg" id="novo-err"></div>
+
+    <div class="form-group">
+      <label>Cliente (opcional)</label>
+      <input type="text" id="cliente-busca" placeholder="Buscar por nome ou celular…" oninput="buscarCliente()" autocomplete="off">
+      <div class="search-results" id="cliente-results"></div>
+      <input type="hidden" id="cliente-id">
+    </div>
+
+    <div class="form-group">
+      <label>Canal de origem *</label>
+      <select id="canal">
+        <option value="balcao">Balcão</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="telefone">Telefone</option>
+        <option value="site">Site</option>
+        <option value="vendedor">Vendedor</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Produto / Serviço *</label>
+      <input type="text" id="produto" placeholder="Ex: Cartão de visita 9x5cm">
+    </div>
+
+    <div class="form-group">
+      <label>Quantidade *</label>
+      <input type="number" id="quantidade" min="1" placeholder="1000" inputmode="numeric">
+    </div>
+
+    <div class="form-group">
+      <label>Acabamento</label>
+      <input type="text" id="acabamento" placeholder="Ex: Laminação fosca">
+    </div>
+
+    <div class="form-group">
+      <label>Material</label>
+      <input type="text" id="material" placeholder="Ex: Couché 300g">
+    </div>
+
+    <div class="form-group">
+      <div class="checkbox-group">
+        <input type="checkbox" id="tem-arte">
+        <label for="tem-arte">Cliente tem arte própria</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Observações</label>
+      <textarea id="obs" placeholder="Detalhes adicionais…"></textarea>
+    </div>
+
+    <button class="submit-btn" id="btn-novo" onclick="criarPedido()">Criar Pedido</button>
+  </div>
+
+  <!-- CARTEIRA -->
+  <div id="panel-carteira" class="panel">
+    <div class="loading" id="carteira-loading">Carregando…</div>
+    <div id="carteira-lista"></div>
+  </div>
+
+</div>
+
+<script src="/js/firebase/firebase-app-compat.js"></script>
+<script src="/js/firebase/firebase-messaging-compat.js"></script>
+<script src="/pwa/app.js"></script>
+<script>
+requireAuth();
+
+const user = getUser();
+if (user) document.getElementById('header-user').textContent = user.name;
+
+function switchTab(tab) {
+  ['novo','carteira'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'carteira') carregarPedidos();
+}
+
+// ── Busca de cliente ──────────────────────────────────────────────────────────
+let clienteTimer;
+async function buscarCliente() {
+  clearTimeout(clienteTimer);
+  const busca = document.getElementById('cliente-busca').value.trim();
+  document.getElementById('cliente-id').value = '';
+  const box = document.getElementById('cliente-results');
+  if (busca.length < 2) { box.style.display = 'none'; return; }
+  clienteTimer = setTimeout(async () => {
+    const data = await api('GET', `/api/v2/clientes?busca=${encodeURIComponent(busca)}&limit=8`);
+    if (!data || !data.data || !data.data.length) { box.style.display = 'none'; return; }
+    box.innerHTML = data.data.map(c =>
+      `<div class="search-result-item" onclick="selecionarCliente('${c.id}','${(c.nome || '').replace(/'/g, "\\'")}')">
+        <div>${c.nome || ''}</div>
+        <div class="sub">${c.celular || c.email || ''}</div>
+      </div>`
+    ).join('');
+    box.style.display = 'block';
+  }, 300);
+}
+
+function selecionarCliente(id, nome) {
+  document.getElementById('cliente-id').value = id;
+  document.getElementById('cliente-busca').value = nome;
+  document.getElementById('cliente-results').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.form-group')) {
+    document.getElementById('cliente-results').style.display = 'none';
+  }
+});
+
+// ── Criar Pedido ──────────────────────────────────────────────────────────────
+async function criarPedido() {
+  const produto = document.getElementById('produto').value.trim();
+  const quantidade = parseInt(document.getElementById('quantidade').value, 10);
+
+  if (!produto) { showNovErr('Informe o produto/serviço.'); return; }
+  if (!quantidade || quantidade < 1) { showNovErr('Informe a quantidade válida.'); return; }
+
+  const btn = document.getElementById('btn-novo');
+  btn.disabled = true;
+  btn.textContent = 'Criando…';
+
+  const body = {
+    origin_channel: document.getElementById('canal').value,
+    produto,
+    quantidade,
+    tem_arte: document.getElementById('tem-arte').checked,
+  };
+  const acabamento = document.getElementById('acabamento').value.trim();
+  const material = document.getElementById('material').value.trim();
+  const obs = document.getElementById('obs').value.trim();
+  const cid = document.getElementById('cliente-id').value;
+  if (acabamento) body.acabamento = acabamento;
+  if (material) body.material = material;
+  if (obs) body.observacoes = obs;
+  if (cid) body.cliente_id = cid;
+
+  const data = await api('POST', '/api/v2/orders', body);
+  btn.disabled = false;
+  btn.textContent = 'Criar Pedido';
+
+  if (!data || data.error) { showNovErr(data && data.error ? data.error : 'Erro ao criar pedido.'); return; }
+
+  const ok = document.getElementById('novo-ok');
+  ok.textContent = `✅ OS #${data.numero_os} criada com sucesso!`;
+  ok.style.display = 'block';
+  document.getElementById('novo-err').style.display = 'none';
+
+  ['produto','quantidade','acabamento','material','obs','cliente-busca','cliente-id'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('tem-arte').checked = false;
+  setTimeout(() => { ok.style.display = 'none'; }, 5000);
+}
+
+function showNovErr(msg) {
+  const el = document.getElementById('novo-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Carteira ──────────────────────────────────────────────────────────────────
+const STATUS_LABELS = {
+  criada: 'Criada',
+  gerando_arquivo_impressao: 'Gerando arte',
+  arte_enviada_cliente: 'Arte enviada',
+  arte_aprovada_cliente: 'Arte aprovada',
+  arte_reprovada_cliente: 'Arte reprovada',
+  em_producao: 'Em produção',
+  concluido: 'Concluído',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+};
+
+function badgeClass(status) {
+  const known = ['criada','em_producao','concluido','entregue','cancelado'];
+  return 'badge badge-' + (known.includes(status) ? status : 'default');
+}
+
+async function carregarPedidos() {
+  document.getElementById('carteira-loading').style.display = 'block';
+  document.getElementById('carteira-lista').innerHTML = '';
+  const data = await api('GET', '/api/v2/orders?limit=50');
+  document.getElementById('carteira-loading').style.display = 'none';
+  if (!data || !data.data || !data.data.length) {
+    document.getElementById('carteira-lista').innerHTML =
+      '<div class="empty"><div class="empty-icon">📋</div><div>Nenhum pedido ainda.</div></div>';
+    return;
+  }
+  document.getElementById('carteira-lista').innerHTML = data.data.map(o => `
+    <div class="order-card">
+      <div class="order-header">
+        <div>
+          <div class="order-os">OS #${o.numero_os}</div>
+          <div class="order-produto">${o.produto || '—'}</div>
+        </div>
+        <span class="${badgeClass(o.status)}">${STATUS_LABELS[o.status] || o.status}</span>
+      </div>
+      <div class="order-info">
+        ${o.quantidade ? `${o.quantidade} un` : ''}${o.cliente_nome ? ` · ${o.cliente_nome}` : ''}
+        · ${new Date(o.created_at).toLocaleDateString('pt-BR')}
+      </div>
+    </div>
+  `).join('');
+}
+
+initFCM().catch(() => {});
+</script>
+</body>
+</html>

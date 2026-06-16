@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entregas LKL</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+    #topbar {
+      background: #1a237e; color: #fff;
+      padding: 14px 16px 10px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    #topbar-left h1 { font-size: 1.2rem; font-weight: 700; }
+    #topbar-left p { font-size: 0.8rem; opacity: 0.8; margin-top: 2px; }
+    #btn-sair {
+      background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+      white-space: nowrap; margin-top: 2px;
+    }
+    #btn-sair:hover { background: rgba(255,255,255,0.25); }
+    #main { padding: 16px; max-width: 600px; margin: 0 auto; }
+    #empty-state {
+      display: none; text-align: center; padding: 48px 16px; color: #666;
+    }
+    #empty-state p { font-size: 1.1rem; margin-bottom: 16px; }
+    #btn-refresh {
+      background: #1a237e; color: #fff; border: none; padding: 10px 20px;
+      border-radius: 8px; cursor: pointer; font-size: 0.95rem;
+    }
+    .os-card {
+      background: #fff; border-radius: 12px; margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1); overflow: hidden; position: relative;
+    }
+    .os-card-header {
+      padding: 14px 14px 0;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .os-num { font-size: 1rem; font-weight: 700; color: #1a237e; }
+    .orc-num { font-size: 0.82rem; color: #888; }
+    .os-card-body { padding: 8px 14px 14px; }
+    .os-descricao { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .os-meta { font-size: 0.85rem; color: #555; margin-bottom: 2px; }
+    .btn-registrar {
+      margin-top: 10px; background: #1a237e; color: #fff; border: none;
+      padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; width: 100%;
+    }
+    .btn-registrar:hover { background: #283593; }
+    .form-entrega { display: none; margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; }
+    .form-entrega.open { display: block; }
+    .form-entrega label { display: block; font-size: 0.85rem; font-weight: 600; color: #444; margin-bottom: 4px; }
+    .form-entrega input[type=text] {
+      width: 100%; padding: 9px 10px; border: 1px solid #ccc; border-radius: 8px;
+      font-size: 0.95rem; margin-bottom: 10px;
+    }
+    .form-entrega input[type=text]:focus { outline: none; border-color: #1a237e; }
+    .file-input-wrap { margin-bottom: 10px; }
+    .file-input-wrap input[type=file] { font-size: 0.9rem; width: 100%; }
+    .foto-preview { display: none; margin-top: 8px; }
+    .foto-preview img { max-height: 120px; border-radius: 6px; border: 1px solid #ddd; display: block; }
+    .btn-confirmar {
+      width: 100%; padding: 10px; background: #2e7d32; color: #fff; border: none;
+      border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-confirmar:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-confirmar:not(:disabled):hover { background: #1b5e20; }
+    .entregue-overlay {
+      display: none; position: absolute; inset: 0;
+      background: rgba(46,125,50,0.92); color: #fff;
+      align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 700; border-radius: 12px;
+    }
+    .entregue-overlay.show { display: flex; }
+    /* Toast */
+    #toast-container {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; display: flex; flex-direction: column; gap: 8px; width: 90%; max-width: 380px;
+    }
+    .toast {
+      background: #333; color: #fff; padding: 12px 16px; border-radius: 8px;
+      font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      animation: fadeIn 0.2s ease;
+    }
+    .toast.error { background: #c62828; }
+    .toast.success { background: #2e7d32; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div id="topbar-left">
+      <h1>🚚 Entregas LKL</h1>
+      <p>OSs prontas para entrega</p>
+    </div>
+    <button id="btn-sair" onclick="logout()">Sair</button>
+  </div>
+
+  <div id="main">
+    <div id="os-list"></div>
+    <div id="empty-state">
+      <p>✅ Nenhuma entrega pendente.</p>
+      <button id="btn-refresh" onclick="loadOSs()">🔄 Atualizar</button>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="/pwa/app.js"></script>
+  <script>
+    requireAuth();
+
+    (function checkRole() {
+      const user = getUser();
+      if (!user || !['admin', 'motorista'].includes(user.role)) {
+        window.location.href = '/pwa/login.html';
+      }
+    })();
+
+    let refreshTimer = null;
+
+    async function loadOSs() {
+      const token = getToken();
+      try {
+        const resp = await fetch('/api/v2/os?status=pronto&limit=100', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!resp.ok) { showToast('Erro ao carregar OSs', 'error'); return; }
+        const json = await resp.json();
+        renderOSs(json.data || []);
+      } catch (e) {
+        showToast('Erro de conexão', 'error');
+      }
+    }
+
+    function renderOSs(list) {
+      const container = document.getElementById('os-list');
+      const emptyState = document.getElementById('empty-state');
+      container.innerHTML = '';
+      if (!list.length) {
+        emptyState.style.display = 'block';
+        return;
+      }
+      emptyState.style.display = 'none';
+      list.forEach(os => {
+        container.appendChild(buildCard(os));
+      });
+    }
+
+    function buildCard(os) {
+      const card = document.createElement('div');
+      card.className = 'os-card';
+      card.dataset.id = os.id;
+
+      card.innerHTML = `
+        <div class="os-card-header">
+          <span class="os-num">OS #${os.numero_os || os.id}</span>
+          <span class="orc-num">ORC #${os.numero_orcamento || '—'}</span>
+        </div>
+        <div class="os-card-body">
+          <div class="os-descricao">${escHtml(os.item_descricao || '—')}</div>
+          <div class="os-meta">Cliente: <strong>${escHtml(os.cliente_nome || '—')}</strong></div>
+          <div class="os-meta">Qtde: <strong>${os.quantidade || '—'}</strong></div>
+          <button class="btn-registrar" onclick="toggleForm(this, '${os.id}')">📦 Registrar Entrega</button>
+          <div class="form-entrega" id="form-${os.id}">
+            <label>Nome de quem recebeu *</label>
+            <input type="text" id="nome-${os.id}" placeholder="Nome completo" oninput="checkFields('${os.id}')" />
+            <div class="file-input-wrap">
+              <label>📷 Foto do Documento *</label>
+              <input type="file" id="foto-${os.id}" accept="image/*" capture="environment"
+                onchange="previewFoto('${os.id}', this)" />
+            </div>
+            <div class="foto-preview" id="preview-${os.id}">
+              <img id="preview-img-${os.id}" src="" alt="Preview" />
+            </div>
+            <button class="btn-confirmar" id="btn-confirmar-${os.id}" disabled
+              onclick="confirmarEntrega('${os.id}')">✅ Confirmar Entrega</button>
+          </div>
+        </div>
+        <div class="entregue-overlay" id="overlay-${os.id}">✅ Entregue!</div>
+      `;
+      return card;
+    }
+
+    function toggleForm(btn, osId) {
+      // Close all other open forms
+      document.querySelectorAll('.form-entrega.open').forEach(f => {
+        if (f.id !== 'form-' + osId) f.classList.remove('open');
+      });
+      const form = document.getElementById('form-' + osId);
+      form.classList.toggle('open');
+    }
+
+    function previewFoto(osId, input) {
+      const previewWrap = document.getElementById('preview-' + osId);
+      const previewImg = document.getElementById('preview-img-' + osId);
+      if (input.files && input.files[0]) {
+        previewImg.src = URL.createObjectURL(input.files[0]);
+        previewWrap.style.display = 'block';
+      } else {
+        previewWrap.style.display = 'none';
+      }
+      checkFields(osId);
+    }
+
+    function checkFields(osId) {
+      const nome = document.getElementById('nome-' + osId);
+      const foto = document.getElementById('foto-' + osId);
+      const btn = document.getElementById('btn-confirmar-' + osId);
+      btn.disabled = !(nome && nome.value.trim() && foto && foto.files && foto.files[0]);
+    }
+
+    async function confirmarEntrega(osId) {
+      const nome = document.getElementById('nome-' + osId).value.trim();
+      const fotoInput = document.getElementById('foto-' + osId);
+      const fotoFile = fotoInput.files[0];
+      if (!nome || !fotoFile) { showToast('Preencha todos os campos', 'error'); return; }
+
+      const btn = document.getElementById('btn-confirmar-' + osId);
+      btn.textContent = 'Enviando...';
+      btn.disabled = true;
+
+      const formData = new FormData();
+      formData.append('nome_recebedor', nome);
+      formData.append('foto_documento', fotoFile);
+
+      try {
+        const resp = await fetch('/api/v2/os/' + osId + '/entregar', {
+          method: 'PATCH',
+          headers: { 'Authorization': 'Bearer ' + getToken() },
+          body: formData,
+        });
+        if (resp.ok) {
+          const overlay = document.getElementById('overlay-' + osId);
+          overlay.classList.add('show');
+          showToast('Entrega confirmada!', 'success');
+          setTimeout(() => {
+            const card = document.querySelector('.os-card[data-id="' + osId + '"]');
+            if (card) card.remove();
+            checkEmpty();
+          }, 2000);
+        } else {
+          let msg = 'Erro ao confirmar entrega';
+          try { const j = await resp.json(); msg = j.error || j.message || msg; } catch(e) {}
+          showToast(msg, 'error');
+          btn.textContent = '✅ Confirmar Entrega';
+          btn.disabled = false;
+        }
+      } catch (e) {
+        showToast('Erro de conexão', 'error');
+        btn.textContent = '✅ Confirmar Entrega';
+        btn.disabled = false;
+      }
+    }
+
+    function checkEmpty() {
+      const container = document.getElementById('os-list');
+      if (!container.children.length) {
+        document.getElementById('empty-state').style.display = 'block';
+      }
+    }
+
+    function showToast(msg, type) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (type ? ' ' + type : '');
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Init
+    loadOSs();
+    refreshTimer = setInterval(loadOSs, 60000);
+  </script>
+</body>
+</html>

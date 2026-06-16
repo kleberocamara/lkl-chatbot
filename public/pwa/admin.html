@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Admin — LKL Gráfica</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+.topbar { background: #1a237e; color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar h1 { font-size: 18px; font-weight: 600; }
+.btn-sair { background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.btn-sair:hover { background: rgba(255,255,255,0.3); }
+.tabs { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; }
+.tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+.tab.active { color: #1a237e; border-bottom-color: #1a237e; }
+.tab-content { display: none; padding: 16px; }
+.tab-content.active { display: block; }
+.card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.card-title { font-weight: 600; font-size: 15px; color: #1a237e; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-rascunho { background: #fff9c4; color: #f57f17; }
+.badge-enviado { background: #e3f2fd; color: #0277bd; }
+.badge-aprovado { background: #e8f5e9; color: #2e7d32; }
+.badge-cancelado { background: #fce4ec; color: #c62828; }
+.badge-aguardando { background: #f5f5f5; color: #555; }
+.badge-arte_final { background: #e8eaf6; color: #3949ab; }
+.badge-impressao { background: #e3f2fd; color: #0277bd; }
+.badge-acabamento { background: #fff3e0; color: #e65100; }
+.badge-embalagem { background: #f3e5f5; color: #6a1b9a; }
+.badge-pronto { background: #e8f5e9; color: #2e7d32; }
+.badge-entregue { background: #1a237e; color: #fff; }
+.card-sub { font-size: 13px; color: #666; margin-bottom: 10px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.btn { padding: 7px 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.btn-primary { background: #1a237e; color: #fff; }
+.btn-primary:hover { background: #283593; }
+.btn-secondary { background: #e8eaf6; color: #1a237e; }
+.btn-secondary:hover { background: #c5cae9; }
+.btn-success { background: #2e7d32; color: #fff; }
+.btn-success:hover { background: #388e3c; }
+.btn-outline { background: #fff; color: #1a237e; border: 1px solid #1a237e; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.os-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.os-row select { flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; }
+.loading { text-align: center; padding: 40px; color: #999; font-size: 14px; }
+.empty { text-align: center; padding: 40px; color: #999; font-size: 14px; }
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; overflow-y: auto; }
+.modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; padding: 20px; }
+.modal { background: #fff; border-radius: 12px; width: 100%; max-width: 500px; margin: auto; }
+.modal-header { background: #1a237e; color: #fff; padding: 16px; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: space-between; }
+.modal-header h2 { font-size: 16px; }
+.modal-close { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }
+.modal-body { padding: 16px; }
+.item-block { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.item-desc { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
+.item-qty { font-size: 12px; color: #888; margin-bottom: 10px; }
+.price-row { display: flex; gap: 8px; }
+.price-field { flex: 1; }
+.price-field label { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
+.price-field input { width: 100%; padding: 7px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+.modal-footer { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; justify-content: flex-end; }
+/* Toast */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; max-width: 90vw; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>⚙️ Painel Admin</h1>
+  <button class="btn-sair" onclick="logout()">Sair</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('orcamentos')">Orçamentos</div>
+  <div class="tab" onclick="switchTab('os')">Ordens de Serviço</div>
+</div>
+
+<div id="tab-orcamentos" class="tab-content active">
+  <div id="orc-list"><div class="loading">Carregando orçamentos...</div></div>
+</div>
+
+<div id="tab-os" class="tab-content">
+  <div id="os-list"><div class="loading">Carregando ordens...</div></div>
+</div>
+
+<!-- Pricing Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Precificar</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarPrecos()">Salvar Preços</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/pwa/app.js"></script>
+<script>
+requireAuth();
+
+(function checkAdmin() {
+  const user = getUser();
+  if (!user || user.role !== 'admin') {
+    window.location.href = '/pwa/login.html';
+  }
+})();
+
+let currentOrcId = null;
+let currentOrcItems = [];
+
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function statusBadge(status) {
+  const labels = {
+    rascunho: 'Rascunho', enviado: 'Enviado', aprovado: 'Aprovado', cancelado: 'Cancelado',
+    aguardando: 'Aguardando', arte_final: 'Arte Final', impressao: 'Impressão',
+    acabamento: 'Acabamento', embalagem: 'Embalagem', pronto: 'Pronto',
+    entregue: 'Entregue'
+  };
+  const cls = 'badge badge-' + (status || 'aguardando');
+  return `<span class="${cls}">${labels[status] || status}</span>`;
+}
+
+function fmtDate(dt) {
+  if (!dt) return '';
+  const d = new Date(dt);
+  return d.toLocaleDateString('pt-BR');
+}
+
+// ---------- ORÇAMENTOS ----------
+
+async function loadOrcamentos() {
+  const el = document.getElementById('orc-list');
+  el.innerHTML = '<div class="loading">Carregando orçamentos...</div>';
+  try {
+    const res = await api('/api/orcamentos?limit=100');
+    const list = res.data || [];
+    if (!list.length) { el.innerHTML = '<div class="empty">Nenhum orçamento encontrado.</div>'; return; }
+    el.innerHTML = list.map(o => renderOrcCard(o)).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="empty">Erro ao carregar orçamentos.</div>';
+  }
+}
+
+function renderOrcCard(o) {
+  const enviarBtn = o.status === 'rascunho'
+    ? `<button class="btn btn-secondary" onclick="enviarOrc(${o.id}, '${o.numero}')">📤 Enviar</button>` : '';
+  const aprovarBtn = o.status === 'enviado'
+    ? `<button class="btn btn-success" onclick="aprovarOrc(${o.id}, '${o.numero}')">✅ Aprovar</button>` : '';
+  return `
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">ORC #${o.numero || o.id}</span>
+      ${statusBadge(o.status)}
+    </div>
+    <div class="card-sub">${o.cliente_nome || '—'} &middot; ${fmtDate(o.created_at)}</div>
+    <div class="card-actions">
+      <button class="btn btn-primary" onclick="abrirPrecificar(${o.id}, '${o.numero || o.id}')">💰 Precificar</button>
+      ${enviarBtn}
+      ${aprovarBtn}
+      <a href="/api/orcamentos/${o.id}/pdf" target="_blank" class="btn btn-outline">📄 PDF</a>
+    </div>
+  </div>`;
+}
+
+async function abrirPrecificar(id, numero) {
+  currentOrcId = id;
+  document.getElementById('modal-title').textContent = `Precificar ORC #${numero}`;
+  document.getElementById('modal-body').innerHTML = '<div class="loading">Carregando itens...</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+  try {
+    const orc = await api(`/api/orcamentos/${id}`);
+    currentOrcItems = orc.itens || [];
+    renderModalItems();
+  } catch (e) {
+    document.getElementById('modal-body').innerHTML = '<div class="empty">Erro ao carregar itens.</div>';
+  }
+}
+
+function renderModalItems() {
+  if (!currentOrcItems.length) {
+    document.getElementById('modal-body').innerHTML = '<div class="empty">Nenhum item encontrado.</div>';
+    return;
+  }
+  document.getElementById('modal-body').innerHTML = currentOrcItems.map((item, idx) => `
+    <div class="item-block">
+      <div class="item-desc">${item.descricao || item.codigo || 'Item'}</div>
+      <div class="item-qty">Qtde: ${item.quantidade}</div>
+      <div class="price-row">
+        <div class="price-field">
+          <label>Valor Unitário (R$)</label>
+          <input type="number" step="0.01" min="0" id="unit-${idx}"
+            value="${item.valor_unitario || ''}"
+            onchange="calcTotal(${idx})"
+            oninput="calcTotal(${idx})">
+        </div>
+        <div class="price-field">
+          <label>Valor Total (R$)</label>
+          <input type="number" step="0.01" min="0" id="total-${idx}"
+            value="${item.valor_total || ''}">
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function calcTotal(idx) {
+  const unitInput = document.getElementById(`unit-${idx}`);
+  const totalInput = document.getElementById(`total-${idx}`);
+  const qty = currentOrcItems[idx].quantidade || 1;
+  const unit = parseFloat(unitInput.value) || 0;
+  totalInput.value = (unit * qty).toFixed(2);
+}
+
+async function salvarPrecos() {
+  const itens = currentOrcItems.map((item, idx) => ({
+    id: item.id,
+    valor_unitario: parseFloat(document.getElementById(`unit-${idx}`).value) || 0,
+    valor_total: parseFloat(document.getElementById(`total-${idx}`).value) || 0
+  }));
+  try {
+    await api(`/api/orcamentos/${currentOrcId}/precificar`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens })
+    });
+    closeModal();
+    showToast('💰 Preços salvos com sucesso!');
+    loadOrcamentos();
+  } catch (e) {
+    showToast('Erro ao salvar preços.');
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  currentOrcId = null;
+  currentOrcItems = [];
+}
+
+async function enviarOrc(id, numero) {
+  if (!confirm('Marcar como enviado ao cliente?')) return;
+  try {
+    await api(`/api/orcamentos/${id}/enviar`, { method: 'PATCH' });
+    showToast('📤 Orçamento enviado!');
+    loadOrcamentos();
+  } catch (e) {
+    showToast('Erro ao enviar orçamento.');
+  }
+}
+
+async function aprovarOrc(id, numero) {
+  if (!confirm('Registrar aprovação do cliente?')) return;
+  const canal = prompt('Canal de aprovação (whatsapp / email / sistema):', 'whatsapp');
+  if (!canal) return;
+  try {
+    const res = await api(`/api/orcamentos/${id}/aprovar`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aprovado_via: canal })
+    });
+    const count = res.os_count || res.os?.length || '';
+    showToast(`✅ Aprovado!${count ? ' ' + count + ' OS(s) gerada(s)' : ''}`);
+    loadOrcamentos();
+  } catch (e) {
+    showToast('Erro ao aprovar orçamento.');
+  }
+}
+
+// ---------- ORDENS DE SERVIÇO ----------
+
+const OS_STATUSES = ['aguardando','arte_final','impressao','acabamento','embalagem','pronto','entregue','cancelado'];
+const OS_LABELS = {
+  aguardando: 'Aguardando', arte_final: 'Arte Final', impressao: 'Impressão',
+  acabamento: 'Acabamento', embalagem: 'Embalagem', pronto: 'Pronto',
+  entregue: 'Entregue', cancelado: 'Cancelado'
+};
+
+async function loadOS() {
+  const el = document.getElementById('os-list');
+  el.innerHTML = '<div class="loading">Carregando ordens...</div>';
+  try {
+    const res = await api('/api/os?limit=100');
+    const list = res.data || [];
+    if (!list.length) { el.innerHTML = '<div class="empty">Nenhuma OS encontrada.</div>'; return; }
+    el.innerHTML = list.map(os => renderOSCard(os)).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="empty">Erro ao carregar ordens.</div>';
+  }
+}
+
+function renderOSCard(os) {
+  const opts = OS_STATUSES.map(s =>
+    `<option value="${s}"${os.status === s ? ' selected' : ''}>${OS_LABELS[s]}</option>`
+  ).join('');
+  return `
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">OS #${os.numero_os || os.id}</span>
+      ${statusBadge(os.status)}
+    </div>
+    <div class="card-sub">ORC #${os.numero_orcamento || '—'} &middot; ${os.cliente_nome || '—'}</div>
+    <div class="card-sub">${os.item_descricao || '—'} &middot; Qtde: ${os.quantidade || '—'}</div>
+    <div class="os-row">
+      <select id="os-status-${os.id}">${opts}</select>
+      <button class="btn btn-primary btn-sm" onclick="atualizarOS(${os.id})">Atualizar</button>
+    </div>
+  </div>`;
+}
+
+async function atualizarOS(id) {
+  const status = document.getElementById(`os-status-${id}`).value;
+  try {
+    await api(`/api/os/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    showToast('✅ Status atualizado!');
+    loadOS();
+  } catch (e) {
+    showToast('Erro ao atualizar status.');
+  }
+}
+
+// ---------- TABS ----------
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && name === 'orcamentos') || (i === 1 && name === 'os'));
+  });
+  document.getElementById('tab-orcamentos').classList.toggle('active', name === 'orcamentos');
+  document.getElementById('tab-os').classList.toggle('active', name === 'os');
+  if (name === 'orcamentos') loadOrcamentos();
+  if (name === 'os') loadOS();
+}
+
+// Init
+loadOrcamentos();
+</script>
+</body>
+</html>

@@ -20,6 +20,21 @@ const upload = multer({
   },
 });
 
+const uploadArtes = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, '../../../public/uploads/artes'),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Apenas imagens são aceitas'));
+  },
+});
+
 const router = express.Router();
 
 // GET / — list OSs (any authenticated user)
@@ -57,6 +72,23 @@ router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'analy
     const { status, responsavel_id } = req.body;
     if (!status) return res.status(400).json({ errors: ['status é obrigatório'] });
     const result = await service.atualizarStatus(req.params.id, status, responsavel_id);
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrada'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /:id/enviar-arte — atendente/admin envia imagem da arte ao cliente via WhatsApp
+router.patch('/:id/enviar-arte', requireRole('admin', 'atendente', 'analyst'), uploadArtes.single('arte'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ errors: ['Arquivo de arte é obrigatório'] });
+    const arquivo_url = `/uploads/artes/${req.file.filename}`;
+    const result = await service.enviarArte(req.params.id, { arquivo_url });
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrada'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });

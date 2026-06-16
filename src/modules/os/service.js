@@ -1,7 +1,92 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
+const whatsapp = require('../../services/whatsapp');
 
-const STATUS_VALIDOS = ['aguardando', 'arte_final', 'impressao', 'acabamento', 'embalagem', 'pronto', 'entregue', 'cancelado'];
+const STATUS_VALIDOS = ['aguardando', 'arte_final', 'aguardando_aprovacao_arte', 'impressao', 'acabamento', 'embalagem', 'pronto', 'entregue', 'cancelado'];
+
+const APROVACAO_KEYWORDS = ['aprovado', 'aprovada', 'aprovo', 'ok', 'sim', 'pode', 'confirmo', 'certo', 'perfeito', 'ótimo', 'otimo', 'aceito', 'gostei', 'ficou bom', 'ficou ótimo'];
+
+async function enviarArte(id, { arquivo_url }) {
+  if (!arquivo_url) return { erro: ['arquivo_url é obrigatório'] };
+
+  const existing = await db.query(
+    `SELECT os.*, c.celular AS cliente_celular, c.nome AS cliente_nome,
+            o.numero AS numero_orcamento
+     FROM ordens_servico os
+     LEFT JOIN orcamentos o ON o.id = os.orcamento_id
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE os.id = $1`,
+    [id]
+  );
+  if (!existing.rows[0]) return { erro: ['OS não encontrada'] };
+  const os = existing.rows[0];
+  if (os.status !== 'arte_final') return { erro: ['OS precisa estar no status arte_final para enviar arte'] };
+  if (!os.cliente_celular) return { erro: ['Cliente sem celular cadastrado'] };
+
+  const publicUrl = `${process.env.BASE_URL}/uploads/artes/${arquivo_url.split('/').pop()}`;
+
+  await db.query(
+    `UPDATE ordens_servico
+     SET status='aguardando_aprovacao_arte', arte_arquivo_url=$1, arte_enviada_em=NOW(), updated_at=NOW()
+     WHERE id=$2`,
+    [arquivo_url, id]
+  );
+
+  // Envia imagem via WhatsApp (fire-and-forget)
+  const msg = `Olá! Segue a arte para aprovação do pedido *ORC #${os.numero_orcamento}* (OS #${os.numero_os}).\n\nResponda *APROVADO* para confirmar ou envie suas alterações.`;
+  whatsapp.sendImage(os.cliente_celular, publicUrl, msg).catch(e =>
+    console.warn('[WA-ARTE] Falha ao enviar imagem:', e.message)
+  );
+
+  return { os: { ...os, status: 'aguardando_aprovacao_arte', arte_arquivo_url: arquivo_url } };
+}
+
+async function processarRespostaArte(phone, mensagem) {
+  const celular = phone.replace(/\D/g, '');
+  const osPendente = await db.query(
+    `SELECT os.id, os.numero_os, os.orcamento_id, o.numero AS numero_orcamento
+     FROM ordens_servico os
+     LEFT JOIN orcamentos o ON o.id = os.orcamento_id
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE os.status = 'aguardando_aprovacao_arte'
+       AND (c.celular LIKE $1 OR c.celular LIKE $2)
+     ORDER BY os.arte_enviada_em DESC
+     LIMIT 1`,
+    [`%${celular.slice(-9)}`, `%${celular}`]
+  );
+  if (!osPendente.rows[0]) return null;
+
+  const os = osPendente.rows[0];
+  const texto = mensagem.trim().toLowerCase();
+  const aprovado = APROVACAO_KEYWORDS.some(kw => texto.includes(kw));
+
+  if (aprovado) {
+    await db.query(
+      `UPDATE ordens_servico
+       SET status='impressao', arte_aprovada_em=NOW(), data_inicio=COALESCE(data_inicio, NOW()), updated_at=NOW()
+       WHERE id=$1`,
+      [os.id]
+    );
+    // FCM ao vendedor
+    const orcR = await db.query('SELECT vendedor_id FROM orcamentos WHERE id=$1', [os.orcamento_id]);
+    if (orcR.rows[0]?.vendedor_id) {
+      fcm.sendToUser(orcR.rows[0].vendedor_id, {
+        title: `ORC #${os.numero_orcamento} — Arte aprovada ✅`,
+        body: `OS #${os.numero_os} seguiu para impressão`,
+        data: { os_id: os.id, status: 'impressao' },
+      }).catch(() => {});
+    }
+    return { aprovado: true, os_id: os.id, numero_os: os.numero_os, resposta: `Arte aprovada! ✅ Seu pedido OS #${os.numero_os} seguiu para impressão. Entraremos em contato quando estiver pronto. 🖨️` };
+  } else {
+    await db.query(
+      `UPDATE ordens_servico
+       SET status='arte_final', arte_aprovacao_comentario=$1, updated_at=NOW()
+       WHERE id=$2`,
+      [mensagem.trim(), os.id]
+    );
+    return { aprovado: false, os_id: os.id, numero_os: os.numero_os, resposta: `Anotado! ✏️ Nosso time de arte vai realizar as alterações e enviará uma nova versão em breve.` };
+  }
+}
 
 async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
   const offset = (page - 1) * limit;
@@ -161,4 +246,4 @@ async function entregar(id, { nome_recebedor, foto_url }) {
   return { os };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar };
+module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte };

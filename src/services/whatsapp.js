@@ -90,4 +90,20 @@ async function downloadMedia(mediaId, originalFilename) {
   return `/api/file/${filename}`;
 }
 
-module.exports = { sendMessage, sendTemplate, markAsRead, getMediaUrl, downloadMedia };
+async function sendImage(to, imageUrl, caption) {
+  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  await axios.post(url, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'image',
+    image: { link: imageUrl, caption: caption || '' },
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+module.exports = { sendMessage, sendImage, sendTemplate, markAsRead, getMediaUrl, downloadMedia };

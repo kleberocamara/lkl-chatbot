@@ -24,22 +24,39 @@ function getAgent() {
   return _agent;
 }
 
+// Error sanitization wrapper
+async function c6Request(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err.response?.data?.mensagem || err.response?.data?.message || err.message;
+    throw new Error(`C6 Bank: ${msg}`);
+  }
+}
+
 // Token cache — válido 55 minutos (C6 expira em 60)
 let _tokenCache = { token: null, expiresAt: 0 };
+let _inflight = null;
 
 async function getAccessToken() {
   if (_tokenCache.token && Date.now() < _tokenCache.expiresAt) {
     return _tokenCache.token;
   }
+  if (_inflight) return _inflight;
+  _inflight = _fetchToken().finally(() => { _inflight = null; });
+  return _inflight;
+}
+
+async function _fetchToken() {
   const params = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
   });
-  const res = await axios.post(`${BASE_URL}/v1/token`, params.toString(), {
+  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/token`, params.toString(), {
     httpsAgent: getAgent(),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+  }));
   const { access_token, expires_in } = res.data;
   _tokenCache = {
     token: access_token,
@@ -75,7 +92,7 @@ function vencimentoPadrao() {
 async function emitirBoleto({ seuNumero, nomeSacado, cpfCnpjSacado, valor, dataVencimento }) {
   const token = await getAccessToken();
   const vencimento = dataVencimento || vencimentoPadrao();
-  const res = await axios.post(`${BASE_URL}/v1/boleto`, {
+  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/boleto`, {
     seuNumero,
     nomeSacado,
     cpfCnpjSacado: cpfCnpjSacado.replace(/\D/g, ''),
@@ -86,7 +103,7 @@ async function emitirBoleto({ seuNumero, nomeSacado, cpfCnpjSacado, valor, dataV
   }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
-  });
+  }));
   const d = res.data;
   return {
     boletoId: d.boletoId || d.id,
@@ -107,13 +124,14 @@ async function emitirBoleto({ seuNumero, nomeSacado, cpfCnpjSacado, valor, dataV
  * @returns {Object} { txid, pixCopiaECola, qrCodeBase64 }
  */
 async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, solicitacao }) {
+  if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
   const token = await getAccessToken();
   const cpfCnpj = cpfCnpjDevedor.replace(/\D/g, '');
   const devedor = cpfCnpj.length === 11
     ? { cpf: cpfCnpj, nome: nomeDevedor }
     : { cnpj: cpfCnpj, nome: nomeDevedor };
 
-  const res = await axios.put(`${BASE_URL}/v2/cob/${txid}`, {
+  const res = await c6Request(() => axios.put(`${BASE_URL}/v2/cob/${txid}`, {
     calendario: { expiracao: 86400 },
     devedor,
     valor: { original: valor.toFixed(2) },
@@ -122,7 +140,7 @@ async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, soli
   }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
-  });
+  }));
   const d = res.data;
   return {
     txid: d.txid,
@@ -136,11 +154,12 @@ async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, soli
  * @param {string} webhookUrl - URL pública do endpoint
  */
 async function registrarWebhookPix(webhookUrl) {
+  if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
   const token = await getAccessToken();
-  await axios.put(`${BASE_URL}/v2/webhook/${PIX_KEY}`, { webhookUrl }, {
+  await c6Request(() => axios.put(`${BASE_URL}/v2/webhook/${PIX_KEY}`, { webhookUrl }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
-  });
+  }));
 }
 
-module.exports = { getAccessToken, emitirBoleto, criarPixCobranca, registrarWebhookPix };
+module.exports = { emitirBoleto, criarPixCobranca, registrarWebhookPix };

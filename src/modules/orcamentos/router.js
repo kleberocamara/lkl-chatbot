@@ -150,4 +150,44 @@ router.get('/:id/pdf', async (req, res) => {
   }
 });
 
+// POST /:id/cobrar — admin gera cobrança (boleto ou pix)
+router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
+  try {
+    const { tipo } = req.body || {};
+    if (!tipo) return res.status(400).json({ errors: ['tipo é obrigatório (boleto ou pix)'] });
+    const result = await service.cobrar(req.params.id, tipo);
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrado'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+
+    // Envia dados de pagamento ao cliente via WhatsApp (fire-and-forget)
+    service.buscarPorId(req.params.id).then(orc => {
+      if (!orc?.cliente_celular) return;
+      let msg;
+      if (result.tipo === 'boleto') {
+        msg = `Olá! Segue o boleto referente ao *ORC #${orc.numero}* — LKL Gráfica.\n\n` +
+              `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n` +
+              `📅 *Vencimento:* ${new Date(result.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
+              `*Linha digitável:*\n${result.linhaDigitavel}\n\n` +
+              (result.pdfUrl ? `PDF: ${result.pdfUrl}\n\n` : '') +
+              `Em caso de dúvidas, entre em contato conosco. Obrigado! 😊`;
+      } else {
+        msg = `Olá! Segue a cobrança PIX referente ao *ORC #${orc.numero}* — LKL Gráfica.\n\n` +
+              `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n\n` +
+              `*PIX Copia e Cola:*\n${result.pixCopiaECola}\n\n` +
+              `Cole o código no app do seu banco para pagar. Obrigado! 😊`;
+      }
+      whatsapp.sendMessage(orc.cliente_celular, msg).catch(e =>
+        console.warn('[WA-COBRAR] Falha:', e.message)
+      );
+    }).catch(() => {});
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

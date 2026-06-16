@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireRole } = require('../../middleware/auth');
 const service = require('./service');
+const { gerarOrcamentoPDF } = require('../../services/pdf');
 
 const router = express.Router();
 
@@ -116,6 +117,21 @@ router.patch('/:id/cancelar', requireRole('admin'), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// GET /:id/pdf — generate PDF quote
+router.get('/:id/pdf', async (req, res) => {
+  const orc = await service.buscarPorId(req.params.id);
+  if (!orc) return res.status(404).json({ error: 'Orçamento não encontrado' });
+  try {
+    const buffer = await gerarOrcamentoPDF(orc);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="orcamento-${orc.numero}.pdf"`);
+    res.send(buffer);
+  } catch (e) {
+    console.error('[PDF]', e.message);
+    res.status(500).json({ error: 'Erro ao gerar PDF' });
   }
 });
 

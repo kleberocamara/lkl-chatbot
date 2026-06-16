@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1a237e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>LKL — Orçamentos</title>
+<link rel="manifest" href="/manifest.json">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f5f6fa; min-height: 100dvh; }
+
+  .header {
+    background: #1a237e;
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .header-title { font-size: 18px; font-weight: 600; }
+  .header-user { font-size: 12px; opacity: .8; margin-top: 2px; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .back-link {
+    color: rgba(255,255,255,.85);
+    font-size: 13px;
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: rgba(255,255,255,.1);
+  }
+  .logout-btn {
+    background: rgba(255,255,255,.15);
+    border: none;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 2px solid #e8e8e8;
+    position: sticky;
+    top: 57px;
+    z-index: 9;
+  }
+  .tab {
+    flex: 1;
+    padding: 14px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all .2s;
+  }
+  .tab.active { color: #1a237e; border-bottom-color: #1a237e; }
+
+  .content { padding: 16px; max-width: 600px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 13px 14px;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    font-size: 15px;
+    background: #fff;
+    outline: none;
+    transition: border-color .2s;
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: #1a237e; }
+  textarea { resize: vertical; min-height: 80px; }
+
+  .submit-btn {
+    width: 100%;
+    padding: 15px;
+    background: #1a237e;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .submit-btn:disabled { background: #9fa8da; }
+
+  .add-item-btn {
+    width: 100%;
+    padding: 13px;
+    background: #fff;
+    color: #1a237e;
+    border: 2px dashed #1a237e;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 16px;
+  }
+  .add-item-btn:active { background: #e8eaf6; }
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a237e;
+    margin: 20px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e8eaf6;
+  }
+
+  .item-block {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    border: 2px solid #e8e8e8;
+  }
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .item-num { font-size: 14px; font-weight: 700; color: #1a237e; }
+  .remove-item-btn {
+    background: #fce4ec;
+    border: none;
+    color: #c62828;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .checkboxes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #444;
+    cursor: pointer;
+  }
+  .check-item input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; }
+
+  .search-results {
+    background: #fff;
+    border: 2px solid #1a237e;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+    margin-top: -14px;
+  }
+  .search-result-item {
+    padding: 12px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+  }
+  .search-result-item:hover { background: #e8eaf6; }
+  .search-result-item .sub { font-size: 12px; color: #888; }
+
+  .orc-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .orc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .orc-num { font-weight: 700; color: #1a237e; font-size: 15px; }
+  .orc-info { font-size: 12px; color: #888; margin-top: 4px; }
+  .orc-actions { margin-top: 12px; }
+  .pdf-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    background: #e8eaf6;
+    color: #1a237e;
+    border: none;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .badge-rascunho { background: #fff8e1; color: #f57f17; }
+  .badge-enviado   { background: #e3f2fd; color: #1565c0; }
+  .badge-aprovado  { background: #e8f5e9; color: #2e7d32; }
+  .badge-cancelado { background: #fce4ec; color: #c62828; }
+  .badge-default   { background: #f5f5f5; color: #555; }
+
+  .empty { text-align: center; padding: 48px 20px; color: #aaa; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .loading { text-align: center; padding: 32px; color: #aaa; font-size: 14px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #323232;
+    color: #fff;
+    padding: 12px 22px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 100;
+    opacity: 0;
+    transition: all .3s;
+    white-space: nowrap;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #2e7d32; }
+  .toast.error { background: #c62828; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">LKL Gráfica</div>
+    <div class="header-user" id="header-user">—</div>
+  </div>
+  <div class="header-right">
+    <a class="back-link" href="/pwa/pedidos.html">← Pedidos</a>
+    <button class="logout-btn" onclick="logout()">Sair</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-novo" onclick="switchTab('novo')">📝 Novo Orçamento</div>
+  <div class="tab" id="tab-meus" onclick="switchTab('meus')">📋 Meus Orçamentos</div>
+</div>
+
+<div class="content">
+
+  <!-- NOVO ORÇAMENTO -->
+  <div id="panel-novo" class="panel active">
+
+    <!-- Cliente -->
+    <div class="form-group">
+      <label>Cliente</label>
+      <input type="text" id="cliente-busca" placeholder="Buscar por nome ou celular…" autocomplete="off">
+      <div class="search-results" id="cliente-results"></div>
+      <input type="hidden" id="cliente-id">
+    </div>
+
+    <!-- Condições comerciais -->
+    <div class="section-title">Condições Comerciais</div>
+
+    <div class="form-group">
+      <label>Condição de Pagamento</label>
+      <input type="text" id="condicao-pagamento" placeholder="Ex: À vista, 30/60 dias…">
+    </div>
+
+    <div class="form-group">
+      <label>Validade (dias)</label>
+      <input type="number" id="validade-dias" value="35" min="1" inputmode="numeric">
+    </div>
+
+    <div class="form-group">
+      <label>Prazo de Entrega</label>
+      <input type="text" id="prazo-entrega" placeholder="Ex: 7 dias úteis">
+    </div>
+
+    <div class="form-group">
+      <label>Observação</label>
+      <textarea id="observacao" placeholder="Informações adicionais…"></textarea>
+    </div>
+
+    <!-- Itens -->
+    <div class="section-title">Itens do Orçamento</div>
+    <div id="itens-container"></div>
+    <button class="add-item-btn" onclick="addItem()">＋ Adicionar Item</button>
+
+    <button class="submit-btn" id="btn-novo" onclick="salvarOrcamento()">Salvar Orçamento</button>
+  </div>
+
+  <!-- MEUS ORÇAMENTOS -->
+  <div id="panel-meus" class="panel">
+    <div class="loading" id="meus-loading">Carregando…</div>
+    <div id="meus-lista"></div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/js/firebase/firebase-app-compat.js"></script>
+<script src="/js/firebase/firebase-messaging-compat.js"></script>
+<script src="/pwa/app.js"></script>
+<script>
+requireAuth();
+
+const user = getUser();
+if (user) document.getElementById('header-user').textContent = user.name;
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['novo', 'meus'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'meus') carregarOrcamentos();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type) {
+  clearTimeout(toastTimer);
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 4000);
+}
+
+// ── Busca de cliente ──────────────────────────────────────────────────────────
+let clienteTimer;
+const clienteBusca = document.getElementById('cliente-busca');
+const clienteResults = document.getElementById('cliente-results');
+
+clienteBusca.addEventListener('input', () => {
+  clearTimeout(clienteTimer);
+  document.getElementById('cliente-id').value = '';
+  const q = clienteBusca.value.trim();
+  if (q.length < 2) { clienteResults.style.display = 'none'; return; }
+  clienteTimer = setTimeout(async () => {
+    const data = await api('GET', `/api/clientes?q=${encodeURIComponent(q)}&limit=5`);
+    if (!data || !data.data || !data.data.length) { clienteResults.style.display = 'none'; return; }
+    clienteResults.innerHTML = data.data.map(c =>
+      `<div class="search-result-item" onclick="selecionarCliente('${c.id}','${(c.nome || '').replace(/'/g,"\\'")}')">
+        <div>${c.nome || ''}</div>
+        <div class="sub">${c.celular || ''}</div>
+      </div>`
+    ).join('');
+    clienteResults.style.display = 'block';
+  }, 300);
+});
+
+function selecionarCliente(id, nome) {
+  document.getElementById('cliente-id').value = id;
+  clienteBusca.value = nome;
+  clienteResults.style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.form-group')) clienteResults.style.display = 'none';
+});
+
+// ── Itens ─────────────────────────────────────────────────────────────────────
+let itemCount = 0;
+
+const ACABAMENTOS = [
+  'Corte', 'Vinco', 'Serrilha', 'Dobra', 'Colagem',
+  'Grampo', 'Ilhós', 'Lamin. Brilho', 'Lamin. Fosca',
+  'Numeração', 'Refile', 'Envelope'
+];
+
+function addItem() {
+  itemCount++;
+  const idx = itemCount;
+  const container = document.getElementById('itens-container');
+  const block = document.createElement('div');
+  block.className = 'item-block';
+  block.id = 'item-block-' + idx;
+
+  block.innerHTML = `
+    <div class="item-header">
+      <span class="item-num">Item ${idx}</span>
+      <button class="remove-item-btn" onclick="removeItem(${idx})">✕ Remover</button>
+    </div>
+
+    <div class="form-group">
+      <label>Descrição *</label>
+      <textarea class="item-descricao" id="item-${idx}-descricao" placeholder="Descreva o item…" rows="2"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Tipo de Insumo</label>
+      <select id="item-${idx}-tipo_insumo">
+        <option value="">— Selecione —</option>
+        <option value="papel">Papel</option>
+        <option value="envelope">Envelope</option>
+        <option value="lona">Lona</option>
+        <option value="adesivo">Adesivo</option>
+        <option value="cartao">Cartão</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Quantidade *</label>
+      <input type="number" id="item-${idx}-quantidade" min="1" placeholder="Ex: 1000" inputmode="numeric">
+    </div>
+
+    <div class="form-group">
+      <label>Formato do Papel</label>
+      <input type="text" id="item-${idx}-formato_papel" placeholder="Ex: A4, 21x29,7cm">
+    </div>
+
+    <div class="form-group">
+      <label>Cores</label>
+      <select id="item-${idx}-cores">
+        <option value="">— Selecione —</option>
+        <option value="4/4 (CMYK)">4/4 (CMYK)</option>
+        <option value="4/0">4/0</option>
+        <option value="1/0">1/0</option>
+        <option value="1/1">1/1</option>
+        <option value="BRANCO">BRANCO</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Impressão</label>
+      <select id="item-${idx}-impressao">
+        <option value="">— Selecione —</option>
+        <option value="Só Frente">Só Frente</option>
+        <option value="Frente e Verso">Frente e Verso</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Acabamentos</label>
+      <div class="checkboxes-grid" id="item-${idx}-acabamentos">
+        ${ACABAMENTOS.map(a =>
+          `<label class="check-item">
+            <input type="checkbox" value="${a}">
+            ${a}
+          </label>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+
+  container.appendChild(block);
+  renumberItems();
+}
+
+function removeItem(idx) {
+  const block = document.getElementById('item-block-' + idx);
+  if (block) block.remove();
+  renumberItems();
+}
+
+function renumberItems() {
+  const blocks = document.querySelectorAll('.item-block');
+  blocks.forEach((b, i) => {
+    const numEl = b.querySelector('.item-num');
+    if (numEl) numEl.textContent = 'Item ' + (i + 1);
+  });
+}
+
+function getItemData(block) {
+  const id = block.id.replace('item-block-', '');
+  const descricao = block.querySelector(`#item-${id}-descricao`).value.trim();
+  const quantidade = parseInt(block.querySelector(`#item-${id}-quantidade`).value, 10);
+  const tipo_insumo = block.querySelector(`#item-${id}-tipo_insumo`).value;
+  const formato_papel = block.querySelector(`#item-${id}-formato_papel`).value.trim();
+  const cores = block.querySelector(`#item-${id}-cores`).value;
+  const impressao = block.querySelector(`#item-${id}-impressao`).value;
+  const checkboxes = block.querySelectorAll(`#item-${id}-acabamentos input[type=checkbox]:checked`);
+  const acabamentos = Array.from(checkboxes).map(c => c.value).join(', ');
+
+  return { descricao, tipo_insumo, formato_papel, gramatura: '', cores, impressao, acabamentos, quantidade };
+}
+
+// ── Salvar Orçamento ──────────────────────────────────────────────────────────
+async function salvarOrcamento() {
+  const blocks = document.querySelectorAll('.item-block');
+  if (!blocks.length) { showToast('Adicione pelo menos um item.', 'error'); return; }
+
+  const itens = [];
+  for (const block of blocks) {
+    const item = getItemData(block);
+    if (!item.descricao) { showToast('Preencha a descrição de todos os itens.', 'error'); return; }
+    if (!item.quantidade || item.quantidade < 1) { showToast('Preencha a quantidade de todos os itens.', 'error'); return; }
+    itens.push(item);
+  }
+
+  const btn = document.getElementById('btn-novo');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+
+  const body = { itens };
+  const cid = document.getElementById('cliente-id').value;
+  const condicao = document.getElementById('condicao-pagamento').value.trim();
+  const validade = parseInt(document.getElementById('validade-dias').value, 10);
+  const prazo = document.getElementById('prazo-entrega').value.trim();
+  const obs = document.getElementById('observacao').value.trim();
+
+  if (cid) body.cliente_id = cid;
+  if (condicao) body.condicao_pagamento = condicao;
+  if (validade) body.validade_dias = validade;
+  if (prazo) body.prazo_entrega = prazo;
+  if (obs) body.observacao = obs;
+
+  const data = await api('POST', '/api/orcamentos', body);
+  btn.disabled = false;
+  btn.textContent = 'Salvar Orçamento';
+
+  if (!data || data.error || data.errors) {
+    const msg = (data && data.error) || (data && data.errors && data.errors[0]) || 'Erro ao salvar orçamento.';
+    showToast(msg, 'error');
+    return;
+  }
+
+  const num = data.orcamento && data.orcamento.numero;
+  showToast('✅ Orçamento' + (num ? ' #' + num : '') + ' salvo!', 'success');
+
+  // Reset form
+  document.getElementById('cliente-busca').value = '';
+  document.getElementById('cliente-id').value = '';
+  document.getElementById('condicao-pagamento').value = '';
+  document.getElementById('validade-dias').value = '35';
+  document.getElementById('prazo-entrega').value = '';
+  document.getElementById('observacao').value = '';
+  document.getElementById('itens-container').innerHTML = '';
+  itemCount = 0;
+  addItem();
+
+  // Switch to Meus Orçamentos
+  setTimeout(() => switchTab('meus'), 800);
+}
+
+// ── Meus Orçamentos ───────────────────────────────────────────────────────────
+const STATUS_LABELS = {
+  rascunho: 'Rascunho',
+  enviado:  'Enviado',
+  aprovado: 'Aprovado',
+  cancelado: 'Cancelado',
+};
+
+function badgeClass(status) {
+  const known = ['rascunho', 'enviado', 'aprovado', 'cancelado'];
+  return 'badge badge-' + (known.includes(status) ? status : 'default');
+}
+
+async function carregarOrcamentos() {
+  document.getElementById('meus-loading').style.display = 'block';
+  document.getElementById('meus-lista').innerHTML = '';
+  const data = await api('GET', '/api/orcamentos?limit=50');
+  document.getElementById('meus-loading').style.display = 'none';
+
+  if (!data || !data.data || !data.data.length) {
+    document.getElementById('meus-lista').innerHTML =
+      '<div class="empty"><div class="empty-icon">📋</div><div>Nenhum orçamento ainda.</div></div>';
+    return;
+  }
+
+  document.getElementById('meus-lista').innerHTML = data.data.map(o => `
+    <div class="orc-card">
+      <div class="orc-header">
+        <div>
+          <div class="orc-num">ORC #${o.numero || o.id}</div>
+          <div class="orc-info">${o.cliente_nome || 'Sem cliente'} · ${new Date(o.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>
+        <span class="${badgeClass(o.status)}">${STATUS_LABELS[o.status] || o.status || '—'}</span>
+      </div>
+      <div class="orc-actions">
+        <a class="pdf-btn" href="/api/orcamentos/${o.id}/pdf" target="_blank" rel="noopener">📄 PDF</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+addItem();
+initFCM().catch(() => {});
+</script>
+</body>
+</html>

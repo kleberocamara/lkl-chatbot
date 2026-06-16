@@ -52,7 +52,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PATCH /:id/status — admin ou operador
-router.patch('/:id/status', requireRole('admin', 'operador'), async (req, res) => {
+router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'analyst'), async (req, res) => {
   try {
     const { status, responsavel_id } = req.body;
     if (!status) return res.status(400).json({ errors: ['status é obrigatório'] });

@@ -1,6 +1,24 @@
 const express = require('express');
 const { requireRole } = require('../../middleware/auth');
 const service = require('./service');
+const multer = require('multer');
+const path = require('path');
+
+const storage = multer.diskStorage({
+  destination: path.join(__dirname, '../../../public/uploads/entregas'),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Apenas imagens são aceitas'));
+  },
+});
 
 const router = express.Router();
 
@@ -39,6 +57,24 @@ router.patch('/:id/status', requireRole('admin', 'operador'), async (req, res) =
     const { status, responsavel_id } = req.body;
     if (!status) return res.status(400).json({ errors: ['status é obrigatório'] });
     const result = await service.atualizarStatus(req.params.id, status, responsavel_id);
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrada'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /:id/entregar — motorista ou admin
+router.patch('/:id/entregar', requireRole('admin', 'motorista'), upload.single('foto_documento'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ errors: ['foto_documento é obrigatória'] });
+    const foto_url = `/uploads/entregas/${req.file.filename}`;
+    const { nome_recebedor } = req.body;
+    const result = await service.entregar(req.params.id, { nome_recebedor, foto_url });
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrada'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });

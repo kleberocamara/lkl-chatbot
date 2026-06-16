@@ -116,4 +116,49 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
   return { os: updatedOs };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus };
+async function entregar(id, { nome_recebedor, foto_url }) {
+  if (!nome_recebedor || !nome_recebedor.trim())
+    return { erro: ['nome_recebedor é obrigatório'] };
+  if (!foto_url)
+    return { erro: ['foto do documento é obrigatória'] };
+
+  const r = await db.query(
+    `UPDATE ordens_servico
+     SET status='entregue', entrega_nome_recebedor=$1, entrega_foto_url=$2,
+         data_conclusao=NOW(), updated_at=NOW()
+     WHERE id=$3 AND status='pronto'
+     RETURNING *`,
+    [nome_recebedor.trim(), foto_url, id]
+  );
+  if (!r.rows[0])
+    return { erro: ['OS não encontrada ou não está no status "pronto"'] };
+
+  const os = r.rows[0];
+
+  // Check if all OSs of this orcamento are done
+  const pendentes = await db.query(
+    `SELECT COUNT(*) FROM ordens_servico
+     WHERE orcamento_id=$1 AND status NOT IN ('entregue','cancelado')`,
+    [os.orcamento_id]
+  );
+  if (parseInt(pendentes.rows[0].count) === 0 && global.io) {
+    global.io.emit('servico_concluido', { orcamento_id: os.orcamento_id });
+  }
+
+  // FCM push to vendedor
+  const orc = await db.query(
+    'SELECT vendedor_id, numero FROM orcamentos WHERE id=$1',
+    [os.orcamento_id]
+  );
+  if (orc.rows[0]?.vendedor_id) {
+    fcm.sendToUser(orc.rows[0].vendedor_id, {
+      title: `ORC #${orc.rows[0].numero} — Entregue 🎉`,
+      body: `OS #${os.numero_os} entregue para ${nome_recebedor.trim()}`,
+      data: { os_id: id, orcamento_id: os.orcamento_id, status: 'entregue' },
+    }).catch(() => {});
+  }
+
+  return { os };
+}
+
+module.exports = { listar, buscarPorId, atualizarStatus, entregar };

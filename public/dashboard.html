@@ -203,10 +203,6 @@
     <a class="nav-item" onclick="showPage('orders', this)" href="#">
       <span class="nav-icon">📋</span><span class="nav-label">Pedidos</span>
     </a>
-    <a class="nav-item" onclick="showPage('orcamentos', this)" href="#">
-      <span class="nav-icon">💰</span><span class="nav-label">Orçamentos</span>
-      <span class="badge-waiting" id="orcBadge" style="display:none;background:#f59e0b">0</span>
-    </a>
     <a class="nav-item admin-only" onclick="showPage('prices', this)" href="#">
       <span class="nav-icon">🏷️</span><span class="nav-label">Preços</span>
     </a>
@@ -410,23 +406,6 @@
 
 
   <!-- ORÇAMENTOS -->
-  <div class="page" id="page-orcamentos">
-    <div class="page-header"><h1>Orçamentos</h1><p>Orçamentos calculados automaticamente — aprovação antes do envio ao cliente</p></div>
-    <div class="card" style="padding:0;overflow:auto">
-      <table id="orcTable" style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="background:#f5f7ff;text-align:left">
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">#Pedido</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Cliente</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Itens</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Total</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Status</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Data</th>
-          <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Ações</th>
-        </tr></thead>
-        <tbody id="orcBody"><tr><td colspan="7" style="padding:24px;text-align:center;color:#aaa">Carregando...</td></tr></tbody>
-      </table>
-    </div>
-  </div>
 
   <!-- TABELA DE PREÇOS -->
   <div class="page" id="page-prices">
@@ -489,7 +468,6 @@ async function init() {
     if (document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
     if (document.getElementById('page-conversations').classList.contains('active')) loadConversations();
     if (document.getElementById('page-orders').classList.contains('active')) loadOrders();
-    if (document.getElementById('page-orcamentos').classList.contains('active')) loadOrcamentos();
     if (document.getElementById('page-prices').classList.contains('active')) loadPrices();
     if (currentConvId === data.conversationId) loadMessages(currentConvId);
   });

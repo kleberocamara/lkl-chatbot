@@ -2,6 +2,7 @@ const express = require('express');
 const { requireRole } = require('../../middleware/auth');
 const service = require('./service');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
+const whatsapp = require('../../services/whatsapp');
 
 const router = express.Router();
 
@@ -82,6 +83,20 @@ router.patch('/:id/enviar', requireRole('admin'), async (req, res) => {
       const isNotFound = result.erro.some(e => e.includes('não encontrado'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
     }
+    // WhatsApp notification (fire-and-forget)
+    service.buscarPorId(req.params.id).then(orc => {
+      if (orc?.cliente_celular) {
+        const msg =
+          `Olá! A LKL Gráfica enviou uma proposta para você.\n\n` +
+          `*Proposta/Orçamento #${orc.numero}*\n` +
+          `Validade: ${orc.validade_dias || 35} dias\n` +
+          `Prazo de entrega: ${orc.prazo_entrega || 'A combinar'}\n\n` +
+          `Para aprovar, responda *SIM* ou entre em contato conosco.`;
+        whatsapp.sendMessage(orc.cliente_celular, msg).catch(e =>
+          console.warn('[WA] Falha ao notificar cliente:', e.message)
+        );
+      }
+    }).catch(() => {});
     res.json(result);
   } catch (err) {
     console.error(err);

@@ -14,5 +14,6 @@ router.use('/funcionarios', requireAuthApi, require('./funcionarios/router'));
 router.use('/price-table', requireAuthApi, require('./price-table/router'));
 router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));
+router.use('/orcamentos', requireAuthApi, require('./orcamentos/router'));
 
 module.exports = router;

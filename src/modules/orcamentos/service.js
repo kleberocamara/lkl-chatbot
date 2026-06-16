@@ -51,8 +51,8 @@ async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dia
       const item = itens[i];
       const iR = await client.query(
         `INSERT INTO orcamento_itens
-           (orcamento_id, codigo, descricao, tipo_insumo, formato_papel, gramatura, cores, impressao, acabamentos, quantidade, valor_unitario, valor_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           (orcamento_id, codigo, descricao, tipo_insumo, formato_papel, gramatura, cores, impressao, acabamentos, quantidade, valor_unitario, valor_total, tem_arte)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           orcamento.id,
@@ -67,6 +67,7 @@ async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dia
           item.quantidade,
           item.valor_unitario || null,
           item.valor_total || null,
+          !!item.tem_arte,
         ]
       );
       insertedItens.push(iR.rows[0]);
@@ -159,11 +160,12 @@ async function aprovar(id, aprovado_via) {
 
     const ordens = [];
     for (const item of existing.itens) {
+      const statusInicial = item.tem_arte ? 'impressao' : 'aguardando';
       const osR = await client.query(
         `INSERT INTO ordens_servico (orcamento_id, orcamento_item_id, status)
-         VALUES ($1, $2, 'aguardando')
+         VALUES ($1, $2, $3)
          RETURNING *`,
-        [id, item.id]
+        [id, item.id, statusInicial]
       );
       ordens.push(osR.rows[0]);
     }

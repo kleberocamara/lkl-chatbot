@@ -209,9 +209,9 @@ async function processMessage(conversationId, userMessage) {
           );
           const { id: orcId, numero: orcNumero } = orcIns.rows[0];
           await db.query(
-            `INSERT INTO orcamento_itens (orcamento_id, descricao, quantidade)
-             VALUES ($1, $2, $3)`,
-            [orcId, descItem, args.quantidade || 1]
+            `INSERT INTO orcamento_itens (orcamento_id, descricao, quantidade, tem_arte)
+             VALUES ($1, $2, $3, $4)`,
+            [orcId, descItem, args.quantidade || 1, !!args.tem_arte]
           );
           console.log(`[ORC-V2] Rascunho ORC#${orcNumero} criado para pedido chatbot #${pedidoNumero}`);
           if (global.io) global.io.emit('new_orcamento_v2', { orcamento_numero: orcNumero, pedido_chatbot_numero: pedidoNumero });

@@ -457,6 +457,13 @@ function addItem() {
         ).join('')}
       </div>
     </div>
+
+    <div class="form-group" style="margin-top:4px">
+      <label class="check-item" style="font-weight:600;color:#1a237e;font-size:14px">
+        <input type="checkbox" id="item-${idx}-tem_arte">
+        ✅ Cliente já possui arte aprovada (pula etapa de arte final)
+      </label>
+    </div>
   `;
 
   container.appendChild(block);
@@ -488,7 +495,8 @@ function getItemData(block) {
   const checkboxes = block.querySelectorAll(`#item-${id}-acabamentos input[type=checkbox]:checked`);
   const acabamentos = Array.from(checkboxes).map(c => c.value).join(', ');
 
-  return { descricao, tipo_insumo, formato_papel, gramatura: '', cores, impressao, acabamentos, quantidade };
+  const tem_arte = block.querySelector(`#item-${id}-tem_arte`)?.checked || false;
+  return { descricao, tipo_insumo, formato_papel, gramatura: '', cores, impressao, acabamentos, quantidade, tem_arte };
 }
 
 // ── Salvar Orçamento ──────────────────────────────────────────────────────────

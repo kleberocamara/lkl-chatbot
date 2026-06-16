@@ -29,7 +29,12 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { page, limit, status, cliente_id } = req.query;
-    const vendedor_id = req.user.role === 'vendedor' ? req.user.id : req.query.vendedor_id;
+    let vendedor_id;
+    if (req.user.role === 'vendedor') {
+      vendedor_id = req.user.id;
+    } else if (req.user.role === 'admin') {
+      vendedor_id = req.query.vendedor_id || undefined;
+    }
     const result = await service.listar({
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,

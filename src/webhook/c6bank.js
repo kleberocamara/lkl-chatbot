@@ -6,6 +6,29 @@ const { confirmarPagamento } = require('../modules/orcamentos/service');
  * Boleto: body.boletoId + body.status === 'LIQUIDADO'
  */
 async function handleC6Webhook(req, res) {
+  // Signature verification (if C6_WEBHOOK_SECRET is configured)
+  const secret = process.env.C6_WEBHOOK_SECRET;
+  if (secret) {
+    const crypto = require('crypto');
+    const sig = req.headers['x-webhook-signature'] || req.headers['x-c6-signature'] || '';
+    if (!sig) {
+      console.warn('[C6-WEBHOOK] Assinatura ausente no header — rejeitado');
+      return res.sendStatus(401);
+    }
+    const payload = JSON.stringify(req.body);
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const sigBuf = Buffer.from(sig.replace(/^sha256=/, ''));
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.warn('[C6-WEBHOOK] Assinatura inválida — rejeitado');
+      return res.sendStatus(403);
+    }
+  } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[C6-WEBHOOK] AVISO: C6_WEBHOOK_SECRET não configurado em produção!');
+    }
+  }
+
   // Responde imediatamente — C6 pode retentar se demorar
   res.sendStatus(200);
 

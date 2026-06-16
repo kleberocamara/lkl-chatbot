@@ -230,6 +230,9 @@ async function cobrar(id, tipo) {
 
   if (orc.status !== 'aprovado') return { erro: ['Orçamento precisa estar aprovado para gerar cobrança'] };
   if (orc.status_pagamento === 'pago') return { erro: ['Orçamento já está pago'] };
+  if (orc.status_pagamento === 'aguardando_pagamento' && orc.tipo_cobranca && orc.tipo_cobranca !== tipo) {
+    return { erro: [`Já existe uma cobrança de ${orc.tipo_cobranca} aguardando pagamento. Cancele-a antes de emitir um novo tipo.`] };
+  }
 
   let valor = parseFloat(orc.valor_total_calculado) || 0;
   if (!valor) {
@@ -243,7 +246,8 @@ async function cobrar(id, tipo) {
 
   const seuNumero = `ORC-${orc.numero}`;
   const nomeSacado = orc.cliente_nome || 'Cliente';
-  const cpfCnpj = (orc.cliente_cpf_cnpj || '').replace(/\D/g, '') || '00000000000';
+  const cpfCnpj = (orc.cliente_cpf_cnpj || '').replace(/\D/g, '');
+  if (!cpfCnpj) return { erro: ['Cliente sem CPF/CNPJ cadastrado — necessário para emitir cobrança'] };
 
   try {
     if (tipo === 'boleto') {
@@ -294,7 +298,8 @@ async function confirmarPagamento({ tipo, txid, boletoId }) {
   try {
     await client.query('BEGIN');
     await client.query(
-      `UPDATE orcamentos SET status_pagamento='pago', pago_em=NOW(), updated_at=NOW() WHERE id=$1`,
+      `UPDATE orcamentos SET status_pagamento='pago', pago_em=COALESCE(pago_em, NOW()), updated_at=NOW()
+       WHERE id=$1 AND status_pagamento != 'pago'`,
       [orcId]
     );
     await client.query(

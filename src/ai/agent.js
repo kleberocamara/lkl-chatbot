@@ -167,20 +167,56 @@ async function processMessage(conversationId, userMessage) {
           [JSON.stringify(orderDetails), orderDetails.tipo_servico, pedidoNumero, conversationId]
         );
 
-        // Tenta calcular orçamento automático
+        // Cria rascunho de orçamento no sistema unificado (Sprint 2)
         try {
-          const orcCalc = await calcularOrcamento(orderDetails);
-          if (orcCalc) {
-            await db.query(
-              `INSERT INTO orcamentos (conversation_id, pedido_numero, itens, subtotal, total, status)
-               VALUES ($1, $2, $3, $4, $5, 'pendente_aprovacao')`,
-              [conversationId, pedidoNumero, JSON.stringify(orcCalc.itens), orcCalc.subtotal, orcCalc.total]
+          const conv = await db.query(
+            `SELECT c.contact_id, ct.phone, ct.name AS contact_name
+             FROM conversations c
+             LEFT JOIN contacts ct ON ct.id = c.contact_id
+             WHERE c.id = $1`,
+            [conversationId]
+          );
+          const row = conv.rows[0];
+          // Busca ou cria cliente em clientes_lkl pelo celular
+          let clienteId = null;
+          if (row?.phone) {
+            const celular = row.phone.replace(/\D/g, '');
+            const existing = await db.query(
+              `SELECT id FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`,
+              [`%${celular.slice(-9)}`]
             );
-            console.log(`[ORCAMENTO] Orçamento calculado para pedido #${pedidoNumero}: R$ ${orcCalc.total}`);
-            if (global.io) global.io.emit('new_orcamento', { pedido_numero: pedidoNumero, total: orcCalc.total });
+            if (existing.rows.length > 0) {
+              clienteId = existing.rows[0].id;
+            } else {
+              const nomeCliente = args.nome_cliente || row.contact_name || row.phone;
+              const ins = await db.query(
+                `INSERT INTO clientes_lkl (nome, celular, canal_origem)
+                 VALUES ($1, $2, 'chatbot') RETURNING id`,
+                [nomeCliente, celular]
+              );
+              clienteId = ins.rows[0].id;
+            }
           }
-        } catch(e) {
-          console.error('[ORCAMENTO] Erro ao calcular:', e.message);
+          const descItem = [
+            args.tipo_servico, args.produto, args.dimensoes,
+            args.material, args.tem_arte ? 'Arte pronta' : 'Sem arte',
+            args.entrega === 'entrega' ? `Entrega: ${args.endereco_entrega || ''}` : 'Retirada na loja',
+          ].filter(Boolean).join(' | ');
+          const orcIns = await db.query(
+            `INSERT INTO orcamentos (cliente_id, canal, pedido_chatbot_numero, status, observacao)
+             VALUES ($1, 'chatbot', $2, 'rascunho', $3) RETURNING id, numero`,
+            [clienteId, pedidoNumero, args.observacoes || null]
+          );
+          const { id: orcId, numero: orcNumero } = orcIns.rows[0];
+          await db.query(
+            `INSERT INTO orcamento_itens (orcamento_id, descricao, quantidade)
+             VALUES ($1, $2, $3)`,
+            [orcId, descItem, args.quantidade || 1]
+          );
+          console.log(`[ORC-V2] Rascunho ORC#${orcNumero} criado para pedido chatbot #${pedidoNumero}`);
+          if (global.io) global.io.emit('new_orcamento_v2', { orcamento_numero: orcNumero, pedido_chatbot_numero: pedidoNumero });
+        } catch (e) {
+          console.error('[ORC-V2] Erro ao criar rascunho:', e.message);
         }
 
         // Salva nome real do cliente no banco

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { handleInboundMessage } = require('./handler');
 const { markAsRead } = require('../services/whatsapp');
+const { handleC6Webhook } = require('./c6bank');
 
 // Verificação do webhook (Meta exige isso na configuração)
 router.get('/', (req, res) => {
@@ -48,5 +49,8 @@ router.post('/', async (req, res) => {
     console.error('Erro no processamento do webhook:', err);
   }
 });
+
+// Webhook C6 Bank — confirmação de pagamento (PIX e Boleto)
+router.post('/c6bank', express.json(), handleC6Webhook);
 
 module.exports = router;

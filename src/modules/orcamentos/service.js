@@ -209,4 +209,97 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
   return { data: rows.rows, total: parseInt(count.rows[0].count), page, limit };
 }
 
-module.exports = { criar, precificar, mudarStatus, aprovar, buscarPorId, listar };
+const c6bank = require('../../services/c6bank');
+
+async function cobrar(id, tipo) {
+  if (!['boleto', 'pix'].includes(tipo)) {
+    return { erro: ['tipo deve ser boleto ou pix'] };
+  }
+
+  const r = await db.query(
+    `SELECT o.id, o.numero, o.status, o.status_pagamento,
+            o.valor_total_calculado,
+            c.nome AS cliente_nome, c.cpf_cnpj AS cliente_cpf_cnpj, c.celular AS cliente_celular
+     FROM orcamentos o
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE o.id = $1`,
+    [id]
+  );
+  if (!r.rows[0]) return { erro: ['Orçamento não encontrado'] };
+  const orc = r.rows[0];
+
+  if (orc.status !== 'aprovado') return { erro: ['Orçamento precisa estar aprovado para gerar cobrança'] };
+  if (orc.status_pagamento === 'pago') return { erro: ['Orçamento já está pago'] };
+
+  let valor = parseFloat(orc.valor_total_calculado) || 0;
+  if (!valor) {
+    const itensR = await db.query(
+      'SELECT COALESCE(SUM(valor_total), 0) AS total FROM orcamento_itens WHERE orcamento_id = $1',
+      [id]
+    );
+    valor = parseFloat(itensR.rows[0].total) || 0;
+  }
+  if (!valor || valor <= 0) return { erro: ['Orçamento sem valor definido — precifique antes de cobrar'] };
+
+  const seuNumero = `ORC-${orc.numero}`;
+  const nomeSacado = orc.cliente_nome || 'Cliente';
+  const cpfCnpj = (orc.cliente_cpf_cnpj || '').replace(/\D/g, '') || '00000000000';
+
+  try {
+    if (tipo === 'boleto') {
+      const boleto = await c6bank.emitirBoleto({ seuNumero, nomeSacado, cpfCnpjSacado: cpfCnpj, valor });
+      await db.query(
+        `UPDATE orcamentos SET tipo_cobranca='boleto', status_pagamento='aguardando_pagamento',
+         boleto_id=$1, boleto_linha_digitavel=$2, boleto_pdf_url=$3, boleto_vencimento=$4,
+         updated_at=NOW() WHERE id=$5`,
+        [boleto.boletoId, boleto.linhaDigitavel, boleto.pdfUrl, boleto.dataVencimento, id]
+      );
+      return { tipo: 'boleto', linhaDigitavel: boleto.linhaDigitavel, pdfUrl: boleto.pdfUrl, dataVencimento: boleto.dataVencimento, valor };
+    } else {
+      const txid = require('crypto').randomBytes(16).toString('hex').slice(0, 32);
+      const pix = await c6bank.criarPixCobranca({
+        txid,
+        valor,
+        nomeDevedor: nomeSacado,
+        cpfCnpjDevedor: cpfCnpj,
+        solicitacao: `${seuNumero} - LKL Gráfica`,
+      });
+      await db.query(
+        `UPDATE orcamentos SET tipo_cobranca='pix', status_pagamento='aguardando_pagamento',
+         pix_txid=$1, pix_copia_cola=$2, updated_at=NOW() WHERE id=$3`,
+        [pix.txid, pix.pixCopiaECola, id]
+      );
+      return { tipo: 'pix', txid: pix.txid, pixCopiaECola: pix.pixCopiaECola, valor };
+    }
+  } catch (e) {
+    console.error('[C6-COBRAR]', e.message);
+    return { erro: [`Erro na API C6 Bank: ${e.message}`] };
+  }
+}
+
+async function confirmarPagamento({ tipo, txid, boletoId }) {
+  let findResult;
+  if (tipo === 'pix' && txid) {
+    findResult = await db.query('SELECT id FROM orcamentos WHERE pix_txid = $1', [txid]);
+  } else if (tipo === 'boleto' && boletoId) {
+    findResult = await db.query('SELECT id FROM orcamentos WHERE boleto_id = $1', [boletoId]);
+  } else {
+    return { erro: ['txid ou boletoId obrigatório'] };
+  }
+
+  if (!findResult.rows[0]) return { erro: ['Orçamento não encontrado para este pagamento'] };
+  const orcId = findResult.rows[0].id;
+
+  await db.query(
+    `UPDATE orcamentos SET status_pagamento='pago', pago_em=NOW(), updated_at=NOW() WHERE id=$1`,
+    [orcId]
+  );
+  await db.query(
+    `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
+    [orcId]
+  );
+
+  return { confirmado: true, orcamento_id: orcId };
+}
+
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento };

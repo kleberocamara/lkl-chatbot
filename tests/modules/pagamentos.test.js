@@ -17,6 +17,9 @@ jest.mock('../../src/services/c6bank', () => ({
 
 jest.mock('../../src/db', () => ({
   query: jest.fn(),
+  pool: {
+    connect: jest.fn(),
+  },
 }));
 
 const db = require('../../src/db');
@@ -43,6 +46,31 @@ describe('cobrar()', () => {
   });
 });
 
+describe('cobrar() happy paths', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('emite boleto e atualiza orcamento', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid1', status: 'aprovado', status_pagamento: 'pendente', numero: 5, cliente_nome: 'Maria', cliente_cpf_cnpj: '12345678000195', valor_total_calculado: '150.00' }] })
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE orcamentos
+    const res = await service.cobrar('uuid1', 'boleto');
+    expect(res.tipo).toBe('boleto');
+    expect(res.linhaDigitavel).toBeDefined();
+    expect(res.valor).toBe(150);
+    expect(db.query).toHaveBeenCalledTimes(2);
+  });
+
+  it('emite PIX e atualiza orcamento', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid2', status: 'aprovado', status_pagamento: 'pendente', numero: 6, cliente_nome: 'João', cliente_cpf_cnpj: '12345678000195', valor_total_calculado: '200.00' }] })
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE orcamentos
+    const res = await service.cobrar('uuid2', 'pix');
+    expect(res.tipo).toBe('pix');
+    expect(res.pixCopiaECola).toBeDefined();
+    expect(res.valor).toBe(200);
+  });
+});
+
 describe('confirmarPagamento()', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -52,5 +80,22 @@ describe('confirmarPagamento()', () => {
   it('retorna erro se orçamento não encontrado por txid', async () => {
     const res = await service.confirmarPagamento({ tipo: 'pix', txid: 'NAO_EXISTE' });
     expect(res.erro).toBeDefined();
+  });
+});
+
+describe('confirmarPagamento() happy path', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('confirma pagamento PIX e atualiza orcamento e OSs', async () => {
+    const mockClient = {
+      query: jest.fn().mockResolvedValue({ rows: [] }),
+      release: jest.fn(),
+    };
+    db.pool.connect.mockResolvedValue(mockClient);
+    db.query.mockResolvedValueOnce({ rows: [{ id: 'uuid3' }] }); // find by txid
+
+    const res = await service.confirmarPagamento({ tipo: 'pix', txid: 'TXID001' });
+    expect(res.confirmado).toBe(true);
+    expect(res.orcamento_id).toBe('uuid3');
   });
 });

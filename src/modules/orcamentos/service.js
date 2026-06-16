@@ -209,9 +209,9 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
   return { data: rows.rows, total: parseInt(count.rows[0].count), page, limit };
 }
 
-const c6bank = require('../../services/c6bank');
-
 async function cobrar(id, tipo) {
+  const c6bank = require('../../services/c6bank');
+  const crypto = require('crypto');
   if (!['boleto', 'pix'].includes(tipo)) {
     return { erro: ['tipo deve ser boleto ou pix'] };
   }
@@ -256,7 +256,7 @@ async function cobrar(id, tipo) {
       );
       return { tipo: 'boleto', linhaDigitavel: boleto.linhaDigitavel, pdfUrl: boleto.pdfUrl, dataVencimento: boleto.dataVencimento, valor };
     } else {
-      const txid = require('crypto').randomBytes(16).toString('hex').slice(0, 32);
+      const txid = crypto.randomBytes(16).toString('hex').slice(0, 32);
       const pix = await c6bank.criarPixCobranca({
         txid,
         valor,
@@ -290,14 +290,24 @@ async function confirmarPagamento({ tipo, txid, boletoId }) {
   if (!findResult.rows[0]) return { erro: ['Orçamento não encontrado para este pagamento'] };
   const orcId = findResult.rows[0].id;
 
-  await db.query(
-    `UPDATE orcamentos SET status_pagamento='pago', pago_em=NOW(), updated_at=NOW() WHERE id=$1`,
-    [orcId]
-  );
-  await db.query(
-    `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
-    [orcId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE orcamentos SET status_pagamento='pago', pago_em=NOW(), updated_at=NOW() WHERE id=$1`,
+      [orcId]
+    );
+    await client.query(
+      `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
+      [orcId]
+    );
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 
   return { confirmado: true, orcamento_id: orcId };
 }

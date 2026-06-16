@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arte Final — LKL Gráfica</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f6f9; min-height: 100vh; }
+  #topbar { background: #1a237e; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
+  #topbar h1 { font-size: 18px; font-weight: 700; }
+  #btn-sair { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  #btn-sair:hover { background: rgba(255,255,255,0.25); }
+  #tabs { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; }
+  .tab { flex: 1; padding: 12px; text-align: center; font-size: 15px; font-weight: 600; color: #666; cursor: pointer; border: none; background: none; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+  .tab.active { color: #1a237e; border-bottom-color: #1a237e; }
+  #content { padding: 12px; max-width: 600px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .os-num { font-weight: 700; color: #1a237e; font-size: 16px; }
+  .orc-num { color: #999; font-size: 13px; }
+  .badge { padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: auto; }
+  .item-desc { font-size: 15px; font-weight: 600; color: #222; margin-bottom: 6px; }
+  .info-row { font-size: 13px; color: #555; margin-bottom: 4px; }
+  .detail-row { font-size: 12px; color: #888; margin-bottom: 3px; }
+  .btn-action { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; color: #fff; cursor: pointer; margin-top: 10px; transition: opacity 0.2s; }
+  .btn-action:active { opacity: 0.8; }
+  .btn-action.iniciar { background: #1a237e; }
+  .btn-action.enviar { background: #2e7d32; }
+  .label-producao { display: block; text-align: center; color: #999; font-size: 13px; margin-top: 10px; }
+  #empty-msg { text-align: center; color: #999; padding: 40px 20px; font-size: 16px; }
+  #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+  .toast { background: #333; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  .toast.success { background: #2e7d32; }
+  .toast.error { background: #c62828; }
+  #loading { text-align: center; color: #999; padding: 40px; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>🎨 Arte Final</h1>
+  <button id="btn-sair">Sair</button>
+</div>
+
+<div id="tabs">
+  <button class="tab active" data-tab="fila">Fila</button>
+  <button class="tab" data-tab="enviadas">Enviadas</button>
+</div>
+
+<div id="content">
+  <div id="loading">Carregando...</div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="/pwa/app.js"></script>
+<script>
+(function() {
+  requireAuth();
+
+  var user = getUser();
+  if (!user || ['admin','atendente','analyst'].indexOf(user.role) === -1) {
+    window.location.href = '/pwa/login.html';
+    return;
+  }
+
+  document.getElementById('btn-sair').addEventListener('click', function() {
+    logout();
+  });
+
+  var currentTab = 'fila';
+  var allOS = [];
+  var refreshTimer = null;
+
+  var FILA_STATUSES = ['aguardando', 'arte_final'];
+  var ENVIADAS_STATUSES = ['impressao', 'acabamento', 'embalagem', 'pronto', 'entregue'];
+
+  var STATUS_LABELS = {
+    aguardando: 'Aguardando',
+    arte_final: 'Arte Final',
+    impressao: 'Impressão',
+    acabamento: 'Acabamento',
+    embalagem: 'Embalagem',
+    pronto: 'Pronto',
+    entregue: 'Entregue'
+  };
+
+  var STATUS_BADGE = {
+    aguardando:  { bg: '#f5f5f5', color: '#555' },
+    arte_final:  { bg: '#e8eaf6', color: '#3949ab' },
+    impressao:   { bg: '#e3f2fd', color: '#0277bd' },
+    acabamento:  { bg: '#fff3e0', color: '#e65100' },
+    embalagem:   { bg: '#f3e5f5', color: '#6a1b9a' },
+    pronto:      { bg: '#e8f5e9', color: '#2e7d32' },
+    entregue:    { bg: '#1a237e', color: '#fff' }
+  };
+
+  function showToast(msg, type) {
+    var container = document.getElementById('toast-container');
+    var t = document.createElement('div');
+    t.className = 'toast' + (type ? ' ' + type : '');
+    t.textContent = msg;
+    container.appendChild(t);
+    setTimeout(function() { t.classList.add('show'); }, 10);
+    setTimeout(function() {
+      t.classList.remove('show');
+      setTimeout(function() { t.remove(); }, 350);
+    }, 3000);
+  }
+
+  function badgeHTML(status) {
+    var s = STATUS_BADGE[status] || { bg: '#eee', color: '#333' };
+    var label = STATUS_LABELS[status] || status;
+    return '<span class="badge" style="background:' + s.bg + ';color:' + s.color + '">' + label + '</span>';
+  }
+
+  function escapeHTML(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderCard(os) {
+    var actionHTML = '';
+    if (os.status === 'aguardando') {
+      actionHTML = '<button class="btn-action iniciar" data-id="' + os.id + '" data-next="arte_final">▶ Iniciar Arte Final</button>';
+    } else if (os.status === 'arte_final') {
+      actionHTML = '<button class="btn-action enviar" data-id="' + os.id + '" data-next="impressao">✅ Enviar para Impressão</button>';
+    } else {
+      actionHTML = '<span class="label-producao">📤 Em produção</span>';
+    }
+
+    var detailLines = '';
+    if (os.cores || os.impressao) {
+      var parts = [];
+      if (os.cores) parts.push(escapeHTML(os.cores));
+      if (os.impressao) parts.push(escapeHTML(os.impressao));
+      detailLines += '<div class="detail-row">' + parts.join(' · ') + '</div>';
+    }
+    if (os.acabamentos && os.acabamentos.length > 0) {
+      var acab = Array.isArray(os.acabamentos) ? os.acabamentos.join(', ') : os.acabamentos;
+      detailLines += '<div class="detail-row">Acabamentos: ' + escapeHTML(acab) + '</div>';
+    }
+
+    return '<div class="card">' +
+      '<div class="card-header">' +
+        '<span class="os-num">OS #' + escapeHTML(os.numero_os) + '</span>' +
+        (os.numero_orcamento ? '<span class="orc-num">ORC #' + escapeHTML(os.numero_orcamento) + '</span>' : '') +
+        badgeHTML(os.status) +
+      '</div>' +
+      '<div class="item-desc">' + escapeHTML(os.item_descricao) + '</div>' +
+      '<div class="info-row">' + escapeHTML(os.cliente_nome) + ' &nbsp;·&nbsp; Qtde: ' + escapeHTML(os.quantidade) + '</div>' +
+      detailLines +
+      actionHTML +
+    '</div>';
+  }
+
+  function renderList() {
+    var list;
+    if (currentTab === 'fila') {
+      list = allOS.filter(function(o) { return FILA_STATUSES.indexOf(o.status) !== -1; });
+    } else {
+      list = allOS.filter(function(o) { return ENVIADAS_STATUSES.indexOf(o.status) !== -1; });
+    }
+
+    var content = document.getElementById('content');
+    if (list.length === 0) {
+      var emptyMsg = currentTab === 'fila'
+        ? '✅ Nenhuma OS na fila.'
+        : 'Nenhuma OS enviada.';
+      content.innerHTML = '<div id="empty-msg">' + emptyMsg + '</div>';
+      return;
+    }
+
+    content.innerHTML = list.map(renderCard).join('');
+
+    content.querySelectorAll('.btn-action[data-id]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-id');
+        var next = btn.getAttribute('data-next');
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        api('/api/v2/os/' + id + '/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: next })
+        }).then(function() {
+          showToast('Status atualizado com sucesso!', 'success');
+          loadOS();
+        }).catch(function(err) {
+          showToast('Erro ao atualizar status.', 'error');
+          btn.disabled = false;
+          btn.style.opacity = '1';
+        });
+      });
+    });
+  }
+
+  function loadOS() {
+    api('/api/v2/os?limit=100').then(function(res) {
+      allOS = (res && res.data) ? res.data : [];
+      renderList();
+    }).catch(function() {
+      document.getElementById('content').innerHTML = '<div id="empty-msg">Erro ao carregar OSs.</div>';
+    });
+  }
+
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      currentTab = tab.getAttribute('data-tab');
+      renderList();
+    });
+  });
+
+  function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadOS, 30000);
+  }
+
+  loadOS();
+  startAutoRefresh();
+})();
+</script>
+</body>
+</html>

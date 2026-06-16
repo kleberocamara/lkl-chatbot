@@ -74,12 +74,13 @@
   var allOS = [];
   var refreshTimer = null;
 
-  var FILA_STATUSES = ['aguardando', 'arte_final'];
+  var FILA_STATUSES = ['aguardando', 'arte_final', 'aguardando_aprovacao_arte'];
   var ENVIADAS_STATUSES = ['impressao', 'acabamento', 'embalagem', 'pronto', 'entregue'];
 
   var STATUS_LABELS = {
     aguardando: 'Aguardando',
     arte_final: 'Arte Final',
+    aguardando_aprovacao_arte: '⏳ Aguard. Aprovação',
     impressao: 'Impressão',
     acabamento: 'Acabamento',
     embalagem: 'Embalagem',
@@ -88,13 +89,14 @@
   };
 
   var STATUS_BADGE = {
-    aguardando:  { bg: '#f5f5f5', color: '#555' },
-    arte_final:  { bg: '#e8eaf6', color: '#3949ab' },
-    impressao:   { bg: '#e3f2fd', color: '#0277bd' },
-    acabamento:  { bg: '#fff3e0', color: '#e65100' },
-    embalagem:   { bg: '#f3e5f5', color: '#6a1b9a' },
-    pronto:      { bg: '#e8f5e9', color: '#2e7d32' },
-    entregue:    { bg: '#1a237e', color: '#fff' }
+    aguardando:                { bg: '#f5f5f5', color: '#555' },
+    arte_final:                { bg: '#e8eaf6', color: '#3949ab' },
+    aguardando_aprovacao_arte: { bg: '#fff8e1', color: '#f57f17' },
+    impressao:                 { bg: '#e3f2fd', color: '#0277bd' },
+    acabamento:                { bg: '#fff3e0', color: '#e65100' },
+    embalagem:                 { bg: '#f3e5f5', color: '#6a1b9a' },
+    pronto:                    { bg: '#e8f5e9', color: '#2e7d32' },
+    entregue:                  { bg: '#1a237e', color: '#fff' }
   };
 
   function showToast(msg, type) {
@@ -126,7 +128,18 @@
     if (os.status === 'aguardando') {
       actionHTML = '<button class="btn-action iniciar" data-id="' + os.id + '" data-next="arte_final">▶ Iniciar Arte Final</button>';
     } else if (os.status === 'arte_final') {
-      actionHTML = '<button class="btn-action enviar" data-id="' + os.id + '" data-next="impressao">✅ Enviar para Impressão</button>';
+      var comentario = os.arte_aprovacao_comentario
+        ? '<div style="background:#fff3e0;border-left:3px solid #f57f17;padding:8px 10px;border-radius:4px;font-size:13px;color:#e65100;margin-bottom:8px">💬 <strong>Alteração solicitada:</strong> ' + escapeHTML(os.arte_aprovacao_comentario) + '</div>'
+        : '';
+      actionHTML = comentario +
+        '<label style="display:block;font-size:13px;font-weight:600;color:#333;margin-bottom:6px">📎 Arquivo da arte (imagem)</label>' +
+        '<input type="file" accept="image/*" data-id="' + os.id + '" class="arte-file-input" style="display:block;width:100%;margin-bottom:8px;font-size:13px">' +
+        '<button class="btn-action enviar" data-id="' + os.id + '" data-action="enviar-arte">📤 Enviar Arte ao Cliente</button>';
+    } else if (os.status === 'aguardando_aprovacao_arte') {
+      var enviadaEm = os.arte_enviada_em ? new Date(os.arte_enviada_em).toLocaleString('pt-BR') : '';
+      actionHTML = '<div style="text-align:center;padding:12px 0;color:#f57f17;font-size:14px;font-weight:600">⏳ Arte enviada ao cliente — aguardando resposta</div>' +
+        (enviadaEm ? '<div style="text-align:center;font-size:12px;color:#999">Enviada em ' + enviadaEm + '</div>' : '') +
+        '<button class="btn-action" style="background:#6a1b9a;margin-top:10px" data-id="' + os.id + '" data-action="reenviar-arte">🔄 Reenviar Arte</button>';
     } else {
       actionHTML = '<span class="label-producao">📤 Em produção</span>';
     }
@@ -179,6 +192,38 @@
       btn.addEventListener('click', function() {
         var id = btn.getAttribute('data-id');
         var next = btn.getAttribute('data-next');
+        var action = btn.getAttribute('data-action');
+
+        if (action === 'enviar-arte' || action === 'reenviar-arte') {
+          var fileInput = content.querySelector('.arte-file-input[data-id="' + id + '"]') ||
+                          content.querySelector('.arte-file-input');
+          if (!fileInput || !fileInput.files[0]) {
+            showToast('Selecione um arquivo de arte antes de enviar.', 'error');
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = 'Enviando...';
+          var formData = new FormData();
+          formData.append('arte', fileInput.files[0]);
+          fetch('/api/v2/os/' + id + '/enviar-arte', {
+            method: 'PATCH',
+            headers: { 'Authorization': 'Bearer ' + getToken() },
+            body: formData
+          }).then(function(r) {
+            if (r.ok) {
+              showToast('✅ Arte enviada ao cliente via WhatsApp!', 'success');
+              loadOS();
+            } else {
+              return r.json().then(function(e) { throw new Error((e.errors || [e.error])[0] || 'Erro'); });
+            }
+          }).catch(function(err) {
+            showToast('❌ ' + (err.message || 'Erro ao enviar arte.'), 'error');
+            btn.disabled = false;
+            btn.textContent = '📤 Enviar Arte ao Cliente';
+          });
+          return;
+        }
+
         btn.disabled = true;
         btn.style.opacity = '0.6';
         api('/api/v2/os/' + id + '/status', {
@@ -188,7 +233,7 @@
         }).then(function() {
           showToast('Status atualizado com sucesso!', 'success');
           loadOS();
-        }).catch(function(err) {
+        }).catch(function() {
           showToast('Erro ao atualizar status.', 'error');
           btn.disabled = false;
           btn.style.opacity = '1';

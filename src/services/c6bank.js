@@ -53,7 +53,7 @@ async function _fetchToken() {
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
   });
-  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/token`, params.toString(), {
+  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/auth/`, params.toString(), {
     httpsAgent: getAgent(),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   }));

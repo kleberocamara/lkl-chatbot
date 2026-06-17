@@ -413,7 +413,7 @@ router.put('/settings/:key', requireAdmin, async (req, res) => {
 // ── TABELA DE PREÇOS ──────────────────────────────────────────────────────────
 
 router.get('/prices', requireAuthApi, async (req, res) => {
-  const result = await db.query('SELECT * FROM price_table ORDER BY servico, qtd_min');
+  const result = await db.query('SELECT * FROM price_table ORDER BY produto, quantidade_min');
   res.json(result.rows);
 });
 

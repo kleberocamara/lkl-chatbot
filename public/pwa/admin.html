@@ -166,7 +166,7 @@ function renderOrcCard(o) {
   <div class="card">
     <div class="card-header">
       <span class="card-title">ORC #${o.numero || o.id}</span>
-      <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${statusBadge(o.status)} ${pgtoBadgeHTML(o.status_pagamento || 'pendente')}</span>
+      <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${statusBadge(o.status)} ${pgtoBadgeHTML(o.status_pagamento || 'pendente')} ${o.nfe_status === 'autorizada' ? `<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:12px;font-size:11px">NF-e ✓</span>` : ''}</span>
     </div>
     <div class="card-sub">${o.cliente_nome || '—'} &middot; ${fmtDate(o.created_at)}</div>
     <div class="card-actions">
@@ -178,6 +178,7 @@ function renderOrcCard(o) {
         <button onclick="gerarCobranca('${o.id}', 'boleto')" style="font-size:11px;padding:4px 10px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">🧾 Boleto</button>
         <button onclick="gerarCobranca('${o.id}', 'pix')" style="font-size:11px;padding:4px 10px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">⚡ PIX</button>
       ` : ''}
+      ${o.status === 'aprovado' && o.tem_os_entregue ? `<button onclick="abrirModalNfe('${o.id}')" style="background:#7b1fa2;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Emitir NF-e</button>` : ''}
       ${o.tipo_cobranca === 'boleto' && o.boleto_linha_digitavel ? `
         <div style="font-size:11px;color:#555;margin-top:6px;word-break:break-all">📋 ${o.boleto_linha_digitavel}</div>
       ` : o.tipo_cobranca === 'pix' && o.pix_copia_cola ? `
@@ -391,6 +392,166 @@ function switchTab(name) {
 
 // Init
 loadOrcamentos();
+
+// ---------- NF-e ----------
+let _nfeItens = [];
+
+async function abrirModalNfe(orcId) {
+  document.getElementById('nfeOrcId').value = orcId;
+  document.getElementById('nfeResultado').innerHTML = '';
+
+  const res = await fetch(`/api/v2/orcamentos/${orcId}`);
+  const orc = await res.json();
+  _nfeItens = orc.itens || [];
+
+  const container = document.getElementById('nfeItensNcm');
+  container.innerHTML = '<strong style="display:block;margin-bottom:8px">NCM por item *</strong>';
+  _nfeItens.forEach(item => {
+    container.innerHTML += `
+      <label style="display:block;margin-bottom:6px">
+        Item ${item.codigo}: ${item.descricao.substring(0,40)}
+        <input type="text" id="ncm_${item.id}" placeholder="ex: 49111090" maxlength="8" required
+          style="display:block;width:100%;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px;font-family:monospace">
+      </label>`;
+  });
+
+  document.getElementById('modalNfe').style.display = 'block';
+}
+
+function fecharModalNfe() {
+  document.getElementById('modalNfe').style.display = 'none';
+}
+
+function toggleTransporte() {
+  const frete = document.getElementById('nfeFrete').value;
+  document.getElementById('nfeTransporteSection').style.display = frete === '9' ? 'none' : 'block';
+}
+
+async function submeterNfe(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnSubmitNfe');
+  btn.disabled = true;
+  btn.textContent = 'Emitindo...';
+
+  const orcId = document.getElementById('nfeOrcId').value;
+  const frete = document.getElementById('nfeFrete').value;
+
+  const ncmPorItem = {};
+  _nfeItens.forEach(item => {
+    const val = document.getElementById(`ncm_${item.id}`)?.value?.trim();
+    if (val) ncmPorItem[String(item.id)] = val;
+  });
+
+  const body = {
+    cnpj_emitente: document.getElementById('nfeCnpj').value,
+    cfop: document.getElementById('nfeCfop').value,
+    ncm_por_item: ncmPorItem,
+    frete_por_conta: frete,
+    frete_valor: frete !== '9' ? parseFloat(document.getElementById('nfeFreteValor').value) || 0 : 0,
+    transportador: frete !== '9' ? {
+      razao_social: document.getElementById('nfeTranspRazao').value,
+      cnpj: document.getElementById('nfeTranspCnpj').value,
+      placa: document.getElementById('nfeTranspPlaca').value,
+      uf: document.getElementById('nfeTranspUf').value,
+      peso_bruto: document.getElementById('nfeTranspPesoB').value,
+      peso_liquido: document.getElementById('nfeTranspPesoL').value,
+      quantidade: document.getElementById('nfeTranspQtd').value,
+      especie: document.getElementById('nfeTranspEspecie').value,
+    } : null,
+  };
+
+  try {
+    const res = await fetch(`/api/v2/nfe/${orcId}/emitir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    const el = document.getElementById('nfeResultado');
+
+    if (res.ok && data.status === 'autorizada') {
+      el.innerHTML = `
+        <div style="background:#e8f5e9;border-radius:4px;padding:12px">
+          ✅ <strong>NF-e Autorizada!</strong><br>
+          Chave: <code style="font-size:11px">${data.chave}</code><br>
+          Protocolo: ${data.protocolo}<br>
+          <a href="${data.danfe_url}" target="_blank" style="color:#1976d2">📄 Download DANFE</a>
+        </div>`;
+    } else {
+      const errs = data.errors || [data.error] || ['Erro desconhecido'];
+      el.innerHTML = `<div style="background:#fce4ec;border-radius:4px;padding:12px">❌ ${errs.join('<br>')}</div>`;
+    }
+  } catch (err) {
+    document.getElementById('nfeResultado').innerHTML =
+      `<div style="background:#fce4ec;border-radius:4px;padding:12px">❌ Erro de conexão: ${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Emitir NF-e';
+  }
+}
 </script>
+
+<!-- Modal NF-e -->
+<div id="modalNfe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
+  <div style="background:#fff;max-width:600px;margin:40px auto;border-radius:8px;padding:24px">
+    <h3 style="margin:0 0 16px">Emitir NF-e</h3>
+    <form id="formNfe" onsubmit="submeterNfe(event)">
+      <input type="hidden" id="nfeOrcId">
+
+      <label style="display:block;margin-bottom:8px">
+        Empresa Emitente *
+        <select id="nfeCnpj" required style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px">
+          <option value="19296723000108">GRUPO DE GRAFICAS LKL LTDA (19.296.723/0001-08)</option>
+          <option value="44448899000185">FACTOR COMUNICAÇÃO VISUAL LTDA (44.448.899/0001-85)</option>
+        </select>
+      </label>
+
+      <label style="display:block;margin-bottom:8px">
+        CFOP *
+        <select id="nfeCfop" required style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px">
+          <option value="5101">5101 — Venda dentro do RJ</option>
+          <option value="6101">6101 — Venda fora do RJ</option>
+        </select>
+      </label>
+
+      <div id="nfeItensNcm" style="margin-bottom:12px"></div>
+
+      <label style="display:block;margin-bottom:8px">
+        Frete por conta
+        <select id="nfeFrete" onchange="toggleTransporte()" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px">
+          <option value="9">9 — Sem frete</option>
+          <option value="0">0 — Por conta do emitente (CIF)</option>
+          <option value="1">1 — Por conta do destinatário (FOB)</option>
+        </select>
+      </label>
+
+      <div id="nfeTransporteSection" style="display:none;border:1px solid #eee;border-radius:4px;padding:12px;margin-bottom:12px">
+        <label style="display:block;margin-bottom:8px">
+          Valor do Frete (R$)
+          <input type="number" id="nfeFreteValor" step="0.01" min="0" value="0" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px">
+        </label>
+        <label style="display:block;margin-bottom:8px">
+          Razão Social Transportadora
+          <input type="text" id="nfeTranspRazao" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px">
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <label>CNPJ Transp. <input type="text" id="nfeTranspCnpj" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>Placa <input type="text" id="nfeTranspPlaca" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>UF <input type="text" id="nfeTranspUf" maxlength="2" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>Peso Bruto (kg) <input type="number" id="nfeTranspPesoB" step="0.001" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>Peso Líquido (kg) <input type="number" id="nfeTranspPesoL" step="0.001" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>Qtd Volumes <input type="number" id="nfeTranspQtd" value="1" min="1" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+          <label>Espécie <input type="text" id="nfeTranspEspecie" value="VOLUME" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px"></label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button type="button" onclick="fecharModalNfe()" style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer">Cancelar</button>
+        <button type="submit" id="btnSubmitNfe" style="background:#7b1fa2;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer">Emitir NF-e</button>
+      </div>
+    </form>
+    <div id="nfeResultado" style="margin-top:16px"></div>
+  </div>
+</div>
 </body>
 </html>

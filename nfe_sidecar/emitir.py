@@ -85,8 +85,11 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     _texto(ide, 'cDV', chave[-1])
     _texto(ide, 'tpAmb', tp_amb)
     _texto(ide, 'finNFe', '1')
-    cpf_cnpj_dest = dados['destinatario']['cpf_cnpj'].replace('.','').replace('/','').replace('-','')
-    _texto(ide, 'indFinal', '0' if len(cpf_cnpj_dest) == 14 else '1')
+    # indFinal=1 para consumidor final (CPF ou CNPJ sem IE); =0 para B2B com IE
+    dest_cpf_cnpj = (dados.get('destinatario', {}).get('cpf_cnpj') or '').replace('.','').replace('/','').replace('-','')
+    dest_ie = (dados.get('destinatario', {}).get('ie') or '').strip().upper()
+    ind_final_cnpj_com_ie = len(dest_cpf_cnpj) == 14 and dest_ie and dest_ie not in ('', 'ISENTO', 'NA')
+    _texto(ide, 'indFinal', '0' if ind_final_cnpj_com_ie else '1')
     _texto(ide, 'indPres', '0')
     _texto(ide, 'procEmi', '0')
     _texto(ide, 'verProc', '1.0')
@@ -134,9 +137,22 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     _texto(end_dest, 'xPais', 'Brasil')
     if dest.get('fone'):
         _texto(end_dest, 'fone', dest['fone'].replace('(','').replace(')','').replace('-','').replace(' ',''))
-    _texto(el_dest, 'indIEDest', '9')  # não contribuinte
+    ie_dest = (dest.get('ie') or '').strip().upper()
+    if len(cpf_cnpj) == 14 and ie_dest and ie_dest not in ('', 'ISENTO', 'NA'):
+        # CNPJ com IE numérica: contribuinte do ICMS
+        _texto(el_dest, 'indIEDest', '1')
+        _texto(el_dest, 'IE', ie_dest)
+    elif len(cpf_cnpj) == 14:
+        # CNPJ sem IE numérica: contribuinte isento (SVRS aceita indIEDest=2 + IE=ISENTO)
+        _texto(el_dest, 'indIEDest', '2')
+        _texto(el_dest, 'IE', 'ISENTO')
+    else:
+        # CPF: não contribuinte (sem elemento IE)
+        _texto(el_dest, 'indIEDest', '9')
 
     # det (itens)
+    frete_valor = float(dados.get('frete_valor') or 0)
+
     valor_total = 0
     for idx, item in enumerate(dados['itens'], 1):
         ncm = dados['ncm_por_item'].get(str(item['id']), dados['ncm_por_item'].get(str(idx), '49111090'))
@@ -148,14 +164,17 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
         _texto(prod, 'NCM', ncm)
         _texto(prod, 'CFOP', cfop)
         _texto(prod, 'uCom', item.get('unidade', 'UN'))
-        _texto(prod, 'qCom', f"{float(item['quantidade']):.4f}")
-        _texto(prod, 'vUnCom', f"{float(item['valor_unitario']):.10f}")
+        qtd = float(item['quantidade'])
         v_prod = round(float(item['valor_total']), 2)
+        # Derivar vUnCom de vProd/qtd garante qCom*vUnCom==vProd (evita cStat=629)
+        v_unit = v_prod / qtd if qtd else float(item['valor_unitario'])
+        _texto(prod, 'qCom', f"{qtd:.4f}")
+        _texto(prod, 'vUnCom', f"{v_unit:.10f}")
         _texto(prod, 'vProd', f"{v_prod:.2f}")
         _texto(prod, 'cEANTrib', 'SEM GTIN')
         _texto(prod, 'uTrib', item.get('unidade', 'UN'))
-        _texto(prod, 'qTrib', f"{float(item['quantidade']):.4f}")
-        _texto(prod, 'vUnTrib', f"{float(item['valor_unitario']):.10f}")
+        _texto(prod, 'qTrib', f"{qtd:.4f}")
+        _texto(prod, 'vUnTrib', f"{v_unit:.10f}")
         _texto(prod, 'indTot', '1')
 
         imposto = etree.SubElement(det, f'{{{NS}}}imposto')
@@ -197,16 +216,15 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
 
         valor_total += v_prod
 
-    # total
-    frete_valor = float(dados.get('frete_valor') or 0)
-    v_nf = round(valor_total + frete_valor, 2)
+    # total (frete não é incluído no NF-e — preço já inclui frete)
+    v_nf = round(valor_total, 2)
     total = etree.SubElement(inf, f'{{{NS}}}total')
     ice = etree.SubElement(total, f'{{{NS}}}ICMSTot')
     for tag, val in [('vBC','0.00'),('vICMS','0.00'),('vICMSDeson','0.00'),
                      ('vFCPUFDest','0.00'),('vICMSUFDest','0.00'),('vICMSUFRemet','0.00'),
                      ('vFCP','0.00'),('vBCST','0.00'),('vST','0.00'),('vFCPST','0.00'),
                      ('vFCPSTRet','0.00'),('vProd', f'{valor_total:.2f}'),
-                     ('vFrete', f'{frete_valor:.2f}'),('vSeg','0.00'),('vDesc','0.00'),
+                     ('vFrete','0.00'),('vSeg','0.00'),('vDesc','0.00'),
                      ('vII','0.00'),('vIPI','0.00'),('vIPIDevol','0.00'),
                      ('vPIS','0.00'),('vCOFINS','0.00'),('vOutro','0.00'),
                      ('vNF', f'{v_nf:.2f}')]:

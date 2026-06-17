@@ -45,7 +45,7 @@ async function emitir(orcamentoId, body) {
             c.nome AS cliente_nome, c.cpf_cnpj, c.celular,
             c.logradouro, c.numero AS c_numero,
             c.bairro, c.cep, c.cidade AS municipio, c.uf,
-            CASE WHEN c.contribuinte_icms = 'sim' THEN 'ISENTO' ELSE 'ISENTO' END AS cliente_ie
+            COALESCE(c.ie, '') AS cliente_ie
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
      WHERE o.id = $1`,

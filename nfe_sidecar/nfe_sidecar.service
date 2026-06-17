@@ -1,0 +1,18 @@
+[Unit]
+Description=LKL NF-e Sidecar (Flask)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/lkl-chatbot/nfe_sidecar
+Environment=NFE_AMBIENTE=2
+Environment=SEFAZ_CERT_GRUPO=/var/www/lkl-chatbot/certs/sefaz/grupo_lkl_19296723000108.pfx
+Environment=SEFAZ_CERT_FACTOR=/var/www/lkl-chatbot/certs/sefaz/factor_44448899000185.pfx
+Environment=SEFAZ_CERT_PASSWORD=12345678
+ExecStart=/usr/bin/python3 /var/www/lkl-chatbot/nfe_sidecar/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

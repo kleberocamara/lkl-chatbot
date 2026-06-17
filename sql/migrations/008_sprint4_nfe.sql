@@ -7,9 +7,9 @@ CREATE TABLE IF NOT EXISTS nfe (
   cnpj_emitente    VARCHAR(14) NOT NULL,
   numero           INTEGER NOT NULL,
   serie            VARCHAR(3) NOT NULL DEFAULT '001',
-  chave            VARCHAR(44),
+  chave            VARCHAR(44) UNIQUE,
   protocolo        VARCHAR(20),
-  status           VARCHAR(20) NOT NULL DEFAULT 'pendente',
+  status           VARCHAR(20) NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','autorizada','denegada','cancelada','erro')),
   xml              TEXT,
   danfe_path       TEXT,
   cfop             VARCHAR(4) NOT NULL,
@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS nfe (
   frete_valor      NUMERIC(10,2) DEFAULT 0,
   transportador    JSONB,
   info_complementar TEXT,
-  emitido_em       TIMESTAMP,
-  created_at       TIMESTAMP DEFAULT NOW(),
-  updated_at       TIMESTAMP DEFAULT NOW()
+  emitido_em       TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS nfe_sequencia (

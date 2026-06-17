@@ -7,15 +7,19 @@ import tempfile
 from lxml import etree
 from cryptography.hazmat.primitives.serialization import pkcs12
 from signxml import XMLSigner, methods
+
+class _XMLSignerSHA1(XMLSigner):
+    """Subclasse que permite RSA-SHA1, exigido pelo padrão NF-e 4.0."""
+    def check_deprecated_methods(self):
+        pass
 import requests
 from emitentes import EMITENTES, SEFAZ_URL, NFE_AMBIENTE
 
 NS = 'http://www.portalfiscal.inf.br/nfe'
 
 def _calcular_dv(chave43):
-    """Calcula dígito verificador da chave de acesso NF-e."""
-    pesos = [2,3,4,5,6,7,8,9,2,3,4,5,6,7,8,9,2,3,4,5,6,7,8,9,2,3,4,5,6,7,8,9,2,3,4,5,6,7,8,9,2,3,4]
-    soma = sum(int(c) * p for c, p in zip(chave43, pesos))
+    """Calcula dígito verificador da chave de acesso NF-e (Módulo 11, da direita para esquerda)."""
+    soma = sum(int(c) * (i % 8 + 2) for i, c in enumerate(reversed(chave43)))
     resto = soma % 11
     return '0' if resto < 2 else str(11 - resto)
 
@@ -58,7 +62,7 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     c_uf = emitente['c_uf']
     chave = _montar_chave(int(c_uf), dh_emi, emitente['cnpj'], 55, 1, n_nf, 1, c_nf)
 
-    nfe = etree.Element(f'{{{NS}}}NFe', xmlns=NS)
+    nfe = etree.Element(f'{{{NS}}}NFe', nsmap={None: NS})
     inf = etree.SubElement(nfe, f'{{{NS}}}infNFe', versao='4.00', Id=f'NFe{chave}')
 
     # ide
@@ -153,15 +157,30 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
 
         imposto = etree.SubElement(det, f'{{{NS}}}imposto')
         icms = etree.SubElement(imposto, f'{{{NS}}}ICMS')
-        csosn = emitente['csosn']
-        if csosn == '0102':
+        csosn = emitente['csosn'].lstrip('0') or '0'
+        if csosn == '101':
+            icms_sn = etree.SubElement(icms, f'{{{NS}}}ICMSSN101')
+            _texto(icms_sn, 'orig', '0')
+            _texto(icms_sn, 'pCredSN', '2.84')
+            _texto(icms_sn, 'vCredICMSSN', '0.00')
+            _texto(icms_sn, 'CSOSN', '101')
+        elif csosn == '500':
+            icms_sn = etree.SubElement(icms, f'{{{NS}}}ICMSSN500')
+            _texto(icms_sn, 'orig', '0')
+            _texto(icms_sn, 'CSOSN', '500')
+        elif csosn == '900':
+            icms_sn = etree.SubElement(icms, f'{{{NS}}}ICMSSN900')
+            _texto(icms_sn, 'orig', '0')
+            _texto(icms_sn, 'modBC', '3')
+            _texto(icms_sn, 'vBC', '0.00')
+            _texto(icms_sn, 'pRedBC', '0.00')
+            _texto(icms_sn, 'pICMS', '0.00')
+            _texto(icms_sn, 'vICMS', '0.00')
+            _texto(icms_sn, 'CSOSN', '900')
+        else:  # 102, 103, 300, 400 → ICMSSN102
             icms_sn = etree.SubElement(icms, f'{{{NS}}}ICMSSN102')
             _texto(icms_sn, 'orig', '0')
-            _texto(icms_sn, 'CSOSN', '102')
-        else:  # 0400
-            icms_sn = etree.SubElement(icms, f'{{{NS}}}ICMSSN400')
-            _texto(icms_sn, 'orig', '0')
-            _texto(icms_sn, 'CSOSN', '400')
+            _texto(icms_sn, 'CSOSN', csosn)
 
         valor_total += v_prod
 
@@ -237,9 +256,9 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
 
     return nfe, chave
 
-def _assinar(nfe, cert_pem, key_pem):
+def _assinar(nfe, cert_pem, key_pem, chave):
     """Assina o XML NF-e com XMLDSIG."""
-    signer = XMLSigner(
+    signer = _XMLSignerSHA1(
         method=methods.enveloped,
         signature_algorithm='rsa-sha1',
         digest_algorithm='sha1',
@@ -249,7 +268,7 @@ def _assinar(nfe, cert_pem, key_pem):
         nfe,
         key=key_pem,
         cert=cert_pem,
-        reference_uri='',
+        reference_uri=f'NFe{chave}',
     )
     return signed
 
@@ -257,28 +276,31 @@ def _transmitir(nfe_xml_bytes, emitente, cert_path_pem, key_path_pem, tp_amb):
     """Envia NF-e para SEFAZ via SOAP e retorna resposta."""
     url = SEFAZ_URL[tp_amb]
     c_uf = emitente['c_uf']
-    nfe_xml_str = nfe_xml_bytes.decode('utf-8')
 
-    soap_body = f"""<?xml version="1.0" encoding="UTF-8"?>
-<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-  <soap12:Header>
-    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">
-      <cUF>{c_uf}</cUF>
-      <versaoDados>4.00</versaoDados>
-    </nfeCabecMsg>
-  </soap12:Header>
-  <soap12:Body>
-    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">
-      <enviNFe versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">
-        <idLote>1</idLote>
-        <indSinc>1</indSinc>
-        {nfe_xml_str}
-      </enviNFe>
-    </nfeDadosMsg>
-  </soap12:Body>
-</soap12:Envelope>"""
+    nfe_str = nfe_xml_bytes.decode('utf-8')
+    if nfe_str.startswith('<?xml'):
+        nfe_str = nfe_str[nfe_str.index('?>') + 2:].lstrip()
+
+    soap_body = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+        ' xmlns:xsd="http://www.w3.org/2001/XMLSchema"'
+        ' xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+        '<soap12:Header>'
+        '<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">'
+        f'<cUF>{c_uf}</cUF><versaoDados>4.00</versaoDados>'
+        '</nfeCabecMsg>'
+        '</soap12:Header>'
+        '<soap12:Body>'
+        '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">'
+        '<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">'
+        '<idLote>1</idLote><indSinc>1</indSinc>'
+        + nfe_str
+        + '</enviNFe>'
+        '</nfeDadosMsg>'
+        '</soap12:Body>'
+        '</soap12:Envelope>'
+    )
 
     resp = requests.post(
         url,
@@ -288,6 +310,7 @@ def _transmitir(nfe_xml_bytes, emitente, cert_path_pem, key_path_pem, tp_amb):
             'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
         },
         cert=(cert_path_pem, key_path_pem),
+        verify=os.path.join(os.path.dirname(__file__), 'sefaz_ca_bundle.pem'),
         timeout=30,
     )
     return resp.text
@@ -296,14 +319,23 @@ def _parsear_retorno(resp_xml):
     """Extrai cStat, xMotivo, chave, protocolo do retorno SEFAZ."""
     root = etree.fromstring(resp_xml.encode('utf-8'))
 
-    def find(tag):
-        el = root.find(f'.//{{{NS}}}{tag}')
-        return el.text if el is not None else None
+    def find_in(el, tag):
+        found = el.find(f'.//{{{NS}}}{tag}')
+        return found.text if found is not None else None
 
-    c_stat = find('cStat')
-    x_motivo = find('xMotivo')
-    ch_nfe = find('chNFe')
-    n_prot = find('nProt')
+    # Resultado real da NF-e está em protNFe/infProt (processamento síncrono)
+    inf_prot = root.find(f'.//{{{NS}}}infProt')
+    if inf_prot is not None:
+        c_stat = find_in(inf_prot, 'cStat')
+        x_motivo = find_in(inf_prot, 'xMotivo')
+        ch_nfe = find_in(inf_prot, 'chNFe')
+        n_prot = find_in(inf_prot, 'nProt')
+    else:
+        # Fallback: erro antes do processamento (ex: schema inválido no lote)
+        c_stat = find_in(root, 'cStat')
+        x_motivo = find_in(root, 'xMotivo')
+        ch_nfe = None
+        n_prot = None
     return c_stat, x_motivo, ch_nfe, n_prot
 
 def emitir_nfe(dados):
@@ -323,7 +355,7 @@ def emitir_nfe(dados):
     tp_amb = NFE_AMBIENTE
     n_nf = dados['numero']
     c_nf = random.randint(10000000, 99999999)
-    dh_emi = datetime.datetime.now()
+    dh_emi = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3)))
 
     cert_pem_path, key_pem_path, cert_pem, key_pem = _extrair_cert_key(
         emitente['cert_path'], emitente['cert_password']
@@ -331,7 +363,7 @@ def emitir_nfe(dados):
 
     try:
         nfe_el, chave = _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb)
-        nfe_assinada = _assinar(nfe_el, cert_pem, key_pem)
+        nfe_assinada = _assinar(nfe_el, cert_pem, key_pem, chave)
         nfe_bytes = etree.tostring(nfe_assinada, xml_declaration=True, encoding='UTF-8')
         resp_text = _transmitir(nfe_bytes, emitente, cert_pem_path, key_pem_path, tp_amb)
         c_stat, x_motivo, ch_nfe, n_prot = _parsear_retorno(resp_text)

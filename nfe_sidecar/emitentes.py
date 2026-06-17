@@ -40,7 +40,7 @@ EMITENTES = {
 
 SEFAZ_URL = {
     '1': 'https://nfe.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx',
-    '2': 'https://hom.nfe.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx',
+    '2': 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
 }
 
 NFE_AMBIENTE = os.environ.get('NFE_AMBIENTE', '2')

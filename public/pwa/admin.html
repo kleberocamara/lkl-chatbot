@@ -70,7 +70,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <body>
 
 <div class="topbar">
-  <h1>⚙️ Painel Admin</h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <img src="/logo.png" alt="LKL" style="height:32px;width:auto;border-radius:4px">
+    <h1>Painel Admin</h1>
+  </div>
   <button class="btn-sair" onclick="logout()">Sair</button>
 </div>
 
@@ -148,7 +151,7 @@ async function loadOrcamentos() {
   const el = document.getElementById('orc-list');
   el.innerHTML = '<div class="loading">Carregando orçamentos...</div>';
   try {
-    const res = await api('/api/orcamentos?limit=100');
+    const res = await api('GET', '/api/v2/orcamentos?limit=100');
     const list = res.data || [];
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhum orçamento encontrado.</div>'; return; }
     el.innerHTML = list.map(o => renderOrcCard(o)).join('');
@@ -173,7 +176,7 @@ function renderOrcCard(o) {
       <button class="btn btn-primary" onclick="abrirPrecificar(${o.id}, '${o.numero || o.id}')">💰 Precificar</button>
       ${enviarBtn}
       ${aprovarBtn}
-      <a href="/api/orcamentos/${o.id}/pdf" target="_blank" class="btn btn-outline">📄 PDF</a>
+      <a href="/api/v2/orcamentos/${o.id}/pdf" target="_blank" class="btn btn-outline">📄 PDF</a>
       ${o.status === 'aprovado' && o.status_pagamento !== 'pago' ? `
         <button onclick="gerarCobranca('${o.id}', 'boleto')" style="font-size:11px;padding:4px 10px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">🧾 Boleto</button>
         <button onclick="gerarCobranca('${o.id}', 'pix')" style="font-size:11px;padding:4px 10px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">⚡ PIX</button>
@@ -194,7 +197,7 @@ async function abrirPrecificar(id, numero) {
   document.getElementById('modal-body').innerHTML = '<div class="loading">Carregando itens...</div>';
   document.getElementById('modal-overlay').classList.add('open');
   try {
-    const orc = await api(`/api/orcamentos/${id}`);
+    const orc = await api('GET', `/api/v2/orcamentos/${id}`);
     currentOrcItems = orc.itens || [];
     renderModalItems();
   } catch (e) {
@@ -244,11 +247,7 @@ async function salvarPrecos() {
     valor_total: parseFloat(document.getElementById(`total-${idx}`).value) || 0
   }));
   try {
-    await api(`/api/orcamentos/${currentOrcId}/precificar`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itens })
-    });
+    await api('PATCH', `/api/v2/orcamentos/${currentOrcId}/precificar`, { itens });
     closeModal();
     showToast('💰 Preços salvos com sucesso!');
     loadOrcamentos();
@@ -266,7 +265,7 @@ function closeModal() {
 async function enviarOrc(id, numero) {
   if (!confirm('Marcar como enviado ao cliente?')) return;
   try {
-    await api(`/api/orcamentos/${id}/enviar`, { method: 'PATCH' });
+    await api('PATCH', `/api/v2/orcamentos/${id}/enviar`);
     showToast('📤 Orçamento enviado!');
     loadOrcamentos();
   } catch (e) {
@@ -279,11 +278,7 @@ async function aprovarOrc(id, numero) {
   const canal = prompt('Canal de aprovação (whatsapp / email / sistema):', 'whatsapp');
   if (!canal) return;
   try {
-    const res = await api(`/api/orcamentos/${id}/aprovar`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ aprovado_via: canal })
-    });
+    const res = await api('PATCH', `/api/v2/orcamentos/${id}/aprovar`, { aprovado_via: canal });
     const count = res.os_count || res.os?.length || '';
     showToast(`✅ Aprovado!${count ? ' ' + count + ' OS(s) gerada(s)' : ''}`);
     loadOrcamentos();
@@ -309,11 +304,7 @@ function pgtoBadgeHTML(statusPgto) {
 async function gerarCobranca(orcId, tipo) {
   const label = tipo === 'boleto' ? 'Boleto' : 'PIX';
   if (!confirm(`Gerar ${label} para este orçamento e enviar ao cliente via WhatsApp?`)) return;
-  const res = await api(`/api/v2/orcamentos/${orcId}/cobrar`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tipo }),
-  });
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/cobrar`, { tipo });
   if (res && !res.errors && !res.error) {
     showToast(`✅ ${label} gerado e enviado ao cliente via WhatsApp!`);
     loadOrcamentos();
@@ -335,7 +326,7 @@ async function loadOS() {
   const el = document.getElementById('os-list');
   el.innerHTML = '<div class="loading">Carregando ordens...</div>';
   try {
-    const res = await api('/api/os?limit=100');
+    const res = await api('GET', '/api/v2/os?limit=100');
     const list = res.data || [];
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhuma OS encontrada.</div>'; return; }
     el.innerHTML = list.map(os => renderOSCard(os)).join('');
@@ -366,11 +357,7 @@ function renderOSCard(os) {
 async function atualizarOS(id) {
   const status = document.getElementById(`os-status-${id}`).value;
   try {
-    await api(`/api/os/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
+    await api('PATCH', `/api/v2/os/${id}/status`, { status });
     showToast('✅ Status atualizado!');
     loadOS();
   } catch (e) {
@@ -400,8 +387,7 @@ async function abrirModalNfe(orcId) {
   document.getElementById('nfeOrcId').value = orcId;
   document.getElementById('nfeResultado').innerHTML = '';
 
-  const res = await fetch(`/api/v2/orcamentos/${orcId}`);
-  const orc = await res.json();
+  const orc = await api('GET', `/api/v2/orcamentos/${orcId}`);
   _nfeItens = orc.itens || [];
 
   const container = document.getElementById('nfeItensNcm');
@@ -461,12 +447,8 @@ async function submeterNfe(e) {
   };
 
   try {
-    const res = await fetch(`/api/v2/nfe/${orcId}/emitir`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
+    const data = await api('POST', `/api/v2/nfe/${orcId}/emitir`, body);
+    const res = { ok: data && data.status === 'autorizada' };
     const el = document.getElementById('nfeResultado');
 
     if (res.ok && data.status === 'autorizada') {

@@ -43,8 +43,9 @@ async function emitir(orcamentoId, body) {
     `SELECT o.id, o.numero, o.status, o.status_pagamento,
             o.boleto_vencimento, o.pago_em,
             c.nome AS cliente_nome, c.cpf_cnpj, c.celular,
-            c.logradouro, c.numero AS c_numero, c.complemento,
-            c.bairro, c.cep, c.municipio, c.uf, c.ie AS cliente_ie
+            c.logradouro, c.numero AS c_numero,
+            c.bairro, c.cep, c.cidade AS municipio, c.uf,
+            CASE WHEN c.contribuinte_icms = 'sim' THEN 'ISENTO' ELSE 'ISENTO' END AS cliente_ie
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
      WHERE o.id = $1`,
@@ -102,7 +103,7 @@ async function emitir(orcamentoId, body) {
       cpf_cnpj: (orc.cpf_cnpj || '').replace(/\D/g, ''),
       logradouro: orc.logradouro || 'NAO INFORMADO',
       numero: orc.c_numero || 'SN',
-      complemento: orc.complemento || '',
+      complemento: '',
       bairro: orc.bairro || 'NAO INFORMADO',
       cep: (orc.cep || '').replace(/\D/g, ''),
       municipio: orc.municipio || 'Duque de Caxias',
@@ -146,12 +147,12 @@ async function emitir(orcamentoId, body) {
                status: 'autorizada', danfe_url: danfePath };
     } else {
       await db.query(
-        `UPDATE nfe SET status='rejeitada', updated_at=NOW() WHERE id=$1`, [nfeId]
+        `UPDATE nfe SET status='erro', updated_at=NOW() WHERE id=$1`, [nfeId]
       );
       return { erro: [resultado.erro || `Rejeição SEFAZ: ${resultado.c_stat} - ${resultado.x_motivo}`] };
     }
   } catch (e) {
-    await db.query(`UPDATE nfe SET status='rejeitada', updated_at=NOW() WHERE id=$1`, [nfeId]);
+    await db.query(`UPDATE nfe SET status='erro', updated_at=NOW() WHERE id=$1`, [nfeId]);
     console.error('[NFE-EMITIR]', e.message);
     return { erro: [`Erro na emissão: ${e.message}`] };
   }

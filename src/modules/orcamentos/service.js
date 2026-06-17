@@ -196,7 +196,9 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
 
   const [rows, count] = await Promise.all([
     db.query(
-      `SELECT o.*, c.nome AS cliente_nome, u.name AS vendedor_nome
+      `SELECT o.*, c.nome AS cliente_nome, u.name AS vendedor_nome,
+              EXISTS(SELECT 1 FROM ordens_servico os WHERE os.orcamento_id = o.id AND os.status = 'entregue') AS tem_os_entregue,
+              (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status
        FROM orcamentos o
        LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
        LEFT JOIN users u ON u.id = o.vendedor_id
@@ -217,8 +219,8 @@ async function cobrar(id, tipo) {
   }
 
   const r = await db.query(
-    `SELECT o.id, o.numero, o.status, o.status_pagamento,
-            o.valor_total_calculado,
+    `SELECT o.id, o.numero, o.status, o.status_pagamento, o.tipo_cobranca,
+            COALESCE((SELECT SUM(valor_total) FROM orcamento_itens WHERE orcamento_id = o.id), 0) AS valor_total_calculado,
             c.nome AS cliente_nome, c.cpf_cnpj AS cliente_cpf_cnpj, c.celular AS cliente_celular
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id

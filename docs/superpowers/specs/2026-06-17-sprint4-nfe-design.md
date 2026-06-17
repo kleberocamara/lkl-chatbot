@@ -247,14 +247,35 @@ const EMITENTES = {
 
 ---
 
-## Dependências npm
+## Arquitetura: Sidecar Python
 
-```bash
-npm install nfe danfe
+Nenhum pacote npm confiável existe para emissão completa de NF-e 4.0. A solução é um **microserviço Python** rodando no mesmo VPS que o Node.js chama via HTTP interno.
+
+```
+Node.js (porta 3000)
+  → POST http://localhost:3001/emitir   (sidecar Python)
+  → POST http://localhost:3001/danfe
 ```
 
-- `nfe`: geração de XML NF-e 4.0, assinatura digital, transmissão SEFAZ
-- `danfe`: geração do PDF DANFE a partir do XML autorizado
+### Sidecar (`nfe_sidecar/`)
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `nfe_sidecar/app.py` | Flask HTTP server (porta 3001, bind 127.0.0.1 apenas) |
+| `nfe_sidecar/emitir.py` | Monta NF-e com nfelib, assina, transmite SEFAZ-RJ |
+| `nfe_sidecar/danfe.py` | Gera PDF DANFE a partir do XML autorizado |
+| `nfe_sidecar/requirements.txt` | nfelib, flask, lxml, reportlab |
+| `nfe_sidecar/nfe_sidecar.service` | Systemd unit para o sidecar no VPS |
+
+### Dependências Python
+
+```bash
+pip install nfelib flask lxml reportlab
+```
+
+### Dependências Node.js
+
+Nenhuma nova — Node.js usa `axios` (já instalado) para chamar o sidecar.
 
 ---
 

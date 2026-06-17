@@ -349,6 +349,10 @@ def _transmitir(nfe_xml_bytes, emitente, cert_path_pem, key_path_pem, tp_amb):
 
 def _parsear_retorno(resp_xml):
     """Extrai cStat, xMotivo, chave, protocolo do retorno SEFAZ."""
+    # Detectar resposta HTTP de erro (não XML)
+    stripped = resp_xml.strip()
+    if not stripped.startswith('<') or '403' in stripped[:200] or '401' in stripped[:200]:
+        return '999', f'Erro HTTP SEFAZ: {stripped[:120]}', None, None
     root = etree.fromstring(resp_xml.encode('utf-8'))
 
     def find_in(el, tag):

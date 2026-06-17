@@ -74,9 +74,14 @@ CREATE TABLE nfe_sequencia (
 );
 
 -- Seeds iniciais
+-- Em homologação: começa do zero (notas de teste não têm valor fiscal)
 INSERT INTO nfe_sequencia (cnpj, ultimo_numero) VALUES
-  ('19296723000108', 1859),   -- GRUPO LKL: última nota emitida no SisGraf (confirmar)
-  ('44448899000185', 222);    -- FACTOR: última nota emitida no SisGraf (confirmar)
+  ('19296723000108', 0),
+  ('44448899000185', 0);
+
+-- ⚠️ VIRADA PARA PRODUÇÃO: atualizar com o último número emitido no SisGraf no dia da migração
+-- UPDATE nfe_sequencia SET ultimo_numero = XXXX WHERE cnpj = '19296723000108';
+-- UPDATE nfe_sequencia SET ultimo_numero = YYYY WHERE cnpj = '44448899000185';
 ```
 
 > **Importante:** o número 1859 deve ser confirmado com o operador — é o último número emitido no SisGraf para o GRUPO LKL antes da migração.

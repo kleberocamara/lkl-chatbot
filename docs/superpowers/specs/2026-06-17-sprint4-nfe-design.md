@@ -13,7 +13,9 @@ Emissão manual de NF-e (produto) diretamente para SEFAZ-RJ a partir de orçamen
   - Ambas: RUA DOUTOR WALDIR DE SOUZA MEDEIROS, 315, QUADRA 28 LOTE 38, PARQUE DUQUE, CEP 25085-595, DUQUE DE CAXIAS - RJ
 - Certificados A1 (.pfx, senha `12345678`) já no VPS em `/var/www/lkl-chatbot/certs/sefaz/`
 - NF-e emitida **manualmente** pelo operador (nem todo orçamento gera nota)
-- Pré-requisito: `status_pagamento = 'pago'`
+- Pré-requisito: orçamento `status = 'aprovado'` com ao menos uma OS com `status = 'entregue'`
+- Nota pode ser parcial (cobrir só alguns itens entregues) ou total (todos entregues)
+- Múltiplas notas por orçamento são suportadas pelo schema
 
 ---
 
@@ -188,8 +190,9 @@ Serve o PDF do DANFE. Requer role `admin` ou `operador`.
 
 ## PWA admin.html
 
-- Orçamentos com `status_pagamento='pago'` mostram botão **"Emitir NF-e"** (além dos botões existentes)
-- Se já existe NF-e `status='autorizada'` para o orçamento: botão vira **"Ver NF-e"** (abre DANFE)
+- Orçamentos com `status='aprovado'` e ao menos uma OS com `status='entregue'` mostram botão **"Emitir NF-e"**
+- Botão fica disponível mesmo se já existe NF-e anterior (permite notas parciais/complementares)
+- Se existe NF-e `status='autorizada'`: exibe badge verde "NF-e emitida" + link DANFE da última nota
 - Modal de emissão: empresa (dropdown) → CFOP → NCM por item → transporte → botão Emitir
 - Badge de status NF-e: pendente (cinza) / autorizada (verde) / rejeitada (vermelho)
 
@@ -259,7 +262,7 @@ npm install nfe danfe
 
 `tests/modules/nfe.test.js` cobre:
 1. Rejeição quando orçamento não encontrado
-2. Rejeição quando `status_pagamento != 'pago'`
+2. Rejeição quando orçamento não está `aprovado` ou não tem OS com `status='entregue'`
 3. Rejeição quando NCM faltando para algum item
 4. Mock de transmissão SEFAZ — retorno de autorização → salva corretamente
 5. Mock de rejeição SEFAZ → status='rejeitada', erro retornado

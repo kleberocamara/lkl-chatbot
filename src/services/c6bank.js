@@ -131,7 +131,7 @@ async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, soli
     ? { cpf: cpfCnpj, nome: nomeDevedor }
     : { cnpj: cpfCnpj, nome: nomeDevedor };
 
-  const res = await c6Request(() => axios.put(`${BASE_URL}/v2/cob/${txid}`, {
+  const res = await c6Request(() => axios.put(`${BASE_URL}/v2/pix/cob/${txid}`, {
     calendario: { expiracao: 86400 },
     devedor,
     valor: { original: valor.toFixed(2) },
@@ -156,7 +156,7 @@ async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, soli
 async function registrarWebhookPix(webhookUrl) {
   if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
   const token = await getAccessToken();
-  await c6Request(() => axios.put(`${BASE_URL}/v2/webhook/${PIX_KEY}`, { webhookUrl }, {
+  await c6Request(() => axios.put(`${BASE_URL}/v2/pix/webhook/${PIX_KEY}`, { webhookUrl }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));

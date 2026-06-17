@@ -16,5 +16,6 @@ router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));
 router.use('/orcamentos', requireAuthApi, require('./orcamentos/router'));
 router.use('/os', requireAuthApi, require('./os/router'));
+router.use('/nfe', requireAuthApi, require('./nfe/router'));
 
 module.exports = router;

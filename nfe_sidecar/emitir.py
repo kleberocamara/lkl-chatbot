@@ -85,7 +85,8 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     _texto(ide, 'cDV', chave[-1])
     _texto(ide, 'tpAmb', tp_amb)
     _texto(ide, 'finNFe', '1')
-    _texto(ide, 'indFinal', '0')
+    cpf_cnpj_dest = dados['destinatario']['cpf_cnpj'].replace('.','').replace('/','').replace('-','')
+    _texto(ide, 'indFinal', '0' if len(cpf_cnpj_dest) == 14 else '1')
     _texto(ide, 'indPres', '0')
     _texto(ide, 'procEmi', '0')
     _texto(ide, 'verProc', '1.0')
@@ -116,7 +117,9 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
         _texto(el_dest, 'CNPJ', cpf_cnpj)
     else:
         _texto(el_dest, 'CPF', cpf_cnpj)
-    _texto(el_dest, 'xNome', dest['nome'][:60])
+    # Em homologação, SEFAZ exige este nome exato (cStat=598 se diferente)
+    xnome = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL' if tp_amb == '2' else dest['nome'][:60]
+    _texto(el_dest, 'xNome', xnome)
     end_dest = etree.SubElement(el_dest, f'{{{NS}}}enderDest')
     _texto(end_dest, 'xLgr', dest.get('logradouro', 'NAO INFORMADO')[:60])
     _texto(end_dest, 'nro', dest.get('numero', 'SN'))
@@ -182,6 +185,16 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
             _texto(icms_sn, 'orig', '0')
             _texto(icms_sn, 'CSOSN', csosn)
 
+        # PIS — CST=07 (isento) para Simples Nacional
+        pis = etree.SubElement(imposto, f'{{{NS}}}PIS')
+        pis_nt = etree.SubElement(pis, f'{{{NS}}}PISNT')
+        _texto(pis_nt, 'CST', '07')
+
+        # COFINS — CST=07 (isento) para Simples Nacional
+        cofins = etree.SubElement(imposto, f'{{{NS}}}COFINS')
+        cofins_nt = etree.SubElement(cofins, f'{{{NS}}}COFINSNT')
+        _texto(cofins_nt, 'CST', '07')
+
         valor_total += v_prod
 
     # total
@@ -242,6 +255,7 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     pag = etree.SubElement(inf, f'{{{NS}}}pag')
     det_pag = etree.SubElement(pag, f'{{{NS}}}detPag')
     _texto(det_pag, 'tPag', '99')  # outros
+    _texto(det_pag, 'xPag', 'A PRAZO')  # obrigatório quando tPag=99
     _texto(det_pag, 'vPag', f'{v_nf:.2f}')
 
     # infAdic

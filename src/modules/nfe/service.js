@@ -55,6 +55,11 @@ async function emitir(orcamentoId, body) {
   const orc = orcR.rows[0];
   if (orc.status !== 'aprovado') return { erro: ['Orçamento precisa estar aprovado'] };
 
+  const cpfCnpjLimpo = (orc.cpf_cnpj || '').replace(/\D/g, '');
+  if (!cpfCnpjLimpo || (cpfCnpjLimpo.length !== 11 && cpfCnpjLimpo.length !== 14)) {
+    return { erro: ['Cliente sem CPF/CNPJ válido cadastrado — atualize o cadastro antes de emitir NF-e'] };
+  }
+
   const osR = await db.query(
     `SELECT COUNT(*) AS total FROM ordens_servico WHERE orcamento_id = $1 AND status = 'entregue'`,
     [orcamentoId]

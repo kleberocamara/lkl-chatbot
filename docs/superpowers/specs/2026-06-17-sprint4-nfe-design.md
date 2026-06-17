@@ -75,8 +75,8 @@ CREATE TABLE nfe_sequencia (
 
 -- Seeds iniciais
 INSERT INTO nfe_sequencia (cnpj, ultimo_numero) VALUES
-  ('19296723000108', 1859),   -- GRUPO LKL: última nota emitida no SisGraf
-  ('44448899000185', 0);      -- FACTOR: começa do zero
+  ('19296723000108', 1859),   -- GRUPO LKL: última nota emitida no SisGraf (confirmar)
+  ('44448899000185', 222);    -- FACTOR: última nota emitida no SisGraf (confirmar)
 ```
 
 > **Importante:** o número 1859 deve ser confirmado com o operador — é o último número emitido no SisGraf para o GRUPO LKL antes da migração.
@@ -198,6 +198,7 @@ const EMITENTES = {
     razaoSocial: 'GRUPO DE GRAFICAS LKL LTDA',
     cnpj: '19296723000108',
     ie: '86591529',
+    csosn: '0102',
     logradouro: 'RUA DOUTOR WALDIR DE SOUZA MEDEIROS',
     numero: '315',
     complemento: 'QUADRA 28 LOTE 38',
@@ -213,9 +214,10 @@ const EMITENTES = {
     razaoSocial: 'FACTOR COMUNICACAO VISUAL LTDA',
     cnpj: '44448899000185',
     ie: '12306440',
+    csosn: '0400',
     logradouro: 'RUA DOUTOR WALDIR DE SOUZA MEDEIROS',
     numero: '315',
-    complemento: 'QUADRA 28 LOTE 38',
+    complemento: 'QUADRA28 LOTE 38 ANEXO PARTE',
     bairro: 'PARQUE DUQUE',
     cep: '25085595',
     municipio: 'Duque de Caxias',

@@ -4,6 +4,7 @@ import json
 from flask import Flask, request, jsonify, send_file
 from emitir import emitir_nfe
 from danfe import gerar_danfe
+from eventos import cancelar_nfe, corrigir_nfe, inutilizar_nfe
 
 app = Flask(__name__)
 
@@ -26,6 +27,42 @@ def danfe():
         dados = request.get_json(force=True)
         pdf_path = gerar_danfe(dados['xml'], dados['output_path'])
         return send_file(pdf_path, mimetype='application/pdf')
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/cancelar', methods=['POST'])
+def cancelar():
+    try:
+        dados = request.get_json(force=True)
+        resultado = cancelar_nfe(dados)
+        if resultado.get('erro'):
+            return jsonify(resultado), 400
+        ok = resultado.get('status') == 'cancelada'
+        return jsonify(resultado), (200 if ok else 422)
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/corrigir', methods=['POST'])
+def corrigir():
+    try:
+        dados = request.get_json(force=True)
+        resultado = corrigir_nfe(dados)
+        if resultado.get('erro'):
+            return jsonify(resultado), 400
+        ok = resultado.get('status') == 'registrada'
+        return jsonify(resultado), (200 if ok else 422)
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/inutilizar', methods=['POST'])
+def inutilizar():
+    try:
+        dados = request.get_json(force=True)
+        resultado = inutilizar_nfe(dados)
+        if resultado.get('erro'):
+            return jsonify(resultado), 400
+        ok = resultado.get('status') == 'inutilizada'
+        return jsonify(resultado), (200 if ok else 422)
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 

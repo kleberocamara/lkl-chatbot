@@ -80,14 +80,58 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="tabs">
   <div class="tab active" onclick="switchTab('orcamentos')">Orçamentos</div>
   <div class="tab" onclick="switchTab('os')">Ordens de Serviço</div>
+  <div class="tab" onclick="switchTab('cadastros')">Cadastros</div>
 </div>
 
 <div id="tab-orcamentos" class="tab-content active">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="abrirModalInutilizar()"
+            style="background:#4e342e;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px">
+      🔒 Inutilizar NF-e
+    </button>
+  </div>
   <div id="orc-list"><div class="loading">Carregando orçamentos...</div></div>
 </div>
 
 <div id="tab-os" class="tab-content">
   <div id="os-list"><div class="loading">Carregando ordens...</div></div>
+</div>
+
+<div id="tab-cadastros" class="tab-content">
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-primary" id="cad-btn-clientes" onclick="switchCad('clientes')">👥 Clientes</button>
+    <button class="btn btn-secondary" id="cad-btn-fornecedores" onclick="switchCad('fornecedores')">🏭 Fornecedores</button>
+    <button class="btn btn-secondary" id="cad-btn-materiais" onclick="switchCad('materiais')">📦 Materiais</button>
+    <button class="btn btn-secondary" id="cad-btn-funcionarios" onclick="switchCad('funcionarios')">👤 Funcionários</button>
+  </div>
+  <div id="cad-clientes" class="cad-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <input type="text" id="busca-clientes" placeholder="Buscar por nome, CPF/CNPJ ou celular..." oninput="_cadPages.clientes=1;debounceLoad(loadClientes)" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;margin-right:8px">
+      <button class="btn btn-success" onclick="abrirModalCliente()">+ Novo</button>
+    </div>
+    <div id="list-clientes"><div class="loading">Carregando...</div></div>
+  </div>
+  <div id="cad-fornecedores" class="cad-section" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <input type="text" id="busca-fornecedores" placeholder="Buscar por nome ou CNPJ..." oninput="_cadPages.fornecedores=1;debounceLoad(loadFornecedores)" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;margin-right:8px">
+      <button class="btn btn-success" onclick="abrirModalFornecedor()">+ Novo</button>
+    </div>
+    <div id="list-fornecedores"><div class="loading">Carregando...</div></div>
+  </div>
+  <div id="cad-materiais" class="cad-section" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <input type="text" id="busca-materiais" placeholder="Buscar por nome..." oninput="_cadPages.materiais=1;debounceLoad(loadMateriais)" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;margin-right:8px">
+      <button class="btn btn-success" onclick="abrirModalMaterial()">+ Novo</button>
+    </div>
+    <div id="list-materiais"><div class="loading">Carregando...</div></div>
+  </div>
+  <div id="cad-funcionarios" class="cad-section" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;color:#666">Funcionários cadastrados</span>
+      <button class="btn btn-success" onclick="abrirModalFuncionario()">+ Novo</button>
+    </div>
+    <div id="list-funcionarios"><div class="loading">Carregando...</div></div>
+  </div>
 </div>
 
 <!-- Pricing Modal -->
@@ -145,6 +189,16 @@ function fmtDate(dt) {
   return d.toLocaleDateString('pt-BR');
 }
 
+function fmtDatas(row) {
+  const cad = row.created_at ? new Date(row.created_at).toLocaleDateString('pt-BR') : '—';
+  const upd = row.updated_at ? new Date(row.updated_at) : null;
+  const cri = row.created_at ? new Date(row.created_at) : null;
+  const alterado = upd && cri && (upd - cri) > 60000;
+  return alterado
+    ? `<span title="Cadastro: ${cad}">${cad}</span><br><span style="font-size:10px;color:#e65100" title="Última alteração">✏️ ${upd.toLocaleDateString('pt-BR')}</span>`
+    : cad;
+}
+
 // ---------- ORÇAMENTOS ----------
 
 async function loadOrcamentos() {
@@ -181,11 +235,61 @@ function renderOrcCard(o) {
         <button onclick="gerarCobranca('${o.id}', 'boleto')" style="font-size:11px;padding:4px 10px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">🧾 Boleto</button>
         <button onclick="gerarCobranca('${o.id}', 'pix')" style="font-size:11px;padding:4px 10px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">⚡ PIX</button>
       ` : ''}
-      ${o.status === 'aprovado' && o.tem_os_entregue ? `<button onclick="abrirModalNfe('${o.id}')" style="background:#7b1fa2;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Emitir NF-e</button>` : ''}
-      ${o.tipo_cobranca === 'boleto' && o.boleto_linha_digitavel ? `
-        <div style="font-size:11px;color:#555;margin-top:6px;word-break:break-all">📋 ${o.boleto_linha_digitavel}</div>
+      ${o.status === 'aprovado' && o.nfe_status !== 'autorizada' ? `<button onclick="abrirModalNfe('${o.id}')" style="background:#7b1fa2;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Emitir NF-e</button>` : ''}
+      ${o.nfe_status === 'autorizada' && o.nfe_id ? `
+  <div style="margin-top:8px;padding:8px;background:#f3e5f5;border-radius:6px;border-left:3px solid #7b1fa2">
+    <div style="font-size:10px;color:#7b1fa2;font-weight:bold;margin-bottom:6px">📋 NF-e AUTORIZADA</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <a href="/api/v2/nfe/danfe/${o.nfe_id}" target="_blank"
+         style="font-size:11px;padding:3px 8px;background:#7b1fa2;color:#fff;border-radius:4px;text-decoration:none">
+        📄 DANFE
+      </a>
+      <button onclick="abrirModalCancelarNfe('${o.nfe_id}')"
+              style="font-size:11px;padding:3px 8px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">
+        ✕ Cancelar NF
+      </button>
+      <button onclick="abrirModalCceNfe('${o.nfe_id}')"
+              style="font-size:11px;padding:3px 8px;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer">
+        ✎ CC-e
+      </button>
+    </div>
+  </div>
+` : ''}
+      ${o.tipo_cobranca === 'boleto' && (o.boletos_parcelas?.length || o.boleto_linha_digitavel) ? `
+        <div style="margin-top:8px;padding:8px;background:#e3f2fd;border-radius:6px;border-left:3px solid #1565c0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:4px">
+            <span style="font-size:10px;color:#1565c0;font-weight:bold">🧾 BOLETO${o.boletos_parcelas?.length > 1 ? ` PARCELADO (${o.boletos_parcelas.length}x)` : ' GERADO'}</span>
+            ${o.status_pagamento !== 'pago' && o.status_pagamento !== 'sem_cobranca' ? `<button onclick="cancelarBoletoDireto('${o.id}')" style="font-size:10px;padding:2px 9px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">🗑 Cancelar boleto</button>` : ''}
+          </div>
+          ${(o.boletos_parcelas?.length ? o.boletos_parcelas : [{
+            parcela:1, total_parcelas:1,
+            linha_digitavel: o.boleto_linha_digitavel,
+            vencimento: o.boleto_vencimento,
+            valor: null,
+            id: null,
+            status: 'aguardando'
+          }]).map(p => `
+            <div style="margin-bottom:8px;padding:6px;background:${p.status==='cancelado'?'#fafafa':'#fff'};border-radius:4px;border:1px solid ${p.status==='cancelado'?'#e0e0e0':p.status==='pago'?'#a5d6a7':'#bbdefb'};opacity:${p.status==='cancelado'?'0.7':'1'}">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+                ${p.total_parcelas > 1 ? `<span style="font-size:10px;color:#1565c0;font-weight:bold">Parcela ${p.parcela}/${p.total_parcelas}${p.valor ? ` — R$ ${Number(p.valor).toFixed(2).replace('.',',')}` : ''}</span>` : ''}
+                <span style="font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600;background:${p.status==='pago'?'#e8f5e9':p.status==='cancelado'?'#f5f5f5':'#fff8e1'};color:${p.status==='pago'?'#2e7d32':p.status==='cancelado'?'#9e9e9e':'#f57f17'}">${p.status==='pago'?'✓ Pago':p.status==='cancelado'?'✗ Cancelado':'⏳ Aguardando'}</span>
+              </div>
+              <div style="font-size:10px;color:#555;margin-bottom:4px">Vencimento: ${p.vencimento ? new Date(p.vencimento).toLocaleDateString('pt-BR') : '—'}</div>
+              <div style="font-size:10px;color:#333;word-break:break-all;font-family:monospace;margin-bottom:4px">${p.status!=='cancelado' ? (p.linha_digitavel || '—') : '<s style="color:#bbb">' + (p.linha_digitavel||'') + '</s>'}</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                ${p.linha_digitavel && p.status!=='cancelado' ? `<button onclick="navigator.clipboard.writeText('${p.linha_digitavel}').then(()=>showToast('Copiado!'))" style="font-size:10px;padding:2px 7px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar</button>` : ''}
+                ${p.status!=='cancelado' ? (p.total_parcelas > 1 && p.parcela ? `<a href="/api/v2/orcamentos/${o.id}/boleto/${p.parcela}/pdf" target="_blank" style="font-size:10px;padding:2px 7px;background:#e65100;color:#fff;border-radius:4px;text-decoration:none">📥 PDF</a>` : `<a href="/api/v2/orcamentos/${o.id}/boleto/pdf" target="_blank" style="font-size:10px;padding:2px 7px;background:#e65100;color:#fff;border-radius:4px;text-decoration:none">📥 PDF</a>`) : ''}
+                ${p.id && p.status==='aguardando' && o.status_pagamento!=='pago' ? `<button onclick="cancelarBoleto('${o.id}',${p.id})" style="font-size:10px;padding:2px 7px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑 Cancelar parcela</button>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
       ` : o.tipo_cobranca === 'pix' && o.pix_copia_cola ? `
-        <div style="font-size:11px;color:#555;margin-top:6px;word-break:break-all">⚡ PIX: ${o.pix_copia_cola.slice(0, 40)}...</div>
+        <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:6px;border-left:3px solid #00695c">
+          <div style="font-size:10px;color:#00695c;font-weight:bold;margin-bottom:4px">⚡ PIX GERADO</div>
+          <div style="font-size:11px;color:#333;word-break:break-all;margin-bottom:6px;font-family:monospace">${o.pix_copia_cola.slice(0, 60)}...</div>
+          <button onclick="navigator.clipboard.writeText('${o.pix_copia_cola}').then(()=>showToast('PIX copiado!'))" style="font-size:11px;padding:3px 8px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar PIX</button>
+        </div>
       ` : ''}
     </div>
   </div>`;
@@ -303,13 +407,66 @@ function pgtoBadgeHTML(statusPgto) {
 
 async function gerarCobranca(orcId, tipo) {
   const label = tipo === 'boleto' ? 'Boleto' : 'PIX';
-  if (!confirm(`Gerar ${label} para este orçamento e enviar ao cliente via WhatsApp?`)) return;
-  const res = await api('POST', `/api/v2/orcamentos/${orcId}/cobrar`, { tipo });
+
+  let payload = { tipo };
+
+  if (tipo === 'boleto') {
+    const nStr = prompt('🔢 Número de parcelas:', '1');
+    if (nStr === null) return;
+    const parcelas = parseInt(nStr);
+    if (!parcelas || parcelas < 1 || parcelas > 24) { showToast('❌ Número de parcelas inválido (1-24).'); return; }
+
+    const def = new Date();
+    def.setDate(def.getDate() + 7);
+    const defStr = def.toISOString().split('T')[0];
+    const dataInput = prompt(`📅 Vencimento da ${parcelas > 1 ? '1ª parcela' : 'parcela'} (AAAA-MM-DD):`, defStr);
+    if (dataInput === null) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInput.trim())) { showToast('❌ Data inválida. Use AAAA-MM-DD.'); return; }
+
+    let intervaloDias = 30;
+    if (parcelas > 1) {
+      const intStr = prompt('📆 Intervalo entre parcelas (dias):', '30');
+      if (intStr === null) return;
+      intervaloDias = parseInt(intStr);
+      if (!intervaloDias || intervaloDias < 1) { showToast('❌ Intervalo inválido.'); return; }
+    }
+
+    payload = { tipo, parcelas, dataVencimento: dataInput.trim(), intervaloDias };
+  } else {
+    if (!confirm(`Gerar ${label} para este orçamento e enviar ao cliente via WhatsApp?`)) return;
+  }
+
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/cobrar`, payload);
   if (res && !res.errors && !res.error) {
-    showToast(`✅ ${label} gerado e enviado ao cliente via WhatsApp!`);
+    const n = res.parcelas > 1 ? ` (${res.parcelas}x)` : '';
+    showToast(`✅ ${label}${n} gerado e enviado ao cliente via WhatsApp!`);
     loadOrcamentos();
   } else {
     showToast(`❌ Erro: ${(res?.errors || [res?.error])[0] || 'Erro desconhecido'}`);
+  }
+}
+
+async function cancelarBoleto(orcId, boletoRowId) {
+  if (!confirm('Confirma o cancelamento desta parcela junto ao C6 Bank? Esta ação não pode ser desfeita.')) return;
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/boletos/${boletoRowId}/cancelar`);
+  if (res && res.cancelado) {
+    showToast('✅ Parcela cancelada com sucesso.');
+    loadOrcamentos();
+  } else {
+    const msg = res?.erro || [res?.error || 'Erro desconhecido'];
+    showToast(`❌ ${Array.isArray(msg) ? msg[0] : msg}`);
+  }
+}
+
+async function cancelarBoletoDireto(orcId) {
+  if (!confirm('Confirma o cancelamento deste boleto junto ao C6 Bank? Esta ação não pode ser desfeita.')) return;
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/boleto/cancelar`);
+  if (res && res.cancelado) {
+    showToast('✅ Boleto cancelado com sucesso.');
+    loadOrcamentos();
+  } else {
+    const msg = res?.erro || [res?.error || 'Erro desconhecido'];
+    showToast(`❌ ${Array.isArray(msg) ? msg[0] : msg}`);
   }
 }
 
@@ -368,14 +525,636 @@ async function atualizarOS(id) {
 // ---------- TABS ----------
 
 function switchTab(name) {
+  const tabs = ['orcamentos', 'os', 'cadastros'];
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', (i === 0 && name === 'orcamentos') || (i === 1 && name === 'os'));
+    t.classList.toggle('active', tabs[i] === name);
   });
-  document.getElementById('tab-orcamentos').classList.toggle('active', name === 'orcamentos');
-  document.getElementById('tab-os').classList.toggle('active', name === 'os');
+  tabs.forEach(t => document.getElementById('tab-' + t).classList.toggle('active', t === name));
   if (name === 'orcamentos') loadOrcamentos();
   if (name === 'os') loadOS();
+  if (name === 'cadastros') { switchCad('clientes'); }
 }
+
+// ---------- CADASTROS ----------
+let _cadAtual = '';
+let _debounceTimer = null;
+
+function debounceLoad(fn) {
+  clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(fn, 350);
+}
+
+// Validadores client-side
+function _validaCPF(cpf) {
+  cpf = cpf.replace(/\D/g,'');
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+  let s = 0, r;
+  for (let i=0;i<9;i++) s += +cpf[i]*(10-i);
+  r = 11 - s%11; if(r>=10) r=0; if(r !== +cpf[9]) return false;
+  s=0;
+  for (let i=0;i<10;i++) s += +cpf[i]*(11-i);
+  r = 11 - s%11; if(r>=10) r=0;
+  return r === +cpf[10];
+}
+
+function _validaCNPJ(c) {
+  c = c.replace(/\D/g,'');
+  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
+  const calc = (n) => {
+    let s=0, p=n-7;
+    for (let i=n;i>=1;i--) { s += +c[n-i]*p--; if(p<2) p=9; }
+    return s%11<2 ? 0 : 11-s%11;
+  };
+  return calc(12) === +c[12] && calc(13) === +c[13];
+}
+
+function _validaEmail(e) { return !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+function _validaCelular(c) { return !c || /^\(?\d{2}\)?\s?9\d{4}[-\s]?\d{4}$/.test(c.replace(/\s/g,'')); }
+
+function _apiErro(r) {
+  if (!r) return 'Erro de comunicação.';
+  if (r.erro) return Array.isArray(r.erro) ? r.erro.join('\n') : r.erro;
+  if (r.erros) return Array.isArray(r.erros) ? r.erros.join('\n') : r.erros;
+  if (r.error) return r.error;
+  if (r.errors) return Array.isArray(r.errors) ? r.errors.join('\n') : r.errors;
+  return null;
+}
+
+async function buscarCEP(cep, pfx) {
+  const c = cep.replace(/\D/g,'');
+  if (c.length !== 8) return;
+  const r = await api('GET', `/api/v2/utils/cep/${c}`);
+  if (r && !r.error) {
+    const set = (sfx, val) => { const el = document.getElementById(pfx+sfx); if (el) el.value = val || ''; };
+    set('lgr',    r.logradouro);
+    set('bairro', r.bairro);
+    set('cidade', r.cidade);   // API retorna 'cidade' (não 'localidade')
+    set('uf',     r.uf);
+  }
+}
+
+// Validação em tempo real — mostra/oculta erro abaixo do campo
+function _fieldErr(id, msg) {
+  const fld = document.getElementById(id);
+  if (!fld) return;
+  let span = document.getElementById(id + '_err');
+  if (!span) {
+    span = document.createElement('span');
+    span.id = id + '_err';
+    span.style.cssText = 'color:#c62828;font-size:11px;margin-top:2px;display:block';
+    fld.parentNode.appendChild(span);
+  }
+  span.textContent = msg || '';
+  fld.style.borderColor = msg ? '#e53935' : '#ddd';
+}
+
+function validarCampoCPFCNPJ(el) {
+  const tipo = document.getElementById('cf-tipo') ? document.getElementById('cf-tipo').value : 'PJ';
+  const v = el.value.replace(/\D/g,'');
+  if (!v) { _fieldErr(el.id, ''); return; }
+  if (tipo === 'PF' && !_validaCPF(v))    _fieldErr(el.id, 'CPF inválido — verifique os dígitos');
+  else if (tipo === 'PJ' && !_validaCNPJ(v)) _fieldErr(el.id, 'CNPJ inválido — verifique os dígitos');
+  else _fieldErr(el.id, '');
+}
+
+function validarCampoEmail(el) {
+  const v = el.value.trim();
+  if (!v) { _fieldErr(el.id, ''); return; }
+  _fieldErr(el.id, _validaEmail(v) ? '' : 'E-mail inválido');
+}
+
+function validarCampoCelular(el) {
+  const v = el.value.trim();
+  if (!v) { _fieldErr(el.id, ''); return; }
+  _fieldErr(el.id, _validaCelular(v) ? '' : 'Use o formato (XX) 9XXXX-XXXX');
+}
+
+function switchCad(nome) {
+  _cadAtual = nome;
+  ['clientes','fornecedores','materiais','funcionarios'].forEach(n => {
+    document.getElementById('cad-' + n).style.display = n === nome ? '' : 'none';
+    const btn = document.getElementById('cad-btn-' + n);
+    btn.className = 'btn ' + (n === nome ? 'btn-primary' : 'btn-secondary');
+  });
+  if (nome === 'clientes') loadClientes();
+  if (nome === 'fornecedores') loadFornecedores();
+  if (nome === 'materiais') loadMateriais();
+  if (nome === 'funcionarios') loadFuncionarios();
+}
+
+// ---- Paginação ----
+const _cadPages = { clientes: 1, fornecedores: 1, materiais: 1, funcionarios: 1 };
+const _cadPerPage = { clientes: 20, fornecedores: 20, materiais: 20, funcionarios: 20 };
+
+const PG_BTN = 'border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:13px;background:#e8eaf6;color:#3f51b5;font-weight:600;transition:background .15s';
+const PG_BTN_DIS = 'border:none;border-radius:6px;padding:5px 10px;font-size:13px;background:#f0f0f0;color:#bbb;cursor:default';
+
+function renderPaginacao(mod, page, total, limit, loadFn) {
+  const totalPages = Math.ceil(total / limit) || 1;
+  const ini = (page - 1) * limit + 1;
+  const fim = Math.min(page * limit, total);
+  const dis = (cond) => cond ? PG_BTN_DIS : PG_BTN;
+  return `<div style="display:flex;align-items:center;gap:6px;padding:8px 2px;flex-wrap:wrap">
+    <button style="${dis(page<=1)}" ${page<=1?'disabled':''} onclick="${mod}GoPage(1)" title="Primeira">&#171;</button>
+    <button style="${dis(page<=1)}" ${page<=1?'disabled':''} onclick="${mod}GoPage(${page-1})" title="Anterior">&#8249;</button>
+    <span style="font-size:12px;color:#555;padding:0 4px">Pág <strong>${page}</strong> de <strong>${totalPages}</strong></span>
+    <button style="${dis(page>=totalPages)}" ${page>=totalPages?'disabled':''} onclick="${mod}GoPage(${page+1})" title="Próxima">&#8250;</button>
+    <button style="${dis(page>=totalPages)}" ${page>=totalPages?'disabled':''} onclick="${mod}GoPage(${totalPages})" title="Última">&#187;</button>
+    <span style="font-size:12px;color:#888;margin-left:6px">${ini}–${fim} de ${total}</span>
+    <label style="font-size:12px;color:#555;margin-left:auto">Por pág:
+      <select onchange="${mod}SetPerPage(this.value)" style="margin-left:4px;border-radius:5px;border:1px solid #ddd;padding:3px 6px;font-size:12px">
+        ${[10,20,50].map(n=>`<option value="${n}" ${n==limit?'selected':''}>${n}</option>`).join('')}
+      </select>
+    </label>
+  </div>`;
+}
+
+// ---- Clientes ----
+const INP = 'width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px';
+const GRID2 = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+
+function clientesGoPage(p) { _cadPages.clientes = p; loadClientes(); }
+function clientesSetPerPage(v) { _cadPerPage.clientes = +v; _cadPages.clientes = 1; loadClientes(); }
+
+async function loadClientes() {
+  const busca = document.getElementById('busca-clientes').value;
+  const el = document.getElementById('list-clientes');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const pg = _cadPages.clientes, lim = _cadPerPage.clientes;
+  const data = await api('GET', `/api/v2/clientes?page=${pg}&limit=${lim}&busca=${encodeURIComponent(busca)}`);
+  const rows = (data && data.clientes) || [];
+  const total = (data && data.total) || 0;
+  if (!rows.length) { el.innerHTML = '<div class="empty">Nenhum cliente encontrado.</div>'; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead style="position:sticky;top:0;background:#e8eaf6;z-index:1">
+        <tr>
+          <th style="padding:8px;text-align:left;font-weight:600">Nome</th>
+          <th style="padding:8px;text-align:left">Tipo</th>
+          <th style="padding:8px;text-align:left">CPF/CNPJ</th>
+          <th style="padding:8px;text-align:left">Celular</th>
+          <th style="padding:8px;text-align:left">Email</th>
+          <th style="padding:8px;text-align:left">Cidade/UF</th>
+          <th style="padding:8px;text-align:left">Cadastro</th>
+          <th style="padding:8px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      ${rows.map((c,i) => `<tr style="border-bottom:1px solid #f0f0f0;background:${i%2?'#fafafa':'#fff'}">
+        <td style="padding:7px 8px;font-weight:500">${c.nome}</td>
+        <td style="padding:7px 8px;color:#888;font-size:11px">${c.tipo_pessoa||''}</td>
+        <td style="padding:7px 8px">${c.cpf_cnpj||''}</td>
+        <td style="padding:7px 8px">${c.celular||''}</td>
+        <td style="padding:7px 8px">${c.email||''}</td>
+        <td style="padding:7px 8px">${c.cidade||''}${c.uf?' - '+c.uf:''}</td>
+        <td style="padding:7px 8px;font-size:11px">${fmtDatas(c)}</td>
+        <td style="padding:7px 4px"><button class="btn btn-secondary btn-sm" onclick="editarCliente('${c.id}')">✏️</button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${renderPaginacao('clientes', pg, total, lim, loadClientes)}`;
+}
+
+let _clienteEdit = null;
+
+async function abrirModalCliente(id) {
+  _clienteEdit = null;
+  document.getElementById('cad-modal-title').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
+  let c = { tipo_pessoa: 'PJ' };
+  if (id) { c = await api('GET', `/api/v2/clientes/${id}`); _clienteEdit = id; }
+  const v = (x) => (c[x]||'').replace ? (c[x]||'').replace(/"/g,'&quot;') : (c[x]||'');
+  document.getElementById('cad-modal-body').innerHTML = `
+    <div style="display:grid;gap:10px">
+      <div id="cf-erros" style="display:none;background:#fce4ec;border-radius:6px;padding:10px;color:#c62828;font-size:13px;white-space:pre-line"></div>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">Tipo
+          <select id="cf-tipo" style="${INP};margin-top:3px">
+            <option value="PJ" ${c.tipo_pessoa==='PJ'?'selected':''}>Pessoa Jurídica</option>
+            <option value="PF" ${c.tipo_pessoa==='PF'?'selected':''}>Pessoa Física</option>
+          </select>
+        </label>
+        <label style="font-size:12px;color:#555">CPF/CNPJ
+          <input id="cf-cpfcnpj" value="${v('cpf_cnpj')}" placeholder="Somente números"
+            onblur="validarCampoCPFCNPJ(this)" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <label style="font-size:12px;color:#555">Nome / Razão Social *
+        <input id="cf-nome" value="${v('nome')}" required oninput="this.value=this.value.toUpperCase()" style="${INP};margin-top:3px;text-transform:uppercase">
+      </label>
+      <label style="font-size:12px;color:#555">Fantasia
+        <input id="cf-fantasia" value="${v('fantasia')}" style="${INP};margin-top:3px">
+      </label>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">E-mail
+          <input id="cf-email" type="text" value="${v('email')}"
+            onblur="validarCampoEmail(this)" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">Celular
+          <input id="cf-celular" value="${v('celular')}" placeholder="(21) 99999-9999"
+            onblur="validarCampoCelular(this)" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">Telefone
+          <input id="cf-tel" value="${v('telefone')}" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">CEP
+          <input id="cf-cep" value="${v('cep')}" maxlength="8" placeholder="00000000"
+            onblur="buscarCEP(this.value,'cf-')" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <label style="font-size:12px;color:#555">Logradouro
+        <input id="cf-lgr" value="${v('logradouro')}" style="${INP};margin-top:3px">
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <label style="font-size:12px;color:#555">Número <input id="cf-nro" value="${v('numero')}" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">Bairro  <input id="cf-bairro" value="${v('bairro')}" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">Cidade  <input id="cf-cidade" value="${v('cidade')}" style="${INP};margin-top:3px"></label>
+      </div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px">
+        <label style="font-size:12px;color:#555">UF <input id="cf-uf" value="${v('uf')}" maxlength="2" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">IE  <input id="cf-ie" value="${v('ie')}" style="${INP};margin-top:3px"></label>
+      </div>
+    </div>`;
+  document.getElementById('cad-modal-save').onclick = salvarCliente;
+  abrirCadModal();
+}
+
+async function editarCliente(id) { abrirModalCliente(id); }
+
+function _mostrarErrosCad(msg) {
+  const el = document.getElementById('cf-erros');
+  if (!el) { showToast(msg); return; }
+  el.textContent = msg; el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function salvarCliente() {
+  const tipo = document.getElementById('cf-tipo').value;
+  const cpfcnpj = document.getElementById('cf-cpfcnpj').value.replace(/\D/g,'');
+  const email = document.getElementById('cf-email').value.trim();
+  const celular = document.getElementById('cf-celular').value.trim();
+
+  const erros = [];
+  if (!document.getElementById('cf-nome').value.trim()) erros.push('Nome é obrigatório.');
+  if (cpfcnpj) {
+    if (tipo === 'PF' && !_validaCPF(cpfcnpj)) erros.push('CPF inválido — verifique os dígitos.');
+    if (tipo === 'PJ' && !_validaCNPJ(cpfcnpj)) erros.push('CNPJ inválido — verifique os dígitos.');
+  }
+  if (email && !_validaEmail(email)) erros.push('E-mail inválido.');
+  if (celular && !_validaCelular(celular)) erros.push('Celular inválido — use (XX) 9XXXX-XXXX.');
+  if (erros.length) { _mostrarErrosCad(erros.join('\n')); return; }
+
+  const body = {
+    tipo_pessoa: tipo, cpf_cnpj: cpfcnpj || null,
+    nome: document.getElementById('cf-nome').value.trim(),
+    fantasia: document.getElementById('cf-fantasia').value,
+    email: email || null, celular: celular || null,
+    telefone: document.getElementById('cf-tel').value,
+    cep: document.getElementById('cf-cep').value.replace(/\D/g,''),
+    logradouro: document.getElementById('cf-lgr').value,
+    numero: document.getElementById('cf-nro').value,
+    bairro: document.getElementById('cf-bairro').value,
+    cidade: document.getElementById('cf-cidade').value,
+    uf: document.getElementById('cf-uf').value.toUpperCase(),
+    ie: document.getElementById('cf-ie').value,
+  };
+
+  const r = _clienteEdit
+    ? await api('PUT', `/api/v2/clientes/${_clienteEdit}`, body)
+    : await api('POST', '/api/v2/clientes', body);
+  const err = _apiErro(r);
+  if (err) { _mostrarErrosCad(err); return; }
+  fecharCadModal();
+  showToast('✅ Cliente salvo!');
+  loadClientes();
+}
+
+// ---- Fornecedores ----
+function fornecedoresGoPage(p) { _cadPages.fornecedores = p; loadFornecedores(); }
+function fornecedoresSetPerPage(v) { _cadPerPage.fornecedores = +v; _cadPages.fornecedores = 1; loadFornecedores(); }
+
+async function loadFornecedores() {
+  const busca = document.getElementById('busca-fornecedores').value;
+  const el = document.getElementById('list-fornecedores');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const pg = _cadPages.fornecedores, lim = _cadPerPage.fornecedores;
+  const data = await api('GET', `/api/v2/fornecedores?page=${pg}&limit=${lim}&busca=${encodeURIComponent(busca)}`);
+  const rows = (data && data.fornecedores) || [];
+  const total = (data && data.total) || 0;
+  if (!rows.length) { el.innerHTML = '<div class="empty">Nenhum fornecedor encontrado.</div>'; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead style="position:sticky;top:0;background:#e8eaf6;z-index:1">
+        <tr>
+          <th style="padding:8px;text-align:left;font-weight:600">Nome</th>
+          <th style="padding:8px;text-align:left">CNPJ</th>
+          <th style="padding:8px;text-align:left">Contato</th>
+          <th style="padding:8px;text-align:left">Telefone</th>
+          <th style="padding:8px;text-align:left">Cidade/UF</th>
+          <th style="padding:8px;text-align:left">Categoria</th>
+          <th style="padding:8px;text-align:left">Cadastro</th>
+          <th style="padding:8px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      ${rows.map((f,i) => `<tr style="border-bottom:1px solid #f0f0f0;background:${i%2?'#fafafa':'#fff'}">
+        <td style="padding:7px 8px;font-weight:500">${f.nome}</td>
+        <td style="padding:7px 8px">${f.cnpj||''}</td>
+        <td style="padding:7px 8px">${f.contato||''}</td>
+        <td style="padding:7px 8px">${f.telefone||''}</td>
+        <td style="padding:7px 8px">${f.cidade||''}${f.uf?' - '+f.uf:''}</td>
+        <td style="padding:7px 8px;color:#888;font-size:11px">${f.categoria||''}</td>
+        <td style="padding:7px 8px;font-size:11px">${fmtDatas(f)}</td>
+        <td style="padding:7px 4px"><button class="btn btn-secondary btn-sm" onclick="editarFornecedor(${f.id})">✏️</button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${renderPaginacao('fornecedores', pg, total, lim, loadFornecedores)}`;
+}
+
+let _fornEdit = null;
+
+async function abrirModalFornecedor(id) {
+  _fornEdit = null;
+  document.getElementById('cad-modal-title').textContent = id ? 'Editar Fornecedor' : 'Novo Fornecedor';
+  let f = {};
+  if (id) { const r = await api('GET', `/api/v2/fornecedores/${id}`); f = r.fornecedor || r; _fornEdit = id; }
+  const v = (x) => (f[x]||'').replace ? (f[x]||'').replace(/"/g,'&quot;') : (f[x]||'');
+  document.getElementById('cad-modal-body').innerHTML = `
+    <div style="display:grid;gap:10px">
+      <div id="cf-erros" style="display:none;background:#fce4ec;border-radius:6px;padding:10px;color:#c62828;font-size:13px;white-space:pre-line"></div>
+      <label style="font-size:12px;color:#555">Nome *
+        <input id="ff-nome" value="${v('nome')}" required style="${INP};margin-top:3px">
+      </label>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">CNPJ
+          <input id="ff-cnpj" value="${v('cnpj')}" placeholder="Somente números" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">Contato
+          <input id="ff-contato" value="${v('contato')}" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">Telefone
+          <input id="ff-tel" value="${v('telefone')}" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">E-mail
+          <input id="ff-email" value="${v('email')}" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <label style="font-size:12px;color:#555">Logradouro
+        <input id="ff-lgr" value="${v('logradouro')}" style="${INP};margin-top:3px">
+      </label>
+      <div style="display:grid;grid-template-columns:2fr 80px;gap:8px">
+        <label style="font-size:12px;color:#555">Cidade <input id="ff-cidade" value="${v('cidade')}" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">UF <input id="ff-uf" value="${v('uf')}" maxlength="2" style="${INP};margin-top:3px"></label>
+      </div>
+      <label style="font-size:12px;color:#555">Categoria
+        <input id="ff-cat" value="${v('categoria')}" placeholder="ex: Papel, Tinta..." style="${INP};margin-top:3px">
+      </label>
+    </div>`;
+  document.getElementById('cad-modal-save').onclick = salvarFornecedor;
+  abrirCadModal();
+}
+
+async function editarFornecedor(id) { abrirModalFornecedor(id); }
+
+async function salvarFornecedor() {
+  const cnpj = document.getElementById('ff-cnpj').value.replace(/\D/g,'');
+  const erros = [];
+  if (!document.getElementById('ff-nome').value.trim()) erros.push('Nome é obrigatório.');
+  if (cnpj && !_validaCNPJ(cnpj)) erros.push('CNPJ inválido — verifique os dígitos.');
+  if (erros.length) { _mostrarErrosCad(erros.join('\n')); return; }
+
+  const body = {
+    nome: document.getElementById('ff-nome').value.trim(),
+    cnpj: cnpj || null,
+    contato: document.getElementById('ff-contato').value,
+    telefone: document.getElementById('ff-tel').value,
+    email: document.getElementById('ff-email').value,
+    logradouro: document.getElementById('ff-lgr').value,
+    cidade: document.getElementById('ff-cidade').value,
+    uf: document.getElementById('ff-uf').value.toUpperCase(),
+    categoria: document.getElementById('ff-cat').value,
+  };
+  const r = _fornEdit
+    ? await api('PUT', `/api/v2/fornecedores/${_fornEdit}`, body)
+    : await api('POST', '/api/v2/fornecedores', body);
+  const err = _apiErro(r);
+  if (err) { _mostrarErrosCad(err); return; }
+  fecharCadModal();
+  showToast('✅ Fornecedor salvo!');
+  loadFornecedores();
+}
+
+// ---- Materiais ----
+function materiaisGoPage(p) { _cadPages.materiais = p; loadMateriais(); }
+function materiaisSetPerPage(v) { _cadPerPage.materiais = +v; _cadPages.materiais = 1; loadMateriais(); }
+
+async function loadMateriais() {
+  const busca = document.getElementById('busca-materiais').value;
+  const el = document.getElementById('list-materiais');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const pg = _cadPages.materiais, lim = _cadPerPage.materiais;
+  const data = await api('GET', `/api/v2/materiais?page=${pg}&limit=${lim}&busca=${encodeURIComponent(busca)}`);
+  const list = Array.isArray(data) ? data : (data && data.materiais) || [];
+  const total = (data && data.total) || list.length;
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum material encontrado.</div>'; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead style="position:sticky;top:0;background:#e8eaf6;z-index:1">
+        <tr>
+          <th style="padding:8px;text-align:left;font-weight:600">Nome</th>
+          <th style="padding:8px;text-align:left">Unidade</th>
+          <th style="padding:8px;text-align:right">Estoque</th>
+          <th style="padding:8px;text-align:right">Est. Mín.</th>
+          <th style="padding:8px;text-align:right">Custo Médio</th>
+          <th style="padding:8px;text-align:left">Fornecedor</th>
+          <th style="padding:8px;text-align:left">Cadastro</th>
+          <th style="padding:8px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      ${list.map((m,i) => {
+        const baixo = +m.estoque_atual <= +m.estoque_minimo;
+        return `<tr style="border-bottom:1px solid #f0f0f0;background:${baixo?'#fff8e1':(i%2?'#fafafa':'#fff')}">
+          <td style="padding:7px 8px;font-weight:500">${m.nome}${baixo?' ⚠️':''}</td>
+          <td style="padding:7px 8px;color:#888">${m.unidade}</td>
+          <td style="padding:7px 8px;text-align:right">${(+m.estoque_atual||0).toFixed(3)}</td>
+          <td style="padding:7px 8px;text-align:right;color:#888">${(+m.estoque_minimo||0).toFixed(3)}</td>
+          <td style="padding:7px 8px;text-align:right">R$ ${(+m.custo_medio||0).toFixed(2).replace('.',',')}</td>
+          <td style="padding:7px 8px;font-size:11px;color:#888">${m.fornecedor_nome||''}</td>
+          <td style="padding:7px 8px;font-size:11px">${fmtDatas(m)}</td>
+          <td style="padding:7px 4px"><button class="btn btn-secondary btn-sm" onclick="ajustarEstoque(${m.id},'${m.nome.replace(/'/g,"\\'")}',${m.estoque_atual})">📦</button></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${renderPaginacao('materiais', pg, total, lim, loadMateriais)}`;
+}
+
+async function abrirModalMaterial() {
+  document.getElementById('cad-modal-title').textContent = 'Novo Material';
+  document.getElementById('cad-modal-body').innerHTML = `
+    <div style="display:grid;gap:10px">
+      <div id="cf-erros" style="display:none;background:#fce4ec;border-radius:6px;padding:10px;color:#c62828;font-size:13px;white-space:pre-line"></div>
+      <label style="font-size:12px;color:#555">Nome *
+        <input id="mf-nome" required style="${INP};margin-top:3px">
+      </label>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">Unidade * <input id="mf-un" required placeholder="ex: kg, m², folha" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">Código <input id="mf-cod" style="${INP};margin-top:3px"></label>
+      </div>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">Estoque inicial <input id="mf-est" type="number" step="0.001" value="0" style="${INP};margin-top:3px"></label>
+        <label style="font-size:12px;color:#555">Estoque mínimo <input id="mf-estmin" type="number" step="0.001" value="0" style="${INP};margin-top:3px"></label>
+      </div>
+      <label style="font-size:12px;color:#555">Custo médio (R$)
+        <input id="mf-custo" type="number" step="0.01" value="0" style="${INP};margin-top:3px">
+      </label>
+    </div>`;
+  document.getElementById('cad-modal-save').onclick = salvarMaterial;
+  abrirCadModal();
+}
+
+async function salvarMaterial() {
+  const nome = document.getElementById('mf-nome').value.trim();
+  const un = document.getElementById('mf-un').value.trim();
+  if (!nome) { _mostrarErrosCad('Nome é obrigatório.'); return; }
+  if (!un)   { _mostrarErrosCad('Unidade é obrigatória.'); return; }
+  const r = await api('POST', '/api/v2/materiais', {
+    nome, unidade: un,
+    codigo: document.getElementById('mf-cod').value,
+    estoque_atual:  parseFloat(document.getElementById('mf-est').value)||0,
+    estoque_minimo: parseFloat(document.getElementById('mf-estmin').value)||0,
+    custo_medio:    parseFloat(document.getElementById('mf-custo').value)||0,
+  });
+  const err = _apiErro(r);
+  if (err) { _mostrarErrosCad(err); return; }
+  fecharCadModal();
+  showToast('✅ Material salvo!');
+  loadMateriais();
+}
+
+async function ajustarEstoque(id, nome, atual) {
+  const qtd = prompt(`Ajustar estoque de "${nome}"\nEstoque atual: ${atual}\nNovo valor:`);
+  if (qtd === null) return;
+  const n = parseFloat(qtd.replace(',','.'));
+  if (isNaN(n)) { showToast('Valor inválido'); return; }
+  const r = await api('PATCH', `/api/v2/materiais/${id}/estoque`, { quantidade: n });
+  const err = _apiErro(r);
+  if (err) { showToast('Erro: ' + err); return; }
+  showToast('✅ Estoque atualizado!');
+  loadMateriais();
+}
+
+// ---- Funcionários ----
+function funcionariosGoPage(p) { _cadPages.funcionarios = p; loadFuncionarios(); }
+function funcionariosSetPerPage(v) { _cadPerPage.funcionarios = +v; _cadPages.funcionarios = 1; loadFuncionarios(); }
+
+async function loadFuncionarios() {
+  const el = document.getElementById('list-funcionarios');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const pg = _cadPages.funcionarios, lim = _cadPerPage.funcionarios;
+  const data = await api('GET', `/api/v2/funcionarios?page=${pg}&limit=${lim}`);
+  const rows = Array.isArray(data) ? data : (data && data.funcionarios) || [];
+  const total = (data && data.total) || rows.length;
+  if (!rows.length) { el.innerHTML = '<div class="empty">Nenhum funcionário cadastrado.</div>'; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead style="position:sticky;top:0;background:#e8eaf6;z-index:1">
+        <tr>
+          <th style="padding:8px;text-align:left;font-weight:600">Nome</th>
+          <th style="padding:8px;text-align:left">CPF</th>
+          <th style="padding:8px;text-align:left">Cargo</th>
+          <th style="padding:8px;text-align:left">Usuário do sistema</th>
+          <th style="padding:8px;text-align:left">Role</th>
+          <th style="padding:8px;text-align:left">Cadastro</th>
+        </tr>
+      </thead>
+      <tbody>
+      ${rows.map((f,i) => `<tr style="border-bottom:1px solid #f0f0f0;background:${i%2?'#fafafa':'#fff'}">
+        <td style="padding:7px 8px;font-weight:500">${f.nome}</td>
+        <td style="padding:7px 8px">${f.cpf||''}</td>
+        <td style="padding:7px 8px;color:#666">${f.cargo||''}</td>
+        <td style="padding:7px 8px;color:#888">${f.user_nome||'—'}</td>
+        <td style="padding:7px 8px"><span class="badge badge-${f.user_role||'aguardando'}" style="font-size:10px">${f.user_role||''}</span></td>
+        <td style="padding:7px 8px;font-size:11px">${fmtDatas(f)}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${renderPaginacao('funcionarios', pg, total, lim, loadFuncionarios)}`;
+}
+
+async function abrirModalFuncionario() {
+  document.getElementById('cad-modal-title').textContent = 'Novo Funcionário';
+  document.getElementById('cad-modal-body').innerHTML = `
+    <div style="display:grid;gap:10px">
+      <div id="cf-erros" style="display:none;background:#fce4ec;border-radius:6px;padding:10px;color:#c62828;font-size:13px;white-space:pre-line"></div>
+      <label style="font-size:12px;color:#555">Nome *
+        <input id="fnf-nome" required style="${INP};margin-top:3px">
+      </label>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">CPF *
+          <input id="fnf-cpf" required placeholder="000.000.000-00" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">Cargo
+          <input id="fnf-cargo" placeholder="ex: Operador" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <div style="${GRID2}">
+        <label style="font-size:12px;color:#555">E-mail
+          <input id="fnf-email" style="${INP};margin-top:3px">
+        </label>
+        <label style="font-size:12px;color:#555">Telefone
+          <input id="fnf-tel" style="${INP};margin-top:3px">
+        </label>
+      </div>
+      <label style="font-size:12px;color:#555">Data de Admissão
+        <input id="fnf-admissao" type="date" style="${INP};margin-top:3px">
+      </label>
+    </div>`;
+  document.getElementById('cad-modal-save').onclick = salvarFuncionario;
+  abrirCadModal();
+}
+
+async function salvarFuncionario() {
+  const cpf = document.getElementById('fnf-cpf').value.replace(/\D/g,'');
+  const email = document.getElementById('fnf-email').value.trim();
+  const erros = [];
+  if (!document.getElementById('fnf-nome').value.trim()) erros.push('Nome é obrigatório.');
+  if (!cpf) erros.push('CPF é obrigatório.');
+  else if (!_validaCPF(cpf)) erros.push('CPF inválido — verifique os dígitos.');
+  if (email && !_validaEmail(email)) erros.push('E-mail inválido.');
+  if (erros.length) { _mostrarErrosCad(erros.join('\n')); return; }
+
+  const r = await api('POST', '/api/v2/funcionarios', {
+    nome: document.getElementById('fnf-nome').value.trim(),
+    cpf,
+    cargo: document.getElementById('fnf-cargo').value,
+    email: email || null,
+    telefone: document.getElementById('fnf-tel').value,
+    data_admissao: document.getElementById('fnf-admissao').value || null,
+  });
+  const err = _apiErro(r);
+  if (err) { _mostrarErrosCad(err); return; }
+  fecharCadModal();
+  showToast('✅ Funcionário salvo!');
+  loadFuncionarios();
+}
+
+// ---- Modal genérico de cadastro ----
+function abrirCadModal() { document.getElementById('cad-modal').style.display = 'flex'; }
+function fecharCadModal() { document.getElementById('cad-modal').style.display = 'none'; }
 
 // Init
 loadOrcamentos();
@@ -457,8 +1236,12 @@ async function submeterNfe(e) {
           ✅ <strong>NF-e Autorizada!</strong><br>
           Chave: <code style="font-size:11px">${data.chave}</code><br>
           Protocolo: ${data.protocolo}<br>
-          <a href="${data.danfe_url}" target="_blank" style="color:#1976d2">📄 Download DANFE</a>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <a href="${data.danfe_url}" target="_blank" style="color:#1976d2">📄 Download DANFE</a>
+            <button onclick="fecharModalNfe()" style="margin-left:auto;padding:4px 14px;border:none;border-radius:4px;background:#388e3c;color:#fff;cursor:pointer;font-size:12px">Fechar</button>
+          </div>
         </div>`;
+      await carregarOrcamentos();
     } else {
       const errs = data.errors || [data.error] || ['Erro desconhecido'];
       el.innerHTML = `<div style="background:#fce4ec;border-radius:4px;padding:12px">❌ ${errs.join('<br>')}</div>`;
@@ -471,7 +1254,149 @@ async function submeterNfe(e) {
     btn.textContent = 'Emitir NF-e';
   }
 }
+
+// ===== Cancelamento NF-e =====
+function abrirModalCancelarNfe(nfeId) {
+  document.getElementById('cancelarNfeId').value = nfeId;
+  document.getElementById('cancelarJustificativa').value = '';
+  document.getElementById('cancelarResultado').innerHTML = '';
+  document.getElementById('btnCancelarNfe').disabled = false;
+  document.getElementById('btnCancelarNfe').textContent = 'Cancelar NF-e';
+  document.getElementById('modalCancelarNfe').style.display = 'block';
+}
+function fecharModalCancelarNfe() {
+  document.getElementById('modalCancelarNfe').style.display = 'none';
+}
+async function submitCancelarNfe(e) {
+  e.preventDefault();
+  const nfeId = document.getElementById('cancelarNfeId').value;
+  const justificativa = document.getElementById('cancelarJustificativa').value;
+  const btn = document.getElementById('btnCancelarNfe');
+  const el = document.getElementById('cancelarResultado');
+  btn.disabled = true; btn.textContent = 'Cancelando...';
+  try {
+    const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('token');
+    const res = await fetch(`/api/v2/nfe/${nfeId}/cancelar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ justificativa })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      el.innerHTML = `<div style="background:#e8f5e9;padding:10px;border-radius:4px;font-size:12px">
+        ✅ NF-e cancelada! Protocolo: <strong>${data.protocolo}</strong></div>`;
+      await carregarOrcamentos();
+    } else {
+      el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">
+        ❌ ${(data.errors || [data.error]).join(', ')}</div>`;
+      btn.disabled = false; btn.textContent = 'Cancelar NF-e';
+    }
+  } catch (err) {
+    el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">❌ Erro: ${err.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Cancelar NF-e';
+  }
+}
+
+// ===== CC-e =====
+function abrirModalCceNfe(nfeId) {
+  document.getElementById('cceNfeId').value = nfeId;
+  document.getElementById('cceCorrecao').value = '';
+  document.getElementById('cceResultado').innerHTML = '';
+  document.getElementById('btnCceNfe').disabled = false;
+  document.getElementById('btnCceNfe').textContent = 'Enviar CC-e';
+  document.getElementById('modalCceNfe').style.display = 'block';
+}
+function fecharModalCceNfe() {
+  document.getElementById('modalCceNfe').style.display = 'none';
+}
+async function submitCceNfe(e) {
+  e.preventDefault();
+  const nfeId = document.getElementById('cceNfeId').value;
+  const correcao = document.getElementById('cceCorrecao').value;
+  const btn = document.getElementById('btnCceNfe');
+  const el = document.getElementById('cceResultado');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('token');
+    const res = await fetch(`/api/v2/nfe/${nfeId}/corrigir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ correcao })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      el.innerHTML = `<div style="background:#e8f5e9;padding:10px;border-radius:4px;font-size:12px">
+        ✅ CC-e registrada! Protocolo: <strong>${data.protocolo}</strong> (Seq. ${data.n_seq})</div>`;
+    } else {
+      el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">
+        ❌ ${(data.errors || [data.error]).join(', ')}</div>`;
+      btn.disabled = false; btn.textContent = 'Enviar CC-e';
+    }
+  } catch (err) {
+    el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">❌ Erro: ${err.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Enviar CC-e';
+  }
+}
+
+// ===== Inutilização =====
+function abrirModalInutilizar() {
+  document.getElementById('inutResultado').innerHTML = '';
+  document.getElementById('btnInutilizar').disabled = false;
+  document.getElementById('btnInutilizar').textContent = 'Inutilizar';
+  document.getElementById('modalInutilizar').style.display = 'block';
+}
+function fecharModalInutilizar() {
+  document.getElementById('modalInutilizar').style.display = 'none';
+}
+async function submitInutilizar(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnInutilizar');
+  const el = document.getElementById('inutResultado');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  const body = {
+    cnpj_emitente: document.getElementById('inutEmitente').value,
+    serie: document.getElementById('inutSerie').value,
+    n_nf_ini: document.getElementById('inutNfIni').value,
+    n_nf_fin: document.getElementById('inutNfFin').value,
+    justificativa: document.getElementById('inutJustificativa').value,
+  };
+  try {
+    const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('token');
+    const res = await fetch('/api/v2/nfe/inutilizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      el.innerHTML = `<div style="background:#e8f5e9;padding:10px;border-radius:4px;font-size:12px">
+        ✅ Inutilização registrada! Protocolo: <strong>${data.protocolo}</strong></div>`;
+    } else {
+      el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">
+        ❌ ${(data.errors || [data.error]).join(', ')}</div>`;
+      btn.disabled = false; btn.textContent = 'Inutilizar';
+    }
+  } catch (err) {
+    el.innerHTML = `<div style="background:#fce4ec;padding:10px;border-radius:4px;font-size:12px">❌ Erro: ${err.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Inutilizar';
+  }
+}
 </script>
+
+<!-- Modal Cadastros -->
+<div id="cad-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;margin:auto">
+    <div style="background:#1a237e;color:#fff;padding:16px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between">
+      <h2 id="cad-modal-title" style="font-size:16px;font-weight:600"></h2>
+      <button onclick="fecharCadModal()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div id="cad-modal-body" style="padding:16px"></div>
+    <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="fecharCadModal()" class="btn btn-secondary">Cancelar</button>
+      <button id="cad-modal-save" class="btn btn-primary">Salvar</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal NF-e -->
 <div id="modalNfe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
@@ -533,6 +1458,114 @@ async function submeterNfe(e) {
       </div>
     </form>
     <div id="nfeResultado" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<!-- Modal Cancelamento NF-e -->
+<div id="modalCancelarNfe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;overflow:auto">
+  <div style="background:#fff;max-width:480px;margin:60px auto;border-radius:8px;padding:24px">
+    <h3 style="margin:0 0 16px;color:#c62828">✕ Cancelar NF-e</h3>
+    <p style="font-size:13px;color:#555;margin:0 0 12px">
+      O cancelamento só é aceito pelo SEFAZ em até <strong>24 horas</strong> após a autorização.
+    </p>
+    <form id="formCancelarNfe" onsubmit="submitCancelarNfe(event)">
+      <input type="hidden" id="cancelarNfeId" value="">
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:bold">Justificativa (mín. 15 caracteres) *</label>
+        <textarea id="cancelarJustificativa" rows="4" required minlength="15"
+          style="width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box"
+          placeholder="Informe o motivo do cancelamento..."></textarea>
+      </div>
+      <div id="cancelarResultado"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button type="button" onclick="fecharModalCancelarNfe()"
+          style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer">Fechar</button>
+        <button type="submit" id="btnCancelarNfe"
+          style="padding:8px 16px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">
+          Cancelar NF-e
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal CC-e -->
+<div id="modalCceNfe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;overflow:auto">
+  <div style="background:#fff;max-width:480px;margin:60px auto;border-radius:8px;padding:24px">
+    <h3 style="margin:0 0 16px;color:#e65100">✎ Carta de Correção (CC-e)</h3>
+    <p style="font-size:12px;color:#777;margin:0 0 12px">
+      A CC-e <strong>não pode</strong> corrigir: valores, base de cálculo, alíquota, dados do remetente/destinatário ou data de emissão.
+    </p>
+    <form id="formCceNfe" onsubmit="submitCceNfe(event)">
+      <input type="hidden" id="cceNfeId" value="">
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:bold">Texto da correção (mín. 15 caracteres) *</label>
+        <textarea id="cceCorrecao" rows="5" required minlength="15"
+          style="width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box"
+          placeholder="Descreva a correção a ser realizada..."></textarea>
+      </div>
+      <div id="cceResultado"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button type="button" onclick="fecharModalCceNfe()"
+          style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer">Fechar</button>
+        <button type="submit" id="btnCceNfe"
+          style="padding:8px 16px;background:#e65100;color:#fff;border:none;border-radius:4px;cursor:pointer">
+          Enviar CC-e
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Inutilização -->
+<div id="modalInutilizar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;overflow:auto">
+  <div style="background:#fff;max-width:480px;margin:60px auto;border-radius:8px;padding:24px">
+    <h3 style="margin:0 0 16px;color:#4e342e">🔒 Inutilizar Numeração NF-e</h3>
+    <p style="font-size:12px;color:#777;margin:0 0 12px">
+      Use para inutilizar números de NF-e que não serão utilizados (ex: sequência pulada por erro de sistema).
+    </p>
+    <form id="formInutilizar" onsubmit="submitInutilizar(event)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <label style="font-size:12px;font-weight:bold">Empresa Emitente *</label>
+          <select id="inutEmitente" required
+            style="width:100%;margin-top:4px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+            <option value="19296723000108">GRUPO LKL (19.296.723/0001-08)</option>
+            <option value="44448899000185">FACTOR (44.448.899/0001-85)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:bold">Série *</label>
+          <input type="number" id="inutSerie" value="1" min="1" max="999" required
+            style="width:100%;margin-top:4px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:bold">NF Inicial *</label>
+          <input type="number" id="inutNfIni" min="1" required
+            style="width:100%;margin-top:4px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:bold">NF Final *</label>
+          <input type="number" id="inutNfFin" min="1" required
+            style="width:100%;margin-top:4px;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:bold">Justificativa (mín. 15 caracteres) *</label>
+        <textarea id="inutJustificativa" rows="3" required minlength="15"
+          style="width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box"
+          placeholder="Motivo da inutilização..."></textarea>
+      </div>
+      <div id="inutResultado"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button type="button" onclick="fecharModalInutilizar()"
+          style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer">Fechar</button>
+        <button type="submit" id="btnInutilizar"
+          style="padding:8px 16px;background:#4e342e;color:#fff;border:none;border-radius:4px;cursor:pointer">
+          Inutilizar
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 </body>

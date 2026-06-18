@@ -60,13 +60,6 @@ async function emitir(orcamentoId, body) {
     return { erro: ['Cliente sem CPF/CNPJ válido cadastrado — atualize o cadastro antes de emitir NF-e'] };
   }
 
-  const osR = await db.query(
-    `SELECT COUNT(*) AS total FROM ordens_servico WHERE orcamento_id = $1 AND status = 'entregue'`,
-    [orcamentoId]
-  );
-  if (parseInt(osR.rows[0].total) === 0) {
-    return { erro: ['Nenhuma OS entregue para este orçamento'] };
-  }
 
   const itensR = await db.query(
     'SELECT * FROM orcamento_itens WHERE orcamento_id = $1 ORDER BY codigo',
@@ -173,4 +166,111 @@ async function listarPorOrcamento(orcamentoId) {
   return r.rows;
 }
 
-module.exports = { emitir, listarPorOrcamento };
+async function cancelar(nfeId, body) {
+  const { justificativa } = body;
+  if (!justificativa || justificativa.trim().length < 15) {
+    return { erro: ['Justificativa deve ter pelo menos 15 caracteres'] };
+  }
+
+  const r = await db.query(
+    `SELECT id, chave, protocolo, status, cnpj_emitente FROM nfe WHERE id = $1`,
+    [nfeId]
+  );
+  if (!r.rows[0]) return { erro: ['NF-e não encontrada'] };
+  const nfe = r.rows[0];
+  if (nfe.status !== 'autorizada') return { erro: ['Só é possível cancelar NF-e autorizada'] };
+  if (!nfe.chave) return { erro: ['NF-e sem chave de acesso'] };
+
+  const { cancelarNfe } = require('../../services/nfe');
+  const resultado = await cancelarNfe({
+    chave: nfe.chave,
+    cnpj_emitente: nfe.cnpj_emitente,
+    justificativa: justificativa.trim(),
+    protocolo_autorizacao: nfe.protocolo,
+  });
+
+  if (resultado.status === 'cancelada') {
+    await db.query(
+      `UPDATE nfe SET status='cancelada', cancelado_em=NOW(),
+       cancelamento_protocolo=$1, updated_at=NOW() WHERE id=$2`,
+      [resultado.protocolo, nfeId]
+    );
+    await db.query(
+      `INSERT INTO nfe_eventos (nfe_id, tipo, protocolo, c_stat, x_motivo, justificativa, xml_evento)
+       VALUES ($1,'cancelamento',$2,$3,$4,$5,$6)`,
+      [nfeId, resultado.protocolo, resultado.c_stat, resultado.x_motivo,
+       justificativa.trim(), resultado.xml_evento]
+    );
+    return { status: 'cancelada', protocolo: resultado.protocolo, c_stat: resultado.c_stat };
+  }
+  return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
+}
+
+async function corrigir(nfeId, body) {
+  const { correcao } = body;
+  if (!correcao || correcao.trim().length < 15) {
+    return { erro: ['Correção deve ter pelo menos 15 caracteres'] };
+  }
+
+  const r = await db.query(
+    `SELECT id, chave, status, cnpj_emitente FROM nfe WHERE id = $1`, [nfeId]
+  );
+  if (!r.rows[0]) return { erro: ['NF-e não encontrada'] };
+  const nfe = r.rows[0];
+  if (nfe.status !== 'autorizada') return { erro: ['Só é possível corrigir NF-e autorizada'] };
+
+  const seqR = await db.query(
+    `SELECT COUNT(*) AS total FROM nfe_eventos WHERE nfe_id=$1 AND tipo='cc_e'`, [nfeId]
+  );
+  const n_seq = parseInt(seqR.rows[0].total) + 1;
+
+  const { corrigirNfe } = require('../../services/nfe');
+  const resultado = await corrigirNfe({
+    chave: nfe.chave,
+    cnpj_emitente: nfe.cnpj_emitente,
+    correcao: correcao.trim(),
+    n_seq_evento: n_seq,
+  });
+
+  if (resultado.status === 'registrada') {
+    await db.query(
+      `INSERT INTO nfe_eventos (nfe_id, tipo, protocolo, c_stat, x_motivo, justificativa, xml_evento)
+       VALUES ($1,'cc_e',$2,$3,$4,$5,$6)`,
+      [nfeId, resultado.protocolo, resultado.c_stat, resultado.x_motivo,
+       correcao.trim(), resultado.xml_evento]
+    );
+    return { status: 'registrada', protocolo: resultado.protocolo, n_seq, c_stat: resultado.c_stat };
+  }
+  return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
+}
+
+async function inutilizar(body) {
+  const { cnpj_emitente, serie, n_nf_ini, n_nf_fin, justificativa } = body;
+  if (!cnpj_emitente || !serie || !n_nf_ini || !n_nf_fin || !justificativa) {
+    return { erro: ['cnpj_emitente, serie, n_nf_ini, n_nf_fin e justificativa são obrigatórios'] };
+  }
+  if (justificativa.trim().length < 15) {
+    return { erro: ['Justificativa deve ter pelo menos 15 caracteres'] };
+  }
+
+  const { inutilizarNfe } = require('../../services/nfe');
+  const resultado = await inutilizarNfe({
+    cnpj_emitente,
+    serie,
+    n_nf_ini: parseInt(n_nf_ini),
+    n_nf_fin: parseInt(n_nf_fin),
+    justificativa: justificativa.trim(),
+  });
+
+  if (resultado.status === 'inutilizada') {
+    await db.query(
+      `INSERT INTO nfe_eventos (nfe_id, tipo, protocolo, c_stat, x_motivo, justificativa)
+       VALUES (NULL, 'inutilizacao', $1, $2, $3, $4)`,
+      [resultado.protocolo, resultado.c_stat, resultado.x_motivo, justificativa.trim()]
+    );
+    return { status: 'inutilizada', protocolo: resultado.protocolo, c_stat: resultado.c_stat };
+  }
+  return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
+}
+
+module.exports = { emitir, listarPorOrcamento, cancelar, corrigir, inutilizar };

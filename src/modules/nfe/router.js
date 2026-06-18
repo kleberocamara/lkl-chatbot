@@ -7,6 +7,18 @@ const service = require('./service');
 
 const router = express.Router();
 
+// Inutilização (sem nfe_id específico — deve ficar antes de /:nfe_id)
+router.post('/inutilizar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.inutilizar(req.body);
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[NFE-INUTILIZAR]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.post('/:orcamento_id/emitir', requireRole('admin', 'operador'), async (req, res) => {
   try {
     const result = await service.emitir(req.params.orcamento_id, req.body);
@@ -24,6 +36,30 @@ router.get('/:orcamento_id', requireRole('admin', 'operador'), async (req, res) 
     res.json(notas);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Cancelamento
+router.post('/:nfe_id/cancelar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.cancelar(req.params.nfe_id, req.body);
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[NFE-CANCELAR]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Carta de Correção
+router.post('/:nfe_id/corrigir', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.corrigir(req.params.nfe_id, req.body);
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[NFE-CORRIGIR]', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });

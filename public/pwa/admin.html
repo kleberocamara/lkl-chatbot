@@ -234,6 +234,7 @@ function renderOrcCard(o) {
       ${o.status === 'aprovado' && o.status_pagamento !== 'pago' ? `
         <button onclick="gerarCobranca('${o.id}', 'boleto')" style="font-size:11px;padding:4px 10px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">🧾 Boleto</button>
         <button onclick="gerarCobranca('${o.id}', 'pix')" style="font-size:11px;padding:4px 10px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">⚡ PIX</button>
+        <button onclick="gerarCobranca('${o.id}', 'link_mp')" style="font-size:11px;padding:4px 10px;background:#009ee3;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">💳 Link MP</button>
       ` : ''}
       ${o.status === 'aprovado' && o.nfe_status !== 'autorizada' ? `<button onclick="abrirModalNfe('${o.id}')" style="background:#7b1fa2;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Emitir NF-e</button>` : ''}
       ${o.nfe_status === 'autorizada' && o.nfe_id ? `
@@ -291,6 +292,18 @@ function renderOrcCard(o) {
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button onclick="navigator.clipboard.writeText('${o.pix_copia_cola}').then(()=>showToast('PIX copiado!'))" style="font-size:11px;padding:3px 8px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar PIX</button>
             <button onclick="cancelarPix('${o.id}')" style="font-size:11px;padding:3px 8px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑 Cancelar PIX</button>
+          </div>
+        </div>
+      ` : o.tipo_cobranca === 'link_mp' && o.mp_checkout_url ? `
+        <div style="margin-top:8px;padding:8px;background:#e3f2fd;border-radius:6px;border-left:3px solid #009ee3">
+          <div style="font-size:10px;color:#0277bd;font-weight:bold;margin-bottom:4px">💳 LINK MP GERADO</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button onclick="navigator.clipboard.writeText('${o.mp_checkout_url}').then(()=>showToast('Link copiado!'))"
+                    style="font-size:11px;padding:3px 8px;background:#009ee3;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar Link</button>
+            <a href="${o.mp_checkout_url}" target="_blank"
+               style="font-size:11px;padding:3px 8px;background:#0277bd;color:#fff;border-radius:4px;text-decoration:none">🔗 Abrir</a>
+            <button onclick="cancelarLinkMp('${o.id}')"
+                    style="font-size:11px;padding:3px 8px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑 Cancelar</button>
           </div>
         </div>
       ` : ''}
@@ -409,7 +422,7 @@ function pgtoBadgeHTML(statusPgto) {
 }
 
 async function gerarCobranca(orcId, tipo) {
-  const label = tipo === 'boleto' ? 'Boleto' : 'PIX';
+  const label = tipo === 'boleto' ? 'Boleto' : tipo === 'pix' ? 'PIX' : 'Link MP';
 
   let payload = { tipo };
 
@@ -442,7 +455,8 @@ async function gerarCobranca(orcId, tipo) {
   const res = await api('POST', `/api/v2/orcamentos/${orcId}/cobrar`, payload);
   if (res && !res.errors && !res.error) {
     const n = res.parcelas > 1 ? ` (${res.parcelas}x)` : '';
-    showToast(`✅ ${label}${n} gerado e enviado ao cliente via WhatsApp!`);
+    const extra = tipo === 'link_mp' ? ' Copie o link e envie ao cliente.' : ' enviado ao cliente via WhatsApp!';
+    showToast(`✅ ${label}${n} gerado.${extra}`);
     loadOrcamentos();
   } else {
     showToast(`❌ Erro: ${(res?.errors || [res?.error])[0] || 'Erro desconhecido'}`);
@@ -478,6 +492,18 @@ async function cancelarPix(orcId) {
   const res = await api('POST', `/api/v2/orcamentos/${orcId}/pix/cancelar`);
   if (res && res.cancelado) {
     showToast('✅ PIX cancelado com sucesso.');
+    loadOrcamentos();
+  } else {
+    const msg = res?.erro || [res?.error || 'Erro desconhecido'];
+    showToast(`❌ ${Array.isArray(msg) ? msg[0] : msg}`);
+  }
+}
+
+async function cancelarLinkMp(orcId) {
+  if (!confirm('Confirma o cancelamento deste link de pagamento MP? Esta ação não pode ser desfeita.')) return;
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/link_mp/cancelar`);
+  if (res && res.cancelado) {
+    showToast('✅ Link MP cancelado.');
     loadOrcamentos();
   } else {
     const msg = res?.erro || [res?.error || 'Erro desconhecido'];

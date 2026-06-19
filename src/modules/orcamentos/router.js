@@ -135,6 +135,42 @@ router.patch('/:id/cancelar', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /:id/boletos/:boletoId/cancelar — cancela parcela específica (admin)
+router.post('/:id/boletos/:boletoId/cancelar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.cancelarBoleto(req.params.id, req.params.boletoId);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[CANCELAR-BOLETO]', err);
+    res.status(500).json({ error: 'Erro interno ao cancelar boleto' });
+  }
+});
+
+// POST /:id/boleto/cancelar — cancela cobrança do orçamento (legado ou parcela única) (admin)
+router.post('/:id/boleto/cancelar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.cancelarBoletoDireto(req.params.id);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[CANCELAR-BOLETO-DIRETO]', err);
+    res.status(500).json({ error: 'Erro interno ao cancelar boleto' });
+  }
+});
+
+// POST /:id/pix/cancelar — cancela cobrança PIX (admin)
+router.post('/:id/pix/cancelar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.cancelarPix(req.params.id);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[CANCELAR-PIX]', err);
+    res.status(500).json({ error: 'Erro interno ao cancelar PIX' });
+  }
+});
+
 // GET /:id/pdf — generate PDF quote
 router.get('/:id/pdf', async (req, res) => {
   const orc = await service.buscarPorId(req.params.id);
@@ -150,12 +186,84 @@ router.get('/:id/pdf', async (req, res) => {
   }
 });
 
+// GET /:id/boleto/:parcela/pdf — proxy PDF de parcela específica
+router.get('/:id/boleto/:parcela/pdf', requireRole('admin'), async (req, res) => {
+  try {
+    const db = require('../../db');
+    const r = await db.query(
+      'SELECT boleto_id, parcela, total_parcelas FROM orcamento_boletos WHERE orcamento_id=$1 AND parcela=$2',
+      [req.params.id, req.params.parcela]
+    );
+    if (!r.rows[0]?.boleto_id) return res.status(404).json({ error: 'Parcela não encontrada' });
+    const { boleto_id, parcela, total_parcelas } = r.rows[0];
+
+    const c6bank = require('../../services/c6bank');
+    const axios = require('axios');
+    const BASE_URL = process.env.C6_BASE_URL || 'https://baas-api-sandbox.c6bank.info';
+    const token = await c6bank._getAccessToken();
+    const agent = c6bank._getAgent();
+
+    const pdfRes = await axios.get(`${BASE_URL}/v1/bank_slips/${boleto_id}/pdf`, {
+      httpsAgent: agent,
+      headers: { Authorization: `Bearer ${token}`, 'partner-software-name': 'LKL Grafica', 'partner-software-version': '1.0.0' },
+      responseType: 'arraybuffer',
+    });
+
+    const orc = await db.query('SELECT numero FROM orcamentos WHERE id=$1', [req.params.id]);
+    const num = orc.rows[0]?.numero || req.params.id;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="boleto-orc${num}-parcela${parcela}de${total_parcelas}.pdf"`);
+    res.send(Buffer.from(pdfRes.data));
+  } catch (e) {
+    console.error('[BOLETO-PARCELA-PDF]', e.message);
+    res.status(500).json({ error: `Erro ao baixar PDF: ${e.message}` });
+  }
+});
+
+// GET /:id/boleto/pdf — proxy PDF do boleto C6 Bank (requer auth mTLS)
+router.get('/:id/boleto/pdf', requireRole('admin'), async (req, res) => {
+  try {
+    const db = require('../../db');
+    const r = await db.query('SELECT boleto_id, numero FROM orcamentos WHERE id = $1', [req.params.id]);
+    if (!r.rows[0]?.boleto_id) return res.status(404).json({ error: 'Boleto não encontrado para este orçamento' });
+    const { boleto_id, numero } = r.rows[0];
+
+    const c6bank = require('../../services/c6bank');
+    const axios = require('axios');
+    const https = require('https');
+    const fs = require('fs');
+    const BASE_URL = process.env.C6_BASE_URL || 'https://baas-api-sandbox.c6bank.info';
+
+    // Reusar agent e token do módulo c6bank
+    const token = await c6bank._getAccessToken();
+    const agent = c6bank._getAgent();
+
+    const pdfRes = await axios.get(`${BASE_URL}/v1/bank_slips/${boleto_id}/pdf`, {
+      httpsAgent: agent,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'partner-software-name': 'LKL Grafica',
+        'partner-software-version': '1.0.0',
+      },
+      responseType: 'arraybuffer',
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="boleto-orc${numero}.pdf"`);
+    res.send(Buffer.from(pdfRes.data));
+  } catch (e) {
+    console.error('[BOLETO-PDF]', e.message);
+    res.status(500).json({ error: `Erro ao baixar PDF do boleto: ${e.message}` });
+  }
+});
+
 // POST /:id/cobrar — admin gera cobrança (boleto ou pix)
 router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
   try {
-    const { tipo } = req.body || {};
+    const { tipo, dataVencimento, parcelas, intervaloDias } = req.body || {};
     if (!tipo) return res.status(400).json({ errors: ['tipo é obrigatório (boleto ou pix)'] });
-    const result = await service.cobrar(req.params.id, tipo);
+    const result = await service.cobrar(req.params.id, tipo, dataVencimento, parcelas, intervaloDias);
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrado'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });

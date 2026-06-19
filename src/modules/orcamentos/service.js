@@ -1,5 +1,6 @@
 const db = require('../../db');
 const { pool } = require('../../db');
+const c6bank = require('../../services/c6bank');
 
 const STATUS_VALIDOS = ['rascunho', 'enviado', 'aprovado', 'cancelado'];
 
@@ -25,8 +26,12 @@ async function buscarPorId(id) {
     'SELECT * FROM ordens_servico WHERE orcamento_id = $1 ORDER BY numero_os',
     [id]
   );
+  const boletosR = await db.query(
+    'SELECT * FROM orcamento_boletos WHERE orcamento_id = $1 ORDER BY parcela',
+    [id]
+  );
 
-  return { ...orcamento, itens: itensR.rows, ordens_servico: osR.rows };
+  return { ...orcamento, itens: itensR.rows, ordens_servico: osR.rows, boletos_parcelas: boletosR.rows };
 }
 
 async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, itens }) {
@@ -198,7 +203,8 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
     db.query(
       `SELECT o.*, c.nome AS cliente_nome, u.name AS vendedor_nome,
               EXISTS(SELECT 1 FROM ordens_servico os WHERE os.orcamento_id = o.id AND os.status = 'entregue') AS tem_os_entregue,
-              (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status
+              (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status,
+              (SELECT n.id FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_id
        FROM orcamentos o
        LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
        LEFT JOIN users u ON u.id = o.vendedor_id
@@ -208,20 +214,40 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
     db.query(`SELECT COUNT(*) FROM orcamentos o ${where}`, params),
   ]);
 
-  return { data: rows.rows, total: parseInt(count.rows[0].count), page, limit };
+  // Inclui parcelas de boleto para cada orçamento
+  const ids = rows.rows.map(r => r.id);
+  let parcelasMap = {};
+  if (ids.length) {
+    const bp = await db.query(
+      `SELECT * FROM orcamento_boletos WHERE orcamento_id = ANY($1) ORDER BY orcamento_id, parcela`,
+      [ids]
+    );
+    for (const p of bp.rows) {
+      if (!parcelasMap[p.orcamento_id]) parcelasMap[p.orcamento_id] = [];
+      parcelasMap[p.orcamento_id].push(p);
+    }
+  }
+  const data = rows.rows.map(r => ({ ...r, boletos_parcelas: parcelasMap[r.id] || [] }));
+
+  return { data, total: parseInt(count.rows[0].count), page, limit };
 }
 
-async function cobrar(id, tipo) {
-  const c6bank = require('../../services/c6bank');
+async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30) {
   const crypto = require('crypto');
   if (!['boleto', 'pix'].includes(tipo)) {
     return { erro: ['tipo deve ser boleto ou pix'] };
   }
+  parcelas = parseInt(parcelas) || 1;
+  intervaloDias = parseInt(intervaloDias) || 30;
+  if (parcelas < 1 || parcelas > 24) return { erro: ['Número de parcelas deve ser entre 1 e 24'] };
 
   const r = await db.query(
     `SELECT o.id, o.numero, o.status, o.status_pagamento, o.tipo_cobranca,
             COALESCE((SELECT SUM(valor_total) FROM orcamento_itens WHERE orcamento_id = o.id), 0) AS valor_total_calculado,
-            c.nome AS cliente_nome, c.cpf_cnpj AS cliente_cpf_cnpj, c.celular AS cliente_celular
+            c.nome AS cliente_nome, c.cpf_cnpj AS cliente_cpf_cnpj, c.celular AS cliente_celular,
+            c.email AS cliente_email,
+            c.logradouro AS end_logradouro, c.bairro AS end_bairro,
+            c.cidade AS end_cidade, c.uf AS end_uf, c.cep AS end_cep
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
      WHERE o.id = $1`,
@@ -246,21 +272,72 @@ async function cobrar(id, tipo) {
   }
   if (!valor || valor <= 0) return { erro: ['Orçamento sem valor definido — precifique antes de cobrar'] };
 
-  const seuNumero = `ORC-${orc.numero}`;
+  const seuNumero = `ORC${String(orc.numero).padStart(7, '0')}`;
   const nomeSacado = orc.cliente_nome || 'Cliente';
   const cpfCnpj = (orc.cliente_cpf_cnpj || '').replace(/\D/g, '');
   if (!cpfCnpj) return { erro: ['Cliente sem CPF/CNPJ cadastrado — necessário para emitir cobrança'] };
 
+  const endereco = {
+    logradouro: orc.end_logradouro,
+    bairro: orc.end_bairro,
+    cidade: orc.end_cidade,
+    uf: orc.end_uf,
+    cep: orc.end_cep,
+  };
+
   try {
     if (tipo === 'boleto') {
-      const boleto = await c6bank.emitirBoleto({ seuNumero, nomeSacado, cpfCnpjSacado: cpfCnpj, valor });
+      // Deletar parcelas anteriores (reemissão)
+      await db.query('DELETE FROM orcamento_boletos WHERE orcamento_id = $1', [id]);
+
+      const valorParcela = Math.round((valor / parcelas) * 100) / 100;
+      const boletosGerados = [];
+
+      for (let i = 0; i < parcelas; i++) {
+        const venc = new Date(dataVencimento + 'T12:00:00');
+        venc.setDate(venc.getDate() + i * intervaloDias);
+        const vencStr = venc.toISOString().split('T')[0];
+
+        // Última parcela absorve centavos de arredondamento
+        const valorEsta = i === parcelas - 1
+          ? Math.round((valor - valorParcela * (parcelas - 1)) * 100) / 100
+          : valorParcela;
+
+        const numParcela = `${seuNumero}P${i + 1}`;
+        const bolepix = await c6bank.emitirBolepix({
+          seuNumero: numParcela,
+          nomeSacado,
+          cpfCnpjSacado: cpfCnpj,
+          email: orc.cliente_email || undefined,
+          valor: valorEsta,
+          dataVencimento: vencStr,
+          endereco,
+        });
+
+        await db.query(
+          `INSERT INTO orcamento_boletos (orcamento_id, parcela, total_parcelas, boleto_id, linha_digitavel, pdf_url, vencimento, valor)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, i + 1, parcelas, bolepix.boletoId, bolepix.linhaDigitavel, bolepix.pdfUrl, vencStr, valorEsta]
+        );
+        boletosGerados.push({
+          parcela: i + 1,
+          valor: valorEsta,
+          vencimento: vencStr,
+          linhaDigitavel: bolepix.linhaDigitavel,
+          pdfUrl: bolepix.pdfUrl,
+          boletoId: bolepix.boletoId,
+        });
+      }
+
+      // Atualiza orcamento com dados da 1ª parcela (retrocompatibilidade)
+      const p1 = boletosGerados[0];
       await db.query(
         `UPDATE orcamentos SET tipo_cobranca='boleto', status_pagamento='aguardando_pagamento',
-         boleto_id=$1, boleto_linha_digitavel=$2, boleto_pdf_url=$3, boleto_vencimento=$4,
-         updated_at=NOW() WHERE id=$5`,
-        [boleto.boletoId, boleto.linhaDigitavel, boleto.pdfUrl, boleto.dataVencimento, id]
+         boleto_id=$1, boleto_linha_digitavel=$2, boleto_pdf_url=$3, boleto_vencimento=$4, updated_at=NOW() WHERE id=$5`,
+        [p1.boletoId, p1.linhaDigitavel, p1.pdfUrl, p1.vencimento, id]
       );
-      return { tipo: 'boleto', linhaDigitavel: boleto.linhaDigitavel, pdfUrl: boleto.pdfUrl, dataVencimento: boleto.dataVencimento, valor };
+
+      return { tipo: 'boleto', parcelas, intervaloDias, boletos: boletosGerados, valor };
     } else {
       const txid = crypto.randomBytes(16).toString('hex').slice(0, 32);
       const pix = await c6bank.criarPixCobranca({
@@ -284,30 +361,62 @@ async function cobrar(id, tipo) {
 }
 
 async function confirmarPagamento({ tipo, txid, boletoId }) {
-  let findResult;
+  let orcId;
+
   if (tipo === 'pix' && txid) {
-    findResult = await db.query('SELECT id FROM orcamentos WHERE pix_txid = $1', [txid]);
+    const r = await db.query('SELECT id FROM orcamentos WHERE pix_txid = $1', [txid]);
+    if (!r.rows[0]) return { erro: ['Orçamento não encontrado para este pagamento'] };
+    orcId = r.rows[0].id;
   } else if (tipo === 'boleto' && boletoId) {
-    findResult = await db.query('SELECT id FROM orcamentos WHERE boleto_id = $1', [boletoId]);
+    // Busca pelo boleto_id na parcela específica ou no campo legado do orçamento
+    const rParcela = await db.query(
+      `SELECT orcamento_id FROM orcamento_boletos WHERE boleto_id = $1`, [boletoId]
+    );
+    if (rParcela.rows[0]) {
+      orcId = rParcela.rows[0].orcamento_id;
+    } else {
+      const rOrc = await db.query('SELECT id FROM orcamentos WHERE boleto_id = $1', [boletoId]);
+      if (!rOrc.rows[0]) return { erro: ['Orçamento não encontrado para este pagamento'] };
+      orcId = rOrc.rows[0].id;
+    }
   } else {
     return { erro: ['txid ou boletoId obrigatório'] };
   }
 
-  if (!findResult.rows[0]) return { erro: ['Orçamento não encontrado para este pagamento'] };
-  const orcId = findResult.rows[0].id;
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `UPDATE orcamentos SET status_pagamento='pago', pago_em=COALESCE(pago_em, NOW()), updated_at=NOW()
-       WHERE id=$1 AND status_pagamento != 'pago'`,
+
+    // Marca a parcela específica como paga (se existir em orcamento_boletos)
+    if (tipo === 'boleto' && boletoId) {
+      await client.query(
+        `UPDATE orcamento_boletos SET status='pago' WHERE boleto_id=$1 AND status='aguardando'`,
+        [boletoId]
+      );
+    }
+
+    // Para boletos parcelados: só marca orçamento como pago quando todas as parcelas estiverem pagas ou canceladas
+    const pendentes = await client.query(
+      `SELECT COUNT(*) FROM orcamento_boletos WHERE orcamento_id=$1 AND status='aguardando'`,
       [orcId]
     );
-    await client.query(
-      `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
+    const totalParcelas = await client.query(
+      `SELECT COUNT(*) FROM orcamento_boletos WHERE orcamento_id=$1`,
       [orcId]
     );
+    // Se não há parcelas no sistema (legado) ou todas foram resolvidas, marca pago
+    if (parseInt(totalParcelas.rows[0].count) === 0 || parseInt(pendentes.rows[0].count) === 0) {
+      await client.query(
+        `UPDATE orcamentos SET status_pagamento='pago', pago_em=COALESCE(pago_em, NOW()), updated_at=NOW()
+         WHERE id=$1 AND status_pagamento != 'pago'`,
+        [orcId]
+      );
+      await client.query(
+        `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
+        [orcId]
+      );
+    }
+
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -319,4 +428,79 @@ async function confirmarPagamento({ tipo, txid, boletoId }) {
   return { confirmado: true, orcamento_id: orcId };
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento };
+async function cancelarBoleto(orcamentoId, boletoRowId) {
+  const r = await db.query(
+    `SELECT * FROM orcamento_boletos WHERE id=$1 AND orcamento_id=$2`,
+    [boletoRowId, orcamentoId]
+  );
+  const boleto = r.rows[0];
+  if (!boleto) return { erro: ['Boleto não encontrado'] };
+  if (boleto.status === 'cancelado') return { erro: ['Boleto já está cancelado'] };
+  if (boleto.status === 'pago') return { erro: ['Boleto já foi pago e não pode ser cancelado'] };
+
+  await c6bank.cancelarBoleto(boleto.boleto_id);
+  await db.query(`UPDATE orcamento_boletos SET status='cancelado' WHERE id=$1`, [boletoRowId]);
+
+  const restantes = await db.query(
+    `SELECT COUNT(*) FROM orcamento_boletos WHERE orcamento_id=$1 AND status != 'cancelado'`,
+    [orcamentoId]
+  );
+  if (parseInt(restantes.rows[0].count) === 0) {
+    await db.query(
+      `UPDATE orcamentos SET status_pagamento='cancelado', updated_at=NOW() WHERE id=$1`,
+      [orcamentoId]
+    );
+  }
+  return { cancelado: true, boleto_id: boleto.boleto_id };
+}
+
+async function cancelarPix(orcamentoId) {
+  const r = await db.query(
+    `SELECT id, pix_txid, status_pagamento FROM orcamentos WHERE id=$1`, [orcamentoId]
+  );
+  const orc = r.rows[0];
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+  if (!orc.pix_txid) return { erro: ['Nenhuma cobrança PIX registrada neste orçamento'] };
+  if (orc.status_pagamento === 'pago') return { erro: ['Pagamento já confirmado, não é possível cancelar'] };
+  if (orc.status_pagamento === 'cancelado') return { erro: ['Cobrança PIX já foi cancelada'] };
+
+  await c6bank.cancelarPixCobranca(orc.pix_txid);
+  await db.query(
+    `UPDATE orcamentos SET status_pagamento='cancelado', pix_txid=NULL, pix_copia_cola=NULL, updated_at=NOW() WHERE id=$1`,
+    [orcamentoId]
+  );
+  return { cancelado: true, txid: orc.pix_txid };
+}
+
+// Cancela boleto usando o boleto_id armazenado diretamente no orçamento (fluxo legado ou parcela único)
+async function cancelarBoletoDireto(orcamentoId) {
+  const r = await db.query(
+    `SELECT id, boleto_id, status_pagamento FROM orcamentos WHERE id=$1`,
+    [orcamentoId]
+  );
+  const orc = r.rows[0];
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+  if (!orc.boleto_id) return { erro: ['Nenhum boleto registrado neste orçamento'] };
+  if (orc.status_pagamento === 'pago') return { erro: ['Pagamento já confirmado, não é possível cancelar'] };
+  if (orc.status_pagamento === 'cancelado') return { erro: ['Cobrança já foi cancelada'] };
+
+  try {
+    await c6bank.cancelarBoleto(orc.boleto_id);
+  } catch (e) {
+    // C6 retorna 400 se o boleto já foi cancelado lá — trata como idempotente
+    if (!e.message.includes('CANCELLED') && !e.message.includes('400')) throw e;
+  }
+
+  await db.query(
+    `UPDATE orcamento_boletos SET status='cancelado' WHERE orcamento_id=$1 AND status='aguardando'`,
+    [orcamentoId]
+  );
+  await db.query(
+    `UPDATE orcamentos SET status_pagamento='cancelado', updated_at=NOW() WHERE id=$1`,
+    [orcamentoId]
+  );
+
+  return { cancelado: true, boleto_id: orc.boleto_id };
+}
+
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix };

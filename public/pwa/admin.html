@@ -288,7 +288,10 @@ function renderOrcCard(o) {
         <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:6px;border-left:3px solid #00695c">
           <div style="font-size:10px;color:#00695c;font-weight:bold;margin-bottom:4px">⚡ PIX GERADO</div>
           <div style="font-size:11px;color:#333;word-break:break-all;margin-bottom:6px;font-family:monospace">${o.pix_copia_cola.slice(0, 60)}...</div>
-          <button onclick="navigator.clipboard.writeText('${o.pix_copia_cola}').then(()=>showToast('PIX copiado!'))" style="font-size:11px;padding:3px 8px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar PIX</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button onclick="navigator.clipboard.writeText('${o.pix_copia_cola}').then(()=>showToast('PIX copiado!'))" style="font-size:11px;padding:3px 8px;background:#00695c;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 Copiar PIX</button>
+            <button onclick="cancelarPix('${o.id}')" style="font-size:11px;padding:3px 8px;background:#c62828;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑 Cancelar PIX</button>
+          </div>
         </div>
       ` : ''}
     </div>
@@ -463,6 +466,18 @@ async function cancelarBoletoDireto(orcId) {
   const res = await api('POST', `/api/v2/orcamentos/${orcId}/boleto/cancelar`);
   if (res && res.cancelado) {
     showToast('✅ Boleto cancelado com sucesso.');
+    loadOrcamentos();
+  } else {
+    const msg = res?.erro || [res?.error || 'Erro desconhecido'];
+    showToast(`❌ ${Array.isArray(msg) ? msg[0] : msg}`);
+  }
+}
+
+async function cancelarPix(orcId) {
+  if (!confirm('Confirma o cancelamento desta cobrança PIX junto ao C6 Bank? Esta ação não pode ser desfeita.')) return;
+  const res = await api('POST', `/api/v2/orcamentos/${orcId}/pix/cancelar`);
+  if (res && res.cancelado) {
+    showToast('✅ PIX cancelado com sucesso.');
     loadOrcamentos();
   } else {
     const msg = res?.erro || [res?.error || 'Erro desconhecido'];

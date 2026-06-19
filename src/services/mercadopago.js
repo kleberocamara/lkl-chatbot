@@ -52,8 +52,7 @@ async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, cl
       timeout: 15000,
     });
     const d = res.data;
-    // init_point = produção, sandbox_init_point = teste
-    const checkoutUrl = d.sandbox_init_point || d.init_point;
+    const checkoutUrl = d.init_point;
     return { preferenceId: d.id, checkoutUrl };
   } catch (err) {
     const msg = err.response?.data?.message || err.message;

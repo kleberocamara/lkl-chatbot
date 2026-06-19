@@ -1,6 +1,7 @@
 const db = require('../../db');
 const { pool } = require('../../db');
 const c6bank = require('../../services/c6bank');
+const mercadopago = require('../../services/mercadopago');
 
 const STATUS_VALIDOS = ['rascunho', 'enviado', 'aprovado', 'cancelado'];
 
@@ -234,8 +235,8 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
 
 async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30) {
   const crypto = require('crypto');
-  if (!['boleto', 'pix'].includes(tipo)) {
-    return { erro: ['tipo deve ser boleto ou pix'] };
+  if (!['boleto', 'pix', 'link_mp'].includes(tipo)) {
+    return { erro: ['tipo deve ser boleto, pix ou link_mp'] };
   }
   parcelas = parseInt(parcelas) || 1;
   intervaloDias = parseInt(intervaloDias) || 30;
@@ -353,6 +354,21 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
         [pix.txid, pix.pixCopiaECola, id]
       );
       return { tipo: 'pix', txid: pix.txid, pixCopiaECola: pix.pixCopiaECola, valor };
+    } else {
+      // link_mp — Mercado Pago checkout
+      const pref = await mercadopago.criarPreference({
+        titulo: `Orçamento #${orc.numero} — LKL Gráfica`,
+        valor,
+        orcamentoNumero: orc.numero,
+        clienteNome: nomeSacado,
+        clienteEmail: orc.cliente_email,
+      });
+      await db.query(
+        `UPDATE orcamentos SET tipo_cobranca='link_mp', status_pagamento='aguardando_pagamento',
+         mp_preference_id=$1, mp_checkout_url=$2, updated_at=NOW() WHERE id=$3`,
+        [pref.preferenceId, pref.checkoutUrl, id]
+      );
+      return { tipo: 'link_mp', preferenceId: pref.preferenceId, checkoutUrl: pref.checkoutUrl, valor };
     }
   } catch (e) {
     console.error('[C6-COBRAR]', e.message);
@@ -426,6 +442,25 @@ async function confirmarPagamento({ tipo, txid, boletoId }) {
   }
 
   return { confirmado: true, orcamento_id: orcId };
+}
+
+async function cancelarLinkMp(orcamentoId) {
+  const r = await db.query(
+    `SELECT id, mp_preference_id, status_pagamento FROM orcamentos WHERE id=$1`, [orcamentoId]
+  );
+  const orc = r.rows[0];
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+  if (!orc.mp_preference_id) return { erro: ['Nenhum link MP registrado neste orçamento'] };
+  if (orc.status_pagamento === 'pago') return { erro: ['Pagamento já confirmado, não é possível cancelar'] };
+  if (orc.status_pagamento === 'cancelado') return { erro: ['Link MP já foi cancelado'] };
+
+  // Preferências MP expiram automaticamente — apenas limpar localmente
+  await db.query(
+    `UPDATE orcamentos SET status_pagamento='cancelado',
+     mp_preference_id=NULL, mp_checkout_url=NULL, updated_at=NOW() WHERE id=$1`,
+    [orcamentoId]
+  );
+  return { cancelado: true };
 }
 
 async function cancelarBoleto(orcamentoId, boletoRowId) {
@@ -503,4 +538,4 @@ async function cancelarBoletoDireto(orcamentoId) {
   return { cancelado: true, boleto_id: orc.boleto_id };
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix };
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp };

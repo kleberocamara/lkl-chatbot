@@ -339,7 +339,7 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
       );
 
       return { tipo: 'boleto', parcelas, intervaloDias, boletos: boletosGerados, valor };
-    } else {
+    } else if (tipo === 'pix') {
       const txid = crypto.randomBytes(16).toString('hex').slice(0, 32);
       const pix = await c6bank.criarPixCobranca({
         txid,

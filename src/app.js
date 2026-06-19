@@ -47,7 +47,7 @@ app.get('/api/me', (req, res) => {
 // PWA
 app.get('/pwa', (_req, res) => res.redirect('/pwa/login.html'));
 
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), { extensions: ['html'] }));
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, '../public/login.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
 app.get('/', (req, res) => res.redirect('/login'));

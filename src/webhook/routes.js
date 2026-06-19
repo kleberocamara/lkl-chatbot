@@ -3,6 +3,7 @@ const router = express.Router();
 const { handleInboundMessage } = require('./handler');
 const { markAsRead } = require('../services/whatsapp');
 const { handleC6Webhook } = require('./c6bank');
+const { handleMercadoPagoWebhook } = require('./mercadopago');
 
 // Verificação do webhook (Meta exige isso na configuração)
 router.get('/', (req, res) => {
@@ -52,5 +53,8 @@ router.post('/', async (req, res) => {
 
 // Webhook C6 Bank — confirmação de pagamento (PIX e Boleto)
 router.post('/c6bank', express.json(), handleC6Webhook);
+
+// Webhook Mercado Pago — confirmação de pagamento via IPN
+router.post('/mercadopago', express.json(), handleMercadoPagoWebhook);
 
 module.exports = router;

@@ -35,6 +35,12 @@ async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, cl
     payment_methods: {
       installments: parseInt(maxParcelas) || 12,
     },
+    back_urls: {
+      success: `${appUrl}/pagamento/sucesso`,
+      failure: `${appUrl}/pagamento/erro`,
+      pending: `${appUrl}/pagamento/pendente`,
+    },
+    auto_return: 'approved',
     external_reference: String(orcamentoNumero),
     notification_url: `${appUrl}/webhook/mercadopago`,
     statement_descriptor: 'FACTOR GRAFICA',

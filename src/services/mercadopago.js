@@ -32,10 +32,6 @@ async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, cl
       unit_price: parseFloat(valor.toFixed(2)),
       currency_id: 'BRL',
     }],
-    payer: {
-      name: (clienteNome || 'Cliente').slice(0, 256),
-      email: clienteEmail || 'cliente@lklgrafica.com.br',
-    },
     payment_methods: {
       installments: parseInt(maxParcelas) || 12,
     },

@@ -23,7 +23,7 @@ function mpHeaders() {
  * @param {string} [p.clienteEmail]
  * @returns {{ preferenceId: string, checkoutUrl: string }}
  */
-async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, clienteEmail }) {
+async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, clienteEmail, maxParcelas }) {
   const appUrl = process.env.APP_URL || 'https://chatbot.klebercamaraconsultoria.cloud';
   const body = {
     items: [{
@@ -35,6 +35,9 @@ async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, cl
     payer: {
       name: (clienteNome || 'Cliente').slice(0, 256),
       email: clienteEmail || 'cliente@lklgrafica.com.br',
+    },
+    payment_methods: {
+      installments: parseInt(maxParcelas) || 12,
     },
     external_reference: String(orcamentoNumero),
     notification_url: `${appUrl}/webhook/mercadopago`,

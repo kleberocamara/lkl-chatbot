@@ -448,6 +448,13 @@ async function gerarCobranca(orcId, tipo) {
     }
 
     payload = { tipo, parcelas, dataVencimento: dataInput.trim(), intervaloDias };
+  } else if (tipo === 'link_mp') {
+    const pStr = prompt('💳 Máximo de parcelas no cartão? (1, 2, 3, 6 ou 12):', '12');
+    if (pStr === null) return;
+    const maxP = parseInt(pStr);
+    if (!maxP || ![1, 2, 3, 6, 12].includes(maxP)) { showToast('❌ Opções válidas: 1, 2, 3, 6 ou 12 parcelas.'); return; }
+    if (!confirm(`Gerar Link MP (até ${maxP}x) para este orçamento?`)) return;
+    payload = { tipo, parcelas: maxP };
   } else {
     if (!confirm(`Gerar ${label} para este orçamento e enviar ao cliente via WhatsApp?`)) return;
   }

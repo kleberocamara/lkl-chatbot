@@ -362,6 +362,7 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
         orcamentoNumero: orc.numero,
         clienteNome: nomeSacado,
         clienteEmail: orc.cliente_email,
+        maxParcelas: parcelas,
       });
       await db.query(
         `UPDATE orcamentos SET tipo_cobranca='link_mp', status_pagamento='aguardando_pagamento',

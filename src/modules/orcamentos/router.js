@@ -171,6 +171,18 @@ router.post('/:id/pix/cancelar', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /:id/link_mp/cancelar — cancela link MP (admin)
+router.post('/:id/link_mp/cancelar', requireRole('admin'), async (req, res) => {
+  try {
+    const result = await service.cancelarLinkMp(req.params.id);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.json(result);
+  } catch (err) {
+    console.error('[CANCELAR-LINK-MP]', err);
+    res.status(500).json({ error: 'Erro interno ao cancelar link MP' });
+  }
+});
+
 // GET /:id/pdf — generate PDF quote
 router.get('/:id/pdf', async (req, res) => {
   const orc = await service.buscarPorId(req.params.id);

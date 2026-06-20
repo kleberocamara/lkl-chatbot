@@ -17,6 +17,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 global.io = io;
+require('./jobs/contas-pagar');
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));

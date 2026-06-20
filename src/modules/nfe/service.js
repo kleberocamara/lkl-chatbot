@@ -203,6 +203,7 @@ async function cancelar(nfeId, body) {
     );
     return { status: 'cancelada', protocolo: resultado.protocolo, c_stat: resultado.c_stat };
   }
+  if (resultado.erro) return { erro: [resultado.erro] };
   return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
 }
 
@@ -241,6 +242,7 @@ async function corrigir(nfeId, body) {
     );
     return { status: 'registrada', protocolo: resultado.protocolo, n_seq, c_stat: resultado.c_stat };
   }
+  if (resultado.erro) return { erro: [resultado.erro] };
   return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
 }
 
@@ -270,6 +272,7 @@ async function inutilizar(body) {
     );
     return { status: 'inutilizada', protocolo: resultado.protocolo, c_stat: resultado.c_stat };
   }
+  if (resultado.erro) return { erro: [resultado.erro] };
   return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
 }
 

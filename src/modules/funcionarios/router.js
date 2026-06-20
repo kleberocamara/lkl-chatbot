@@ -5,7 +5,10 @@ const { requireRole } = require('../../middleware/auth');
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-  try { res.json(await service.listar(req.query)); }
+  try {
+    const { status, page, limit } = req.query;
+    res.json(await service.listar({ status, page: parseInt(page) || 1, limit: parseInt(limit) || 20 }));
+  }
   catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 

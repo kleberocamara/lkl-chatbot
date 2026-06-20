@@ -1,16 +1,17 @@
 const db = require('../../db');
 
-async function listar({ busca, status } = {}) {
+async function listar({ busca, status, page = 1, limit = 20 } = {}) {
   const params = [];
   let where = 'WHERE 1=1';
   if (status) { params.push(status); where += ` AND m.status = $${params.length}`; }
   if (busca) { params.push(`%${busca}%`); where += ` AND m.nome ILIKE $${params.length}`; }
-  const r = await db.query(
-    `SELECT m.*, f.nome as fornecedor_nome FROM materiais m
-     LEFT JOIN fornecedores f ON f.id = m.fornecedor_id ${where} ORDER BY m.nome`,
-    params
-  );
-  return r.rows;
+  const offset = (page - 1) * limit;
+  const base = `FROM materiais m LEFT JOIN fornecedores f ON f.id = m.fornecedor_id ${where}`;
+  const [rows, count] = await Promise.all([
+    db.query(`SELECT m.*, f.nome as fornecedor_nome ${base} ORDER BY m.nome LIMIT $${params.length+1} OFFSET $${params.length+2}`, [...params, limit, offset]),
+    db.query(`SELECT COUNT(*) ${base}`, params),
+  ]);
+  return { materiais: rows.rows, total: parseInt(count.rows[0].count), page, limit };
 }
 
 async function buscarPorId(id) {

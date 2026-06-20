@@ -23,7 +23,7 @@ EMITENTES = {
         'razao_social': 'FACTOR COMUNICACAO VISUAL LTDA',
         'cnpj': '44448899000185',
         'ie': '12306440',
-        'csosn': '0400',
+        'csosn': '0102',
         'logradouro': 'RUA DOUTOR WALDIR DE SOUZA MEDEIROS',
         'numero': '315',
         'complemento': 'QUADRA28 LOTE 38 ANEXO PARTE',

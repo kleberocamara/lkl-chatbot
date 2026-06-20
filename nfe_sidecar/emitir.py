@@ -143,9 +143,8 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
         _texto(el_dest, 'indIEDest', '1')
         _texto(el_dest, 'IE', ie_dest)
     elif len(cpf_cnpj) == 14:
-        # CNPJ sem IE numérica: contribuinte isento (SVRS aceita indIEDest=2 + IE=ISENTO)
-        _texto(el_dest, 'indIEDest', '2')
-        _texto(el_dest, 'IE', 'ISENTO')
+        # CNPJ sem IE numérica: não contribuinte — sem elemento IE (schema SVRS rejeita IE=ISENTO)
+        _texto(el_dest, 'indIEDest', '9')
     else:
         # CPF: não contribuinte (sem elemento IE)
         _texto(el_dest, 'indIEDest', '9')
@@ -334,6 +333,7 @@ def _transmitir(nfe_xml_bytes, emitente, cert_path_pem, key_path_pem, tp_amb):
         '</soap12:Envelope>'
     )
 
+    import sys; print('[SOAP-URL]', url, '[SIZE]', len(soap_body), file=sys.stderr, flush=True)
     resp = requests.post(
         url,
         data=soap_body.encode('utf-8'),
@@ -402,6 +402,7 @@ def emitir_nfe(dados):
         nfe_assinada = _assinar(nfe_el, cert_pem, key_pem, chave)
         nfe_bytes = etree.tostring(nfe_assinada, xml_declaration=True, encoding='UTF-8')
         resp_text = _transmitir(nfe_bytes, emitente, cert_pem_path, key_pem_path, tp_amb)
+        import sys; print('[SEFAZ-RAW]', resp_text[:800], file=sys.stderr, flush=True)
         c_stat, x_motivo, ch_nfe, n_prot = _parsear_retorno(resp_text)
 
         if c_stat == '100':

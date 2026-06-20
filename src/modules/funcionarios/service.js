@@ -1,16 +1,17 @@
 const db = require('../../db');
 const { validarCPF } = require('../../utils/validators');
 
-async function listar({ status } = {}) {
+async function listar({ status, page = 1, limit = 20 } = {}) {
   const params = [];
   let where = 'WHERE 1=1';
   if (status) { params.push(status); where += ` AND f.status = $${params.length}`; }
-  const r = await db.query(
-    `SELECT f.*, u.name as user_nome, u.role as user_role FROM funcionarios f
-     LEFT JOIN users u ON u.id = f.user_id ${where} ORDER BY f.nome`,
-    params
-  );
-  return r.rows;
+  const offset = (page - 1) * limit;
+  const base = `FROM funcionarios f LEFT JOIN users u ON u.id = f.user_id ${where}`;
+  const [rows, count] = await Promise.all([
+    db.query(`SELECT f.*, u.name as user_nome, u.role as user_role ${base} ORDER BY f.nome LIMIT $${params.length+1} OFFSET $${params.length+2}`, [...params, limit, offset]),
+    db.query(`SELECT COUNT(*) ${base}`, params),
+  ]);
+  return { funcionarios: rows.rows, total: parseInt(count.rows[0].count), page, limit };
 }
 
 async function buscarPorId(id) {

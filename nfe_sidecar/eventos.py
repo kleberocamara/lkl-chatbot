@@ -33,9 +33,14 @@ def _texto(parent, tag, text):
 def _parsear_retorno_evento(resp_xml):
     """Extrai cStat e xMotivo da resposta do receptor de eventos."""
     stripped = resp_xml.strip()
-    if not stripped.startswith('<') or '403' in stripped[:300] or '401' in stripped[:300]:
+    if not stripped.startswith('<'):
         return '999', f'Erro HTTP SEFAZ: {stripped[:120]}', None
-    root = etree.fromstring(resp_xml.encode('utf-8'))
+    if '403' in stripped[:300] or '401' in stripped[:300] or '<html' in stripped[:200].lower():
+        return '999', f'Erro HTTP SEFAZ: {stripped[:120]}', None
+    try:
+        root = etree.fromstring(resp_xml.encode('utf-8'))
+    except etree.XMLSyntaxError as e:
+        return '999', f'XML inválido SEFAZ: {e}', None
 
     def find(tag):
         el = root.find(f'.//{{{NS}}}{tag}')
@@ -301,20 +306,31 @@ def inutilizar_nfe(dados):
         url,
         data=soap.encode('utf-8'),
         headers={
-            'Content-Type': 'application/soap+xml; charset=utf-8',
-            'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NfeInutilizacao4/nfeInutilizacaoNF',
+            'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NfeInutilizacao4/nfeInutilizacaoNF"',
         },
-        cert=(cert_path_pem, key_path_pem),
+        cert=(cert_pem_path, key_pem_path),
         verify=_CA_BUNDLE,
         timeout=30,
     )
 
     resp_xml = resp.text
     stripped = resp_xml.strip()
-    if not stripped.startswith('<') or '403' in stripped[:300]:
+    if not stripped.startswith('<') or '403' in stripped[:300] or '<html' in stripped[:200].lower():
         return {'erro': f'Erro HTTP SEFAZ: {stripped[:120]}'}
 
-    root = etree.fromstring(resp_xml.encode('utf-8'))
+    try:
+        root = etree.fromstring(resp_xml.encode('utf-8'))
+    except etree.XMLSyntaxError as e:
+        return {'erro': f'XML inválido SEFAZ: {e}'}
+
+    # Check for SOAP Fault
+    SOAP_NS = 'http://www.w3.org/2003/05/soap-envelope'
+    fault = root.find(f'.//{{{SOAP_NS}}}Fault')
+    if fault is not None:
+        reason = root.find(f'.//{{{SOAP_NS}}}Text')
+        msg = reason.text if reason is not None else 'SOAP Fault'
+        return {'erro': f'SEFAZ SOAP Fault: {msg}'}
+
     def find(tag):
         el = root.find(f'.//{{{NS}}}{tag}')
         return el.text if el is not None else None

@@ -235,4 +235,68 @@ async function registrarWebhookPix(webhookUrl) {
   }));
 }
 
-module.exports = { emitirBolepix, consultarBoleto, cancelarBoleto, criarPixCobranca, cancelarPixCobranca, registrarWebhookPix, _getAccessToken: getAccessToken, _getAgent: getAgent };
+// ─── Agendamento de Pagamentos ────────────────────────────────────────────
+
+async function consultarDDA() {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/schedule_payments/query`, {
+    httpsAgent: getAgent(),
+    headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
+  }));
+  return res.data.items || [];
+}
+
+async function criarLote(items) {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/schedule_payments/decode`, { items }, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+  return res.data.group_id;
+}
+
+async function consultarLote(groupId) {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/schedule_payments/${groupId}/items`, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+  return res.data.items || [];
+}
+
+async function removerItemLote(groupId, itemId) {
+  const token = await getAccessToken();
+  await c6Request(() => axios.delete(`${BASE_URL}/v1/schedule_payments/${groupId}/items/${itemId}`, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+}
+
+async function submeterLote(groupId, uploaderName) {
+  const token = await getAccessToken();
+  await c6Request(() => axios.post(`${BASE_URL}/v1/schedule_payments/submit`, {
+    group_id: groupId,
+    uploader_name: uploaderName,
+  }, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+}
+
+async function consultarExtrato(startDate, endDate) {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/statement/`, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+    params: { start_date: startDate, end_date: endDate },
+  }));
+  return res.data.entries || [];
+}
+
+module.exports = {
+  emitirBolepix, consultarBoleto, cancelarBoleto,
+  criarPixCobranca, cancelarPixCobranca, registrarWebhookPix,
+  consultarDDA, criarLote, consultarLote, removerItemLote, submeterLote, consultarExtrato,
+  _getAccessToken: getAccessToken,
+  _getAgent: getAgent,
+};

@@ -1,15 +1,31 @@
--- sql/migrations/012_contas_pagar.sql
 BEGIN;
 
-CREATE TYPE tipo_despesa_enum AS ENUM (
-  'ALUGUEL', 'AGUA', 'TARIFA_BANCO', 'FRETE', 'COMBUSTIVEL',
-  'TELEFONIA_INTERNET', 'MATERIAL_LIMPEZA', 'MATERIAL_ESCRITORIO',
-  'DESPESA_VIAGEM', 'LUZ', 'IMPOSTOS', 'MANUTENCAO', 'COMISSOES',
-  'FORNECEDOR', 'SERVICO_TERCEIRIZADO', 'EMPRESTIMO_FINANCIAMENTO',
-  'CONTADOR_FOLHA_PAGAMENTO', 'OUTRAS_DESPESAS'
+DO $$ BEGIN
+  CREATE TYPE tipo_despesa_enum AS ENUM (
+    'ALUGUEL', 'AGUA', 'TARIFA_BANCO', 'FRETE', 'COMBUSTIVEL',
+    'TELEFONIA_INTERNET', 'MATERIAL_LIMPEZA', 'MATERIAL_ESCRITORIO',
+    'DESPESA_VIAGEM', 'LUZ', 'IMPOSTOS', 'MANUTENCAO', 'COMISSOES',
+    'FORNECEDOR', 'SERVICO_TERCEIRIZADO', 'EMPRESTIMO_FINANCIAMENTO',
+    'CONTADOR_FOLHA_PAGAMENTO', 'OUTRAS_DESPESAS'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS payment_batches (
+  id               SERIAL PRIMARY KEY,
+  c6_group_id      TEXT UNIQUE NOT NULL,
+  uploader_name    TEXT NOT NULL,
+  status           VARCHAR(20) NOT NULL DEFAULT 'decodificando'
+                     CHECK (status IN ('decodificando','pronto','submetido','aprovado','parcial','erro')),
+  valor_total      NUMERIC(10,2),
+  quantidade_itens INTEGER,
+  submetido_em     TIMESTAMP,
+  aprovado_em      TIMESTAMP,
+  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE contas_pagar (
+CREATE TABLE IF NOT EXISTS contas_pagar (
   id                     SERIAL PRIMARY KEY,
   descricao              TEXT NOT NULL,
   fornecedor             TEXT,
@@ -24,7 +40,7 @@ CREATE TABLE contas_pagar (
                            CHECK (tipo_entrada IN ('manual','dda','importacao_oc')),
   status                 VARCHAR(20) NOT NULL DEFAULT 'pendente'
                            CHECK (status IN ('pendente','agendado','pago','vencido','cancelado')),
-  c6_group_id            TEXT,
+  c6_group_id            TEXT REFERENCES payment_batches(c6_group_id) ON DELETE SET NULL,
   c6_item_id             TEXT,
   c6_status              TEXT,
   recorrente             BOOLEAN NOT NULL DEFAULT false,
@@ -36,25 +52,11 @@ CREATE TABLE contas_pagar (
   updated_at             TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_contas_pagar_status      ON contas_pagar(status);
-CREATE INDEX idx_contas_pagar_vencimento  ON contas_pagar(vencimento);
-CREATE INDEX idx_contas_pagar_tipo_desp   ON contas_pagar(tipo_despesa);
-CREATE INDEX idx_contas_pagar_c6_group    ON contas_pagar(c6_group_id);
-CREATE UNIQUE INDEX idx_contas_pagar_ld   ON contas_pagar(linha_digitavel)
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_status     ON contas_pagar(status);
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_vencimento ON contas_pagar(vencimento);
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_tipo_desp  ON contas_pagar(tipo_despesa);
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_c6_group   ON contas_pagar(c6_group_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contas_pagar_ld  ON contas_pagar(linha_digitavel)
   WHERE linha_digitavel IS NOT NULL AND status != 'cancelado';
-
-CREATE TABLE payment_batches (
-  id               SERIAL PRIMARY KEY,
-  c6_group_id      TEXT UNIQUE NOT NULL,
-  uploader_name    TEXT NOT NULL,
-  status           VARCHAR(20) NOT NULL DEFAULT 'decodificando'
-                     CHECK (status IN ('decodificando','pronto','submetido','aprovado','parcial','erro')),
-  valor_total      NUMERIC(10,2),
-  quantidade_itens INTEGER,
-  submetido_em     TIMESTAMP,
-  aprovado_em      TIMESTAMP,
-  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
-);
 
 COMMIT;

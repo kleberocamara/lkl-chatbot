@@ -143,10 +143,13 @@
 <!-- ABA 2: LOTE C6 -->
 <div id="tab-lote-c6" class="tab-content">
   <div class="steps">
-    <div class="step active" id="step-1">1. Selecionar</div>
-    <div class="step" id="step-2">2. Validar</div>
-    <div class="step" id="step-3">3. Revisar</div>
-    <div class="step" id="step-4">4. Submeter</div>
+    <div class="step active" id="step-1" title="Marque as contas que deseja pagar">1. Selecionar</div>
+    <div class="step" id="step-2" title="O C6 Bank verifica se os boletos/PIX são válidos">2. Validar no C6</div>
+    <div class="step" id="step-3" title="Revise e remova itens se necessário antes de confirmar">3. Revisar</div>
+    <div class="step" id="step-4" title="Envia para aprovação humana no web banking do C6 — sem essa aprovação nenhum pagamento sai">4. Aprovar no C6</div>
+  </div>
+  <div id="instrucao-lote" style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#0369a1; display:none;">
+    <span id="instrucao-texto"></span>
   </div>
 
   <div class="lote-layout">
@@ -186,7 +189,10 @@
           Montar Lote C6
         </button>
         <button class="btn btn-green" style="width:100%; margin-top:8px; display:none" id="btn-submeter-lote" onclick="submeterLote()">
-          ✅ Enviar para Aprovação no C6
+          ✅ Aprovar no C6 Bank
+        </button>
+        <button class="btn btn-secondary" style="width:100%; margin-top:8px; display:none; border-color:#dc2626; color:#dc2626;" id="btn-cancelar-lote" onclick="cancelarLote()">
+          ✕ Cancelar este Lote
         </button>
       </div>
 
@@ -605,8 +611,9 @@
     document.getElementById('lote-group-id').textContent = r.groupId;
     document.getElementById('lote-status').style.display = 'block';
     document.getElementById('btn-submeter-lote').style.display = 'block';
+    document.getElementById('btn-cancelar-lote').style.display = 'block';
     setStep(3);
-    showToast(`✅ Lote criado: ${r.quantidade} item(s). Revise e submeta.`);
+    showToast(`✅ Lote validado: ${r.quantidade} item(s). Revise e envie para aprovação.`);
     await carregarHistoricoLotes();
   }
 
@@ -615,8 +622,21 @@
     const uploaderName = document.getElementById('uploader-name').value.trim();
     if (!confirm('Enviar este lote para aprovação no C6 Bank? O pagamento só será realizado após aprovação manual no web banking.')) return;
     const r = await api('POST', `/contas-pagar/lote/${currentGroupId}/submeter`, { uploaderName });
-    if (r) { showToast('✅ Lote enviado para aprovação no C6 Bank'); setStep(4); await carregarHistoricoLotes(); }
+    if (r) {
+      document.getElementById('btn-submeter-lote').style.display = 'none';
+      document.getElementById('btn-cancelar-lote').style.display = 'none';
+      setStep(4);
+      showToast('✅ Lote enviado! Acesse o web banking do C6 Bank para aprovar os pagamentos.');
+      await carregarHistoricoLotes();
+    }
   }
+
+  const instrucoes = {
+    1: '',
+    2: '⏳ Aguarde — enviando boletos para validação no C6 Bank...',
+    3: '✅ Lote validado pelo C6 Bank. Revise os itens e clique em <strong>Aprovar no C6 Bank</strong> para enviar à fila de aprovação. Você também pode cancelar o lote se quiser recomeçar.',
+    4: '🏦 Lote enviado! Agora entre no <strong>web banking ou app do C6 Bank</strong> e aprove o lote de pagamentos. Apenas após a aprovação humana os pagamentos serão realizados.',
+  };
 
   function setStep(n) {
     for (let i = 1; i <= 4; i++) {
@@ -624,6 +644,33 @@
       s.classList.toggle('done', i < n);
       s.classList.toggle('active', i === n);
     }
+    const instr = document.getElementById('instrucao-lote');
+    const texto = instrucoes[n] || '';
+    if (texto) {
+      document.getElementById('instrucao-texto').innerHTML = texto;
+      instr.style.display = 'block';
+    } else {
+      instr.style.display = 'none';
+    }
+  }
+
+  async function cancelarLote() {
+    if (!currentGroupId) return;
+    if (!confirm('Cancelar este lote? As contas voltarão para status pendente e você poderá criar um novo lote.')) return;
+    const items = await api('GET', `/contas-pagar/lote/${currentGroupId}`);
+    if (!items) return;
+    showToast('⏳ Removendo itens do lote...');
+    for (const item of (items.items || [])) {
+      await api('DELETE', `/contas-pagar/lote/${currentGroupId}/item/${item.id}`);
+    }
+    currentGroupId = null;
+    document.getElementById('lote-status').style.display = 'none';
+    document.getElementById('btn-submeter-lote').style.display = 'none';
+    document.getElementById('btn-cancelar-lote').style.display = 'none';
+    document.getElementById('btn-montar-lote').disabled = false;
+    setStep(1);
+    showToast('✅ Lote cancelado. Contas voltaram para pendente.');
+    await carregarLote();
   }
 
   async function carregarHistoricoLotes() {

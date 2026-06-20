@@ -211,7 +211,17 @@ async function criarLoteC6(ids, uploaderName) {
        VALUES ($1,$2,$3,$4)`,
       [groupId, uploaderName, contas.reduce((s, c) => s + parseFloat(c.valor), 0), contas.length]
     );
-    const loteItems = await c6bank.consultarLote(groupId);
+    // C6 pode demorar alguns segundos para processar os itens após criar o lote
+    let loteItems = [];
+    for (let tentativa = 1; tentativa <= 5; tentativa++) {
+      try {
+        loteItems = await c6bank.consultarLote(groupId);
+        break;
+      } catch (e) {
+        if (tentativa === 5 || !e.message.includes('422')) throw e;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
     for (const item of loteItems) {
       const conta = contas.find(c => `CP-${c.id}` === (item.description || '').split(' ')[0]);
       if (conta) {
@@ -252,6 +262,8 @@ async function removerItemLoteC6(groupId, itemId) {
 }
 
 async function submeterLoteC6(groupId, uploaderName) {
+  const existing = await query('SELECT status FROM payment_batches WHERE c6_group_id=$1', [groupId]);
+  if (existing.rows[0]?.status === 'submetido') return { submetido: true };
   await c6bank.submeterLote(groupId, uploaderName || 'Admin LKL');
   await query(
     `UPDATE payment_batches SET status='submetido', submetido_em=NOW(), updated_at=NOW() WHERE c6_group_id=$1`,

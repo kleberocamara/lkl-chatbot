@@ -177,7 +177,7 @@ async function sincronizarDDA() {
         ]
       );
       importados++;
-    } catch (_) { ignorados++; }
+    } catch (err) { console.error('[CONTAS-PAGAR] sincronizarDDA erro ao inserir boleto:', err.message); ignorados++; }
   }
   return { total: boletos.length, importados, ignorados };
 }
@@ -224,6 +224,7 @@ async function criarLoteC6(ids, uploaderName) {
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error(`[CONTAS-PAGAR] ATENÇÃO: lote C6 ${groupId} criado no banco mas registro local falhou. Grupo precisa ser cancelado manualmente.`, err.message);
     throw err;
   } finally {
     client.release();
@@ -275,10 +276,11 @@ async function reconciliar() {
     const match = (e.description || e.title || '').match(/CP-(\d+)/);
     if (!match) continue;
     const contaId = parseInt(match[1]);
+    const pagoEm = e.entry_date || e.transaction_date || e.date || null;
     const r = await query(
-      `UPDATE contas_pagar SET status='pago', pago_em=NOW(), c6_status='PROCESSED', updated_at=NOW()
+      `UPDATE contas_pagar SET status='pago', pago_em=COALESCE($2::timestamp, NOW()), c6_status='PROCESSED', updated_at=NOW()
        WHERE id=$1 AND status NOT IN ('pago','cancelado') RETURNING id`,
-      [contaId]
+      [contaId, pagoEm]
     );
     if (r.rowCount) atualizadas++;
   }
@@ -319,8 +321,9 @@ async function atualizarStatusLotesSubmetidos() {
       else if (processados > 0) novoStatus = 'parcial';
       else if (erros === todos) novoStatus = 'erro';
 
+      const extraCol = novoStatus === 'aprovado' ? ', aprovado_em=NOW()' : '';
       await query(
-        `UPDATE payment_batches SET status=$1, ${novoStatus === 'aprovado' ? 'aprovado_em=NOW(),' : ''} updated_at=NOW() WHERE c6_group_id=$2`,
+        `UPDATE payment_batches SET status=$1${extraCol}, updated_at=NOW() WHERE c6_group_id=$2`,
         [novoStatus, batch.c6_group_id]
       );
 
@@ -334,7 +337,7 @@ async function atualizarStatusLotesSubmetidos() {
           aprovados++;
         }
       }
-    } catch (_) { /* continua para próximo lote */ }
+    } catch (err) { console.error(`[CONTAS-PAGAR] check_batch_status erro no lote ${batch.c6_group_id}:`, err.message); }
   }
   return { aprovados };
 }

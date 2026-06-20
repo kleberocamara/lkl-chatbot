@@ -34,12 +34,17 @@ app.use('/api', apiRoutes);
 app.use('/api/v2', rateLimit({ windowMs: 60000, max: 200 }));
 app.use('/api/v2', modulesRouter);
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role });
+    const pool = require('./db/index');
+    const { rows } = await pool.query(
+      'SELECT matricula, setor FROM users WHERE id=$1', [decoded.id]
+    );
+    const extra = rows[0] || {};
+    res.json({ id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role, matricula: extra.matricula, setor: extra.setor });
   } catch {
     res.status(401).json({ error: 'Token inválido' });
   }

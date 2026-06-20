@@ -176,12 +176,58 @@
   }
   .toast.show { transform: translateY(0); opacity: 1; }
 
+  /* Nav groups */
+  .nav-section-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: rgba(255,255,255,.4);
+    cursor: pointer; user-select: none;
+    border-top: 1px solid rgba(255,255,255,.07);
+    margin-top: 4px;
+  }
+  .nav-section-header:first-child { border-top: none; margin-top: 0; }
+  .nav-section-header .chevron { margin-left: auto; font-size: 10px; transition: transform .2s; }
+  .nav-section-header.collapsed .chevron { transform: rotate(-90deg); }
+  .nav-children { overflow: hidden; transition: max-height .25s ease; }
+  .nav-children.collapsed { max-height: 0 !important; }
+  .nav-child {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 20px 9px 36px; cursor: pointer;
+    font-size: 13px; font-weight: 500;
+    transition: background .15s;
+    border-left: 3px solid transparent;
+    color: rgba(255,255,255,.7); text-decoration: none;
+  }
+  .nav-child:hover, .nav-child.active { background: rgba(255,255,255,.1); border-left-color: var(--accent); color: white; }
+
+  /* Role badge */
+  .role-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    background: rgba(255,214,0,.2); color: var(--accent);
+  }
+  .sidebar-matricula { font-size: 11px; opacity: .5; margin-top: 2px; }
+
+  /* Placeholder page */
+  .placeholder-page { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:300px; color:var(--muted); gap:12px; }
+  .placeholder-page .icon { font-size:56px; }
+  .placeholder-page p { font-size:14px; }
+
+  /* Table base */
+  .data-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .data-table th { background:#f5f7ff; padding:10px 12px; text-align:left; font-weight:600; color:var(--primary); border-bottom:2px solid var(--border); white-space:nowrap; }
+  .data-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .data-table tr:hover td { background:#fafbff; }
+
   /* Responsivo */
   @media (max-width: 768px) {
     .sidebar { width: 60px; }
-    .sidebar .nav-label, .sidebar-logo span, .sidebar-user { display: none; }
+    .sidebar .nav-label, .sidebar .nav-section-header span:first-child,
+    .sidebar .nav-section-header .chevron, .sidebar-logo span, .sidebar-user { display: none; }
     .main { margin-left: 60px; }
     .chat-layout { grid-template-columns: 1fr; }
+    .nav-child { padding-left: 18px; }
   }
 </style>
 </head>
@@ -192,31 +238,12 @@
     <img src="/logo.png" alt="LKL Gráfica">
     <span>Painel de Atendimento</span>
   </div>
-  <nav>
-    <a class="nav-item active" onclick="showPage('dashboard', this)" href="#">
-      <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
-    </a>
-    <a class="nav-item" onclick="showPage('conversations', this)" href="#">
-      <span class="nav-icon">💬</span><span class="nav-label">Conversas</span>
-      <span class="badge-waiting" id="waitingBadge" style="display:none">0</span>
-    </a>
-    <a class="nav-item" onclick="showPage('orders', this)" href="#">
-      <span class="nav-icon">📋</span><span class="nav-label">Pedidos</span>
-    </a>
-    <a class="nav-item admin-only" onclick="showPage('prices', this)" href="#">
-      <span class="nav-icon">🏷️</span><span class="nav-label">Preços</span>
-    </a>
-    <a class="nav-item admin-only" onclick="showPage('settings', this)" href="#">
-      <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
-    </a>
-    <a class="nav-item admin-only" onclick="showPage('users', this)" href="#">
-      <span class="nav-icon">👥</span><span class="nav-label">Usuários</span>
-    </a>
-  </nav>
+  <nav id="sidebar-nav"></nav>
   <div class="sidebar-user">
     <strong id="userName">—</strong>
-    <span id="userRole" style="opacity:.6;font-size:11px"></span><br>
-    <a href="#" onclick="logout()" style="color:rgba(255,255,255,.6);font-size:12px">Sair</a>
+    <div style="margin-top:4px"><span class="role-badge" id="userRoleBadge">—</span></div>
+    <div class="sidebar-matricula" id="userMatricula"></div>
+    <a href="#" onclick="logout()" style="color:rgba(255,255,255,.6);font-size:12px;display:inline-block;margin-top:6px">Sair</a>
   </div>
 </nav>
 
@@ -433,6 +460,157 @@
     </div>
   </div>
 
+  <!-- ORÇAMENTOS -->
+  <div class="page" id="page-orcamentos">
+    <div class="page-header"><h1>📋 Orçamentos</h1><p>Gerencie orçamentos e aprovações</p></div>
+    <div id="orc-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+  </div>
+
+  <!-- ORDENS DE SERVIÇO -->
+  <div class="page" id="page-os">
+    <div class="page-header">
+      <h1>📝 Ordens de Serviço</h1>
+      <p>Acompanhe o ciclo completo de produção de cada OS</p>
+    </div>
+    <div id="os-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+  </div>
+
+  <!-- ARTE FINAL -->
+  <div class="page" id="page-arte_final">
+    <div class="page-header"><h1>🎨 Arte Final</h1><p>Aprovação e envio de artes ao cliente</p></div>
+    <div id="arte-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+  </div>
+
+  <!-- PRODUÇÃO (mobile) -->
+  <div class="page" id="page-producao">
+    <div class="placeholder-page">
+      <div class="icon">🏭</div>
+      <p>Módulo de Produção disponível via tablet</p>
+      <a href="/pwa/producao.html" target="_blank" class="btn btn-primary" style="margin-top:8px">Abrir versão mobile</a>
+    </div>
+  </div>
+
+  <!-- ENTREGAS (mobile) -->
+  <div class="page" id="page-entregas">
+    <div class="placeholder-page">
+      <div class="icon">🚚</div>
+      <p>Módulo de Entregas disponível no app do motorista</p>
+      <a href="/pwa/motorista.html" target="_blank" class="btn btn-primary" style="margin-top:8px">Abrir versão mobile</a>
+    </div>
+  </div>
+
+  <!-- CONTAS A PAGAR -->
+  <div class="page" id="page-contas_pagar">
+    <div class="page-header"><h1>📤 Contas a Pagar</h1><p>Gestão de pagamentos e lotes C6 Bank</p></div>
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="showSubPage('cp-lista')">📋 Lista</button>
+      <button class="btn btn-outline" id="btn-cp-lote" onclick="showSubPage('cp-lote')">💳 Lote C6</button>
+      <button class="btn btn-outline" id="btn-cp-historico" onclick="showSubPage('cp-historico')">🕓 Histórico</button>
+    </div>
+    <div id="cp-lista"><div style="text-align:center;padding:40px;color:#999">Carregando contas...</div></div>
+    <div id="cp-lote" style="display:none"></div>
+    <div id="cp-historico" style="display:none"></div>
+  </div>
+
+  <!-- COBRANÇAS / BOLETOS / PIX -->
+  <div class="page" id="page-cobrancas">
+    <div class="page-header"><h1>💳 Cobranças / Boletos / PIX</h1><p>Gerencie cobranças emitidas pelo sistema</p></div>
+    <div class="placeholder-page" style="min-height:200px">
+      <div class="icon">🚧</div>
+      <p>Em desenvolvimento — Sprint M10-B</p>
+    </div>
+  </div>
+
+  <!-- ANÁLISES GERENCIAIS -->
+  <div class="page" id="page-analises">
+    <div class="page-header"><h1>📈 Análises Gerenciais</h1><p>DRE · Fluxo de Caixa · Metas · Insights IA</p></div>
+    <div class="placeholder-page" style="min-height:200px">
+      <div class="icon">🚧</div>
+      <p>Em desenvolvimento — Sprint M10-B</p>
+    </div>
+  </div>
+
+  <!-- NF-e -->
+  <div class="page" id="page-nfe">
+    <div class="page-header"><h1>📄 NF-e</h1><p>Emissão e gestão de Notas Fiscais Eletrônicas</p></div>
+    <div class="placeholder-page" style="min-height:200px">
+      <div class="icon">🚧</div>
+      <p>Em integração ao painel unificado — disponível via Admin</p>
+      <a href="/pwa/admin.html" target="_blank" class="btn btn-outline" style="margin-top:8px">Abrir Admin</a>
+    </div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="page" id="page-clientes">
+    <div class="page-header">
+      <h1>👥 Clientes</h1>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" id="busca-clientes-main" placeholder="Buscar por nome, CPF/CNPJ ou celular..."
+          oninput="debouncedLoadClientes()"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="abrirModalClienteMain()">+ Novo</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <div id="list-clientes-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- FORNECEDORES -->
+  <div class="page" id="page-fornecedores">
+    <div class="page-header">
+      <h1>🏢 Fornecedores</h1>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" id="busca-forn-main" placeholder="Buscar por nome ou CNPJ..."
+          oninput="debouncedLoadFornecedores()"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="abrirModalFornecedorMain()">+ Novo</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <div id="list-forn-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- USUÁRIOS (expandido) -->
+  <div class="page" id="page-usuarios">
+    <div class="page-header">
+      <h1>👤 Usuários</h1>
+      <p>Gerencie acessos, perfis e matrículas</p>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <h3 style="margin-bottom:14px">➕ Novo Usuário</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nome</label>
+          <input id="nu2-name" type="text" placeholder="Nome completo" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">E-mail</label>
+          <input id="nu2-email" type="email" placeholder="email@lkl.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Senha</label>
+          <input id="nu2-password" type="password" placeholder="Senha inicial" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Perfil</label>
+          <select id="nu2-role" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+            <option value="atendente">Atendente</option>
+            <option value="analista">Analista</option>
+            <option value="operador">Operador</option>
+            <option value="financeiro">Financeiro</option>
+            <option value="gestor">Gestor</option>
+            <option value="admin">Admin</option>
+          </select></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Setor</label>
+          <input id="nu2-setor" type="text" placeholder="Ex: Produção" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:14px" onclick="criarUsuario2()">Criar Usuário</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>
+          <th>Matrícula</th><th>Nome</th><th>E-mail</th>
+          <th>Perfil</th><th>Setor</th><th>Status</th><th>Último Login</th><th>Ações</th>
+        </tr></thead>
+        <tbody id="users2-body"><tr><td colspan="8" style="text-align:center;padding:32px;color:#aaa">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 
 </main>
 
@@ -445,20 +623,101 @@ let currentFilter = 'all';
 let currentConvId = null;
 const socket = io();
 
+// ── ROLE LABELS ───────────────────────────────────────────────────────────────
+const ROLE_LABELS = {
+  admin: 'Admin', gestor: 'Gestor', financeiro: 'Financeiro',
+  atendente: 'Atendente', analista: 'Analista', operador: 'Operador',
+  motorista: 'Motorista', analyst: 'Analista'
+};
+
+// ── BUILD SIDEBAR ─────────────────────────────────────────────────────────────
+function buildSidebar(role) {
+  const NAV = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊',
+      roles: ['admin','gestor','financeiro','atendente','analista','operador'] },
+    { section: 'Atendimento', roles: ['admin','gestor','atendente'], children: [
+      { id: 'conversations', label: 'Conversas',  icon: '💬', roles: ['admin','gestor','atendente'], badge: 'waitingBadge' },
+      { id: 'orcamentos',    label: 'Orçamentos', icon: '📋', roles: ['admin','gestor','atendente'] },
+      { id: 'orders',        label: 'Pedidos',    icon: '🛒', roles: ['admin','gestor','atendente'] },
+    ]},
+    { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
+      { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },
+      { id: 'arte_final', label: 'Arte Final',           icon: '🎨', roles: ['admin','gestor','analista'] },
+      { id: 'producao',   label: 'Produção',             icon: '🏭', roles: ['admin','gestor','analista','operador'] },
+      { id: 'entregas',   label: 'Motorista / Entregas', icon: '🚚', roles: ['admin','gestor','analista','operador'] },
+    ]},
+    { section: 'Financeiro', roles: ['admin','gestor','financeiro','atendente'], children: [
+      { id: 'contas_pagar', label: 'Contas a Pagar',        icon: '📤', roles: ['admin','gestor','financeiro','atendente'] },
+      { id: 'cobrancas',   label: 'Cobranças / Boletos / PIX', icon: '💳', roles: ['admin','gestor','financeiro'] },
+      { id: 'analises',    label: 'Análises Gerenciais',    icon: '📈', roles: ['admin','gestor','financeiro'] },
+    ]},
+    { section: 'Fiscal', roles: ['admin','gestor','financeiro'], children: [
+      { id: 'nfe', label: 'NF-e', icon: '📄', roles: ['admin','gestor','financeiro'] },
+    ]},
+    { section: 'Cadastros', roles: ['admin','gestor','analista','atendente'], children: [
+      { id: 'clientes',     label: 'Clientes',     icon: '👥', roles: ['admin','gestor','analista','atendente'] },
+      { id: 'fornecedores', label: 'Fornecedores', icon: '🏢', roles: ['admin','gestor','analista','atendente'] },
+      { id: 'usuarios',     label: 'Usuários',     icon: '👤', roles: ['admin','gestor','analista','atendente'] },
+    ]},
+    { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
+    { id: 'settings',  label: 'Configurações', icon: '⚙️', roles: ['admin'] },
+  ];
+
+  const nav = document.getElementById('sidebar-nav');
+  let html = '';
+
+  for (const item of NAV) {
+    if (!item.roles.includes(role)) continue;
+
+    if (item.section) {
+      const children = item.children.filter(c => c.roles.includes(role));
+      if (!children.length) continue;
+      const secId = 'sec-' + item.section.toLowerCase().replace(/\s/g,'-');
+      html += `<div class="nav-section-header" onclick="toggleSection('${secId}')">
+        <span>${item.section}</span><span class="chevron">▾</span></div>
+        <div class="nav-children" id="${secId}">`;
+      for (const c of children) {
+        const badgeHtml = c.badge
+          ? `<span class="badge-waiting" id="${c.badge}" style="display:none">0</span>` : '';
+        html += `<a class="nav-child" data-page="${c.id}" onclick="showPage('${c.id}',this)" href="#">
+          <span>${c.icon}</span><span class="nav-label">${c.label}</span>${badgeHtml}</a>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<a class="nav-item ${item.id==='dashboard'?'active':''}" data-page="${item.id}"
+        onclick="showPage('${item.id}',this)" href="#">
+        <span class="nav-icon">${item.icon}</span>
+        <span class="nav-label">${item.label}</span></a>`;
+    }
+  }
+  nav.innerHTML = html;
+
+  // Set max-height for open sections
+  document.querySelectorAll('.nav-children').forEach(el => {
+    el.style.maxHeight = el.scrollHeight + 'px';
+  });
+}
+
+function toggleSection(secId) {
+  const el = document.getElementById(secId);
+  const header = el.previousElementSibling;
+  const isOpen = !el.classList.contains('collapsed');
+  el.style.maxHeight = isOpen ? '0' : el.scrollHeight + 'px';
+  el.classList.toggle('collapsed', isOpen);
+  header.classList.toggle('collapsed', isOpen);
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const res = await fetch('/api/auth/login', { method: 'HEAD' }).catch(() => null);
-  // Pega usuário do token via endpoint simples
   const me = await api('/api/me');
   if (!me || me.error) return (window.location.href = '/login');
 
   currentUser = me;
   document.getElementById('userName').textContent = me.name;
-  document.getElementById('userRole').textContent = me.role === 'admin' ? 'Administrador' : 'Analista';
+  document.getElementById('userRoleBadge').textContent = ROLE_LABELS[me.role] || me.role;
+  if (me.matricula) document.getElementById('userMatricula').textContent = me.matricula;
 
-  if (me.role !== 'admin') {
-    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-  }
+  buildSidebar(me.role);
 
   loadDashboard();
   setInterval(loadDashboard, 30000);
@@ -508,19 +767,237 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3500);
 }
 
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+const debouncedLoadClientes     = debounce(() => loadClientesMain(), 400);
+const debouncedLoadFornecedores = debounce(() => loadFornecedoresMain(), 400);
+
+function showSubPage(id) {
+  ['cp-lista','cp-lote','cp-historico'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? '' : 'none';
+  });
+  if (id === 'cp-lista')     loadContasPagar();
+  if (id === 'cp-historico') loadHistoricoLotes();
+}
+
 function showPage(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item, .nav-child').forEach(n => n.classList.remove('active'));
+  const pageEl = document.getElementById('page-' + page);
+  if (!pageEl) return;
+  pageEl.classList.add('active');
   if (el) el.classList.add('active');
 
-  if (page === 'conversations') loadConversations();
-  if (page === 'settings') loadSettings();
-  if (page === 'users') loadUsers();
-  if (page === 'orders') loadOrders();
-  if (page === 'orcamentos') loadOrcamentos();
-  if (page === 'prices') loadPrices();
-  if (page === 'dashboard') loadDashboard();
+  const loaders = {
+    dashboard:    loadDashboard,
+    conversations:loadConversations,
+    settings:     loadSettings,
+    users:        loadUsers,
+    orders:       loadOrders,
+    orcamentos:   loadOrcamentosMain,
+    prices:       loadPrices,
+    os:           loadOsMain,
+    arte_final:   loadArteFinalMain,
+    contas_pagar: () => { showSubPage('cp-lista'); },
+    clientes:     loadClientesMain,
+    fornecedores: loadFornecedoresMain,
+    usuarios:     loadUsuarios2,
+  };
+  if (loaders[page]) loaders[page]();
+}
+
+// ── ORÇAMENTOS (na nova página) ────────────────────────────────────────────────
+async function loadOrcamentosMain() {
+  const list = document.getElementById('orc-list-main');
+  const res = await api('/api/v2/orcamentos?limit=50');
+  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const data = res.data || res;
+  if (!data.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum orçamento</p>'; return; }
+  const statusBadge = s => ({ rascunho:'#fff9c4|#f57f17', enviado:'#e3f2fd|#0277bd', aprovado:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', pendente_aprovacao:'#fff3e0|#e65100' }[s] || '#f5f5f5|#555');
+  list.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>#</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Pagamento</th><th>Data</th></tr></thead>
+    <tbody>${data.map(o => {
+      const [bg,col] = statusBadge(o.status).split('|');
+      const val = o.total ? `R$ ${parseFloat(o.total).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
+      const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
+      return `<tr>
+        <td style="font-weight:600">#${o.numero||'—'}</td>
+        <td>${o.cliente_nome||'—'}</td>
+        <td style="font-weight:600">${val}</td>
+        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${o.status||'—'}</span></td>
+        <td style="font-size:12px">${o.status_pagamento||'—'}</td>
+        <td style="font-size:12px;color:#888">${dt}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+// ── OS (na nova página) ────────────────────────────────────────────────────────
+async function loadOsMain() {
+  const list = document.getElementById('os-list-main');
+  const res = await api('/api/v2/os?limit=100');
+  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const rows = res.data || res;
+  if (!rows.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhuma OS</p>'; return; }
+  const statusColors = { arte_final:'#e8eaf6|#3949ab', impressao:'#e3f2fd|#0277bd', acabamento:'#fff3e0|#e65100', embalagem:'#f3e5f5|#6a1b9a', pronto:'#e8f5e9|#2e7d32', entregue:'#1a237e|#fff', cancelado:'#fce4ec|#c62828' };
+  list.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>OS</th><th>Cliente</th><th>Descrição</th><th>Status</th><th>Criado em</th></tr></thead>
+    <tbody>${rows.map(o => {
+      const [bg,col] = (statusColors[o.status]||'#f5f5f5|#555').split('|');
+      const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
+      return `<tr>
+        <td style="font-weight:600;font-family:monospace">${o.numero_os||o.id.substring(0,8)}</td>
+        <td>${o.cliente_nome||'—'}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.item_descricao||'—'}</td>
+        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${o.status||'—'}</span></td>
+        <td style="font-size:12px;color:#888">${dt}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+// ── ARTE FINAL ─────────────────────────────────────────────────────────────────
+async function loadArteFinalMain() {
+  const list = document.getElementById('arte-list-main');
+  const res = await api('/api/v2/os?status=arte_final&limit=50');
+  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const rows = res.data || res;
+  if (!rows.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px"><span style="color:#2e7d32">✅ Nenhuma arte pendente</span></p>'; return; }
+  list.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>OS</th><th>Cliente</th><th>Descrição</th><th>Responsável</th><th>Ações</th></tr></thead>
+    <tbody>${rows.map(o => `<tr>
+      <td style="font-weight:600;font-family:monospace">${o.numero_os||o.id.substring(0,8)}</td>
+      <td>${o.cliente_nome||'—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.item_descricao||'—'}</td>
+      <td style="font-size:12px;color:#888">${o.responsavel_nome||'—'}</td>
+      <td><a href="/pwa/arte_final.html" target="_blank" class="btn btn-outline" style="font-size:12px;padding:4px 10px">Gerenciar</a></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+// ── CONTAS A PAGAR ─────────────────────────────────────────────────────────────
+async function loadContasPagar() {
+  const el = document.getElementById('cp-lista');
+  const data = await api('/api/v2/contas-pagar?limit=50');
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhuma conta a pagar</p>'; return; }
+  const fmt = v => v ? `R$ ${parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
+  const statusBg = { pendente:'#fff9c4|#f57f17', pago:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', vencido:'#fce4ec|#c62828' };
+  el.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Valor</th><th>Status</th></tr></thead>
+    <tbody>${data.map(c => {
+      const [bg,col] = (statusBg[c.status]||'#f5f5f5|#555').split('|');
+      const dt = c.data_vencimento ? new Date(c.data_vencimento).toLocaleDateString('pt-BR') : '—';
+      return `<tr>
+        <td style="font-weight:600">${dt}</td>
+        <td>${c.descricao||'—'}</td>
+        <td style="color:#888;font-size:12px">${c.fornecedor_nome||'—'}</td>
+        <td style="font-weight:600">${fmt(c.valor)}</td>
+        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${c.status}</span></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+async function loadHistoricoLotes() {
+  const el = document.getElementById('cp-historico');
+  const data = await api('/api/v2/contas-pagar/lotes');
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum lote</p>'; return; }
+  const fmt = v => `R$ ${parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+  el.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>Group ID</th><th>Responsável</th><th>Itens</th><th>Valor</th><th>Status</th><th>Submetido em</th></tr></thead>
+    <tbody>${data.map(b => `<tr>
+      <td style="font-family:monospace;font-size:11px">${b.c6_group_id.substring(0,20)}…</td>
+      <td>${b.uploader_name||'—'}</td>
+      <td style="text-align:center">${b.quantidade_itens}</td>
+      <td style="font-weight:600">${fmt(b.valor_total)}</td>
+      <td><span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${b.status}</span></td>
+      <td style="font-size:12px;color:#888">${b.submetido_em ? new Date(b.submetido_em).toLocaleString('pt-BR') : '—'}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+// ── CLIENTES ───────────────────────────────────────────────────────────────────
+async function loadClientesMain() {
+  const el = document.getElementById('list-clientes-main');
+  const q = document.getElementById('busca-clientes-main')?.value || '';
+  const data = await api(`/api/v2/clientes?q=${encodeURIComponent(q)}&limit=50`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro</p>'; return; }
+  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum cliente</p>'; return; }
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>CPF/CNPJ</th><th>Celular</th><th>E-mail</th><th>Cidade</th><th>Status</th></tr></thead>
+    <tbody>${data.map(c => `<tr>
+      <td style="font-weight:600">${c.nome||'—'}</td>
+      <td style="font-family:monospace;font-size:12px">${c.cpf_cnpj||'—'}</td>
+      <td>${c.celular||c.telefone||'—'}</td>
+      <td style="font-size:12px">${c.email||'—'}</td>
+      <td>${c.cidade||'—'}</td>
+      <td><span style="background:${c.status==='ativo'?'#e8f5e9':'#fce4ec'};color:${c.status==='ativo'?'#2e7d32':'#c62828'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${c.status||'—'}</span></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function abrirModalClienteMain() { showToast('Use a seção Cadastros no Admin para criar clientes'); }
+
+// ── FORNECEDORES ───────────────────────────────────────────────────────────────
+async function loadFornecedoresMain() {
+  const el = document.getElementById('list-forn-main');
+  const q = document.getElementById('busca-forn-main')?.value || '';
+  const data = await api(`/api/v2/fornecedores?q=${encodeURIComponent(q)}&limit=50`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro</p>'; return; }
+  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum fornecedor</p>'; return; }
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>CNPJ</th><th>Contato</th><th>Cidade</th><th>Status</th></tr></thead>
+    <tbody>${data.map(f => `<tr>
+      <td style="font-weight:600">${f.nome||'—'}</td>
+      <td style="font-family:monospace;font-size:12px">${f.cnpj||'—'}</td>
+      <td>${f.contato||'—'}</td>
+      <td>${f.cidade||'—'}</td>
+      <td><span style="background:${f.status==='ativo'?'#e8f5e9':'#fce4ec'};color:${f.status==='ativo'?'#2e7d32':'#c62828'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${f.status||'—'}</span></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function abrirModalFornecedorMain() { showToast('Use a seção Cadastros no Admin para criar fornecedores'); }
+
+// ── USUÁRIOS (novo) ────────────────────────────────────────────────────────────
+async function loadUsuarios2() {
+  const el = document.getElementById('users2-body');
+  const data = await api('/api/v2/users');
+  if (!data || data.error) { el.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#aaa">Erro ao carregar</td></tr>'; return; }
+  const fmt = dt => dt ? new Date(dt).toLocaleDateString('pt-BR') : '—';
+  el.innerHTML = data.map(u => `<tr>
+    <td style="font-family:monospace;font-size:12px;font-weight:600">${u.matricula||'—'}</td>
+    <td style="font-weight:600">${u.name}</td>
+    <td style="font-size:12px">${u.email}</td>
+    <td><span class="role-badge" style="background:rgba(26,35,126,.1);color:#1a237e">${ROLE_LABELS[u.role]||u.role}</span></td>
+    <td style="font-size:12px">${u.setor||'—'}</td>
+    <td><span style="background:${u.active?'#e8f5e9':'#f5f5f5'};color:${u.active?'#2e7d32':'#888'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${u.active?'Ativo':'Inativo'}</span></td>
+    <td style="font-size:12px;color:#888">${fmt(u.last_login)}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      ${u.active?`<button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="toggleUserActive('${u.id}',false)">Desativar</button>`
+                :`<button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="toggleUserActive('${u.id}',true)">Ativar</button>`}
+      <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="openEditUser2('${u.id}','${escHtml(u.name)}','${escHtml(u.email)}','${u.role}','${u.setor||''}')">✏️</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function criarUsuario2() {
+  const body = {
+    name:     document.getElementById('nu2-name').value,
+    email:    document.getElementById('nu2-email').value,
+    password: document.getElementById('nu2-password').value,
+    role:     document.getElementById('nu2-role').value,
+    setor:    document.getElementById('nu2-setor').value,
+  };
+  if (!body.name||!body.email||!body.password) return showToast('Preencha nome, email e senha');
+  const r = await api('/api/v2/users', { method:'POST', body: JSON.stringify(body) });
+  if (r?.error) return showToast('Erro: ' + r.error);
+  showToast('✅ Usuário criado — Matrícula: ' + (r.matricula||'gerada'));
+  ['nu2-name','nu2-email','nu2-password','nu2-setor'].forEach(id => document.getElementById(id).value='');
+  loadUsuarios2();
+}
+
+async function toggleUserActive(id, active) {
+  await api(`/api/v2/users/${id}`, { method:'PATCH', body: JSON.stringify({ active }) });
+  loadUsuarios2();
+}
+
+function openEditUser2(id, name, email, role, setor) {
+  openEditUser(id, name, email, role); // reusa o modal existente
 }
 
 async function logout() {
@@ -587,13 +1064,13 @@ function renderConversations(list) {
       </div>
       <div class="conv-meta">
         <div class="conv-time">${timeAgo(c.last_message_at || c.started_at)}</div>
-        <span class="status-badge status-${c.status}">${statusLabel(c.status)}</span>
+        <span class="status-badge status-${c.status}">${convStatusLabel(c.status)}</span>
       </div>
     </li>
   `).join('') || '<li style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Nenhuma conversa encontrada</li>';
 }
 
-function statusLabel(s) {
+function convStatusLabel(s) {
   return {
     active: 'Ativa',
     aguardando_humano: 'Aguardando',
@@ -640,7 +1117,7 @@ async function loadMessages(id) {
       <div class="conv-avatar" style="width:36px;height:36px;font-size:15px">${(c.name || c.profile_name || c.phone)[0].toUpperCase()}</div>
       <div class="info">
         <h4>${c.name || c.profile_name || c.phone}</h4>
-        <p>${c.phone} · <span class="status-badge status-${c.status}">${statusLabel(c.status)}</span></p>
+        <p>${c.phone} · <span class="status-badge status-${c.status}">${convStatusLabel(c.status)}</span></p>
       </div>
       <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
         ${(c.pedido_status === 'orcamento_enviado' || c.status === 'orcamento_enviado') ? `

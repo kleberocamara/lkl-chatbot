@@ -18,5 +18,6 @@ router.use('/orcamentos', requireAuthApi, require('./orcamentos/router'));
 router.use('/os', requireAuthApi, require('./os/router'));
 router.use('/nfe', requireAuthApi, require('./nfe/router'));
 router.use('/contas-pagar', requireAuthApi, require('./contas-pagar/router'));
+router.use('/users', requireAuthApi, require('./users/router'));
 
 module.exports = router;

@@ -36,7 +36,9 @@
   .sidebar-logo { padding: 16px 20px 12px; display: flex; flex-direction: column; align-items: center; }
   .sidebar-logo img { width: 80px; height: 80px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); }
   .sidebar-logo span { font-size: 11px; opacity: .6; margin-top: 6px; text-align: center; }
-  .sidebar nav { flex: 1; padding: 8px 0; }
+  .sidebar nav { flex: 1; padding: 8px 0; overflow-y: auto; min-height: 0; }
+  .sidebar nav::-webkit-scrollbar { width: 4px; }
+  .sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 2px; }
   .nav-item {
     display: flex; align-items: center; gap: 10px;
     padding: 12px 20px; cursor: pointer;
@@ -401,6 +403,12 @@
         <button class="btn btn-outline" onclick="copyShareLink()">🔗 Compartilhar</button>
       </div>
     </div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <input type="text" id="orders-search" placeholder="🔍 Buscar por #pedido, nome ou telefone..."
+        oninput="filtrarPedidos()"
+        style="flex:1;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;max-width:400px">
+      <span id="orders-count" style="font-size:12px;color:#999"></span>
+    </div>
     <div class="card" style="padding:0;overflow:auto">
       <table id="ordersTable" style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
@@ -462,7 +470,15 @@
 
   <!-- ORÇAMENTOS -->
   <div class="page" id="page-orcamentos">
-    <div class="page-header"><h1>📋 Orçamentos</h1><p>Gerencie orçamentos e aprovações</p></div>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div><h1>📋 Orçamentos</h1><p>Gerencie orçamentos e aprovações</p></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="orc-search" placeholder="🔍 Buscar por #, cliente ou status..."
+          oninput="filtrarOrcamentos()"
+          style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:280px">
+        <button class="btn btn-outline" onclick="loadOrcamentosMain()">🔄</button>
+      </div>
+    </div>
     <div id="orc-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
   </div>
 
@@ -637,8 +653,8 @@ function buildSidebar(role) {
       roles: ['admin','gestor','financeiro','atendente','analista','operador'] },
     { section: 'Atendimento', roles: ['admin','gestor','atendente'], children: [
       { id: 'conversations', label: 'Conversas',  icon: '💬', roles: ['admin','gestor','atendente'], badge: 'waitingBadge' },
-      { id: 'orcamentos',    label: 'Orçamentos', icon: '📋', roles: ['admin','gestor','atendente'] },
       { id: 'orders',        label: 'Pedidos',    icon: '🛒', roles: ['admin','gestor','atendente'] },
+      { id: 'orcamentos',    label: 'Orçamentos', icon: '📋', roles: ['admin','gestor','atendente'] },
     ]},
     { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
       { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },
@@ -808,28 +824,188 @@ function showPage(page, el) {
 }
 
 // ── ORÇAMENTOS (na nova página) ────────────────────────────────────────────────
+let orcamentosMainData = [];
+
+const ORC_STATUS = {
+  rascunho:           { label:'Rascunho',            bg:'#fff9c4', col:'#f57f17' },
+  pendente_aprovacao: { label:'Pendente aprovação',  bg:'#fff3e0', col:'#e65100' },
+  enviado:            { label:'Enviado',              bg:'#e3f2fd', col:'#0277bd' },
+  aprovado:           { label:'Aprovado',             bg:'#e8f5e9', col:'#2e7d32' },
+  cancelado:          { label:'Cancelado',            bg:'#fce4ec', col:'#c62828' },
+};
+
+function orcBadge(s) {
+  const st = ORC_STATUS[s] || { label: s||'—', bg:'#f5f5f5', col:'#555' };
+  return `<span style="background:${st.bg};color:${st.col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${st.label}</span>`;
+}
+
+function renderOrcamentoCards(data) {
+  const list = document.getElementById('orc-list-main');
+  if (!data.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum orçamento encontrado</p>'; return; }
+  list.innerHTML = data.map(o => {
+    const val = o.total ? `R$ ${parseFloat(o.total).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
+    const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
+    return `
+    <div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">
+      <div onclick="toggleOrcItems('${o.id}')"
+           style="display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;background:#fff;transition:background .15s"
+           onmouseenter="this.style.background='#f5f7ff'" onmouseleave="this.style.background='#fff'">
+        <span style="font-size:18px;color:#888;transition:transform .2s;display:inline-block" id="orc-chevron-${o.id}">▶</span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <strong style="color:#1a237e;font-size:15px">#${o.numero||'—'}</strong>
+            <span style="font-size:14px;font-weight:500">${escHtml(o.cliente_nome||'—')}</span>
+            ${orcBadge(o.status)}
+          </div>
+          <div style="font-size:12px;color:#888;margin-top:3px">${dt} ${o.status_pagamento ? '· Pgto: '+o.status_pagamento : ''}</div>
+        </div>
+        <div style="font-size:16px;font-weight:700;color:#1a237e;white-space:nowrap">${val}</div>
+      </div>
+      <div id="orc-items-${o.id}" style="display:none;border-top:1px solid #e8eaf6;background:#fafbff;padding:0 18px 14px"></div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleOrcItems(id) {
+  const panel = document.getElementById(`orc-items-${id}`);
+  const chevron = document.getElementById(`orc-chevron-${id}`);
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    chevron.style.transform = '';
+    return;
+  }
+  chevron.style.transform = 'rotate(90deg)';
+  panel.style.display = 'block';
+  if (panel.dataset.loaded) return;
+  panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Carregando itens...</p>';
+  const res = await api(`/api/v2/orcamentos/${id}`);
+  if (!res || res.error) { panel.innerHTML = '<p style="padding:16px;color:#c00;font-size:13px">Erro ao carregar itens</p>'; return; }
+  panel.dataset.loaded = '1';
+  renderOrcItens(id, res.itens || []);
+}
+
+function renderOrcItens(orcId, itens) {
+  const panel = document.getElementById(`orc-items-${orcId}`);
+  if (!itens.length) { panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Sem itens cadastrados</p>'; return; }
+  panel.innerHTML = `
+    <div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin-bottom:8px">PRODUTOS / SERVIÇOS</div>
+      ${itens.map((it, i) => `
+      <div id="orc-item-row-${it.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:8px;margin-bottom:4px;background:${i%2===0?'#fff':'#f0f2ff'}">
+        <div style="width:90px;font-size:12px;color:#666;flex-shrink:0">${it.quantidade} Unidade(s)</div>
+        <div style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(it.descricao)}">${escHtml(it.descricao)}</div>
+        <div style="width:110px;text-align:right;font-size:13px;color:#555;flex-shrink:0">a R$ ${parseFloat(it.valor_unitario||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        <div style="width:130px;text-align:right;font-weight:700;font-size:13px;flex-shrink:0">Total R$ ${parseFloat(it.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}',${it.quantidade},${it.valor_unitario||0})"
+          style="background:none;border:none;cursor:pointer;font-size:18px;color:#5c6bc0;padding:2px 4px;flex-shrink:0" title="Editar">✏️</button>
+        <button onclick="excluirItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}')"
+          style="background:#e53935;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:white;font-size:16px;line-height:1;flex-shrink:0" title="Excluir">−</button>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
+        <button onclick="abrirAdicionarItemOrc('${orcId}')"
+          style="background:#43a047;border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;color:white;font-size:20px;line-height:1" title="Adicionar item">+</button>
+      </div>
+    </div>`;
+}
+
+// ── Modal editar item ──────────────────────────────────────────────────────────
+function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
+  const html = `
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:#666">Descrição</label>
+      <input id="ei-desc" value="${escHtml(descricao)}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
+        <input id="ei-qtd" type="number" min="1" value="${qtd}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+      <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
+        <input id="ei-val" type="number" step="0.01" min="0" value="${valorUnit}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    </div>
+    <button onclick="salvarItemOrc('${orcId}','${itemId}')" class="btn btn-primary" style="width:100%">💾 Salvar alterações</button>`;
+  showModal('Editar Item', html);
+}
+
+async function salvarItemOrc(orcId, itemId) {
+  const descricao = document.getElementById('ei-desc').value.trim();
+  const quantidade = parseFloat(document.getElementById('ei-qtd').value);
+  const valor_unitario = parseFloat(document.getElementById('ei-val').value);
+  if (!descricao || isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha todos os campos'); return; }
+  const valor_total = quantidade * valor_unitario;
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ descricao, quantidade, valor_unitario, valor_total })
+  });
+  if (res && !res.erro) {
+    closeModal();
+    showToast('✅ Item atualizado');
+    document.getElementById(`orc-items-${orcId}`).dataset.loaded = '';
+    const panel = document.getElementById(`orc-items-${orcId}`);
+    panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+    const detail = await api(`/api/v2/orcamentos/${orcId}`);
+    if (detail) renderOrcItens(orcId, detail.itens || []);
+  } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0] || 'desconhecido')); }
+}
+
+async function excluirItemOrc(orcId, itemId, descricao) {
+  if (!confirm(`Excluir item "${descricao}"?`)) return;
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'DELETE' });
+  if (res && !res.erro) {
+    showToast('🗑️ Item excluído');
+    document.getElementById(`orc-item-row-${itemId}`)?.remove();
+  } else { showToast('❌ Erro ao excluir'); }
+}
+
+function abrirAdicionarItemOrc(orcId) {
+  const html = `
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:#666">Descrição</label>
+      <input id="ni-desc" placeholder="Ex: Adesivação parede" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
+        <input id="ni-qtd" type="number" min="1" value="1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+      <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
+        <input id="ni-val" type="number" step="0.01" min="0" value="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    </div>
+    <button onclick="adicionarItemOrc('${orcId}')" class="btn btn-primary" style="width:100%">➕ Adicionar item</button>`;
+  showModal('Novo Item', html);
+}
+
+async function adicionarItemOrc(orcId) {
+  const descricao = document.getElementById('ni-desc').value.trim();
+  const quantidade = parseFloat(document.getElementById('ni-qtd').value);
+  const valor_unitario = parseFloat(document.getElementById('ni-val').value);
+  if (!descricao || isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha todos os campos'); return; }
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens`, {
+    method: 'POST',
+    body: JSON.stringify({ descricao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
+  });
+  if (res && !res.erro) {
+    closeModal();
+    showToast('✅ Item adicionado');
+    const panel = document.getElementById(`orc-items-${orcId}`);
+    panel.dataset.loaded = '';
+    panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+    const detail = await api(`/api/v2/orcamentos/${orcId}`);
+    if (detail) renderOrcItens(orcId, detail.itens || []);
+  } else { showToast('❌ Erro ao adicionar'); }
+}
+
+function filtrarOrcamentos() {
+  const q = (document.getElementById('orc-search')?.value || '').toLowerCase().trim();
+  if (!q) { renderOrcamentoCards(orcamentosMainData); return; }
+  renderOrcamentoCards(orcamentosMainData.filter(o =>
+    String(o.numero||'').includes(q) ||
+    (o.cliente_nome||'').toLowerCase().includes(q) ||
+    (o.status||'').includes(q)
+  ));
+}
+
 async function loadOrcamentosMain() {
   const list = document.getElementById('orc-list-main');
-  const res = await api('/api/v2/orcamentos?limit=50');
-  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
-  const data = res.data || res;
-  if (!data.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum orçamento</p>'; return; }
-  const statusBadge = s => ({ rascunho:'#fff9c4|#f57f17', enviado:'#e3f2fd|#0277bd', aprovado:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', pendente_aprovacao:'#fff3e0|#e65100' }[s] || '#f5f5f5|#555');
-  list.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
-    <thead><tr><th>#</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Pagamento</th><th>Data</th></tr></thead>
-    <tbody>${data.map(o => {
-      const [bg,col] = statusBadge(o.status).split('|');
-      const val = o.total ? `R$ ${parseFloat(o.total).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
-      const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
-      return `<tr>
-        <td style="font-weight:600">#${o.numero||'—'}</td>
-        <td>${o.cliente_nome||'—'}</td>
-        <td style="font-weight:600">${val}</td>
-        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${o.status||'—'}</span></td>
-        <td style="font-size:12px">${o.status_pagamento||'—'}</td>
-        <td style="font-size:12px;color:#888">${dt}</td>
-      </tr>`;
-    }).join('')}</tbody></table></div>`;
+  list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Carregando...</p>';
+  const res = await api('/api/v2/orcamentos?limit=100');
+  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#c00;padding:40px">Erro ao carregar</p>'; return; }
+  orcamentosMainData = res.data || res;
+  const search = document.getElementById('orc-search');
+  if (search) search.value = '';
+  renderOrcamentoCards(orcamentosMainData);
 }
 
 // ── OS (na nova página) ────────────────────────────────────────────────────────
@@ -1677,15 +1853,16 @@ const STATUS_OPTIONS = [
 function statusLabel(s) { return STATUS_OPTIONS.find(x => x.value === s)?.label || s; }
 function statusColor(s) { return STATUS_OPTIONS.find(x => x.value === s)?.color || '#999'; }
 
-async function loadOrders() {
-  const orders = await api('/api/orders');
-  ordersData = orders || [];
+function renderOrderRows(data) {
   const tbody = document.getElementById('ordersBody');
-  if (!ordersData.length) {
-    tbody.innerHTML = '<tr><td colspan="17" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido registrado ainda.</td></tr>';
+  const countEl = document.getElementById('orders-count');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="18" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido encontrado.</td></tr>';
+    if (countEl) countEl.textContent = '';
     return;
   }
-  tbody.innerHTML = ordersData.map((o, i) => {
+  if (countEl) countEl.textContent = `${data.length} pedido${data.length !== 1 ? 's' : ''}`;
+  tbody.innerHTML = data.map((o, i) => {
     const bg = i % 2 === 0 ? 'white' : '#fafbff';
     const dt = new Date(o.data).toLocaleDateString('pt-BR');
     const td = (v) => `<td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(String(v||''))}">${escHtml(String(v||'-'))}</td>`;
@@ -1701,6 +1878,29 @@ async function loadOrders() {
       : `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0"></td>`;
     return `<tr style="background:${bg}">${numCell}${statusBadge}${statusSelect}${td(dt)}${td(o.nome)}${td(o.telefone)}${td(o.contato)}${td(o.email)}${td(o.servico)}${td(o.produto)}${td(o.quantidade)}${td(o.tamanho)}${td(o.material)}${td(o.arte)}${td(o.prazo)}${td(o.entrega)}${td(o.observacoes)}${btnCriarOrc}</tr>`;
   }).join('');
+}
+
+function filtrarPedidos() {
+  const q = (document.getElementById('orders-search')?.value || '').toLowerCase().trim();
+  if (!q) { renderOrderRows(ordersData); return; }
+  const filtered = ordersData.filter(o =>
+    String(o.pedido_numero || '').includes(q) ||
+    (o.nome || '').toLowerCase().includes(q) ||
+    (o.telefone || '').includes(q)
+  );
+  renderOrderRows(filtered);
+}
+
+async function loadOrders() {
+  const orders = await api('/api/orders');
+  ordersData = orders || [];
+  const search = document.getElementById('orders-search');
+  if (search) search.value = '';
+  if (!ordersData.length) {
+    document.getElementById('ordersBody').innerHTML = '<tr><td colspan="18" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido registrado ainda.</td></tr>';
+    return;
+  }
+  renderOrderRows(ordersData);
 }
 
 async function updateOrderStatus(id, newStatus, selectEl) {
@@ -1880,5 +2080,26 @@ function copyShareLink() {
     </div>
   </div>
 </div>
+<!-- Modal genérico -->
+<div id="generic-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
+  <div style="background:white;border-radius:14px;padding:28px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h3 id="generic-modal-title" style="margin:0;color:#1a237e;font-size:16px"></h3>
+      <button onclick="closeModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;line-height:1">×</button>
+    </div>
+    <div id="generic-modal-body"></div>
+  </div>
+</div>
+
+<script>
+function showModal(title, html) {
+  document.getElementById('generic-modal-title').textContent = title;
+  document.getElementById('generic-modal-body').innerHTML = html;
+  document.getElementById('generic-modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('generic-modal').style.display = 'none';
+}
+</script>
 </body>
 </html>

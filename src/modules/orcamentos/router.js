@@ -310,4 +310,54 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
   }
 });
 
+// ── CRUD de itens ─────────────────────────────────────────────────────────────
+const db = require('../../db/index');
+
+router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req, res) => {
+  try {
+    const { descricao, quantidade, valor_unitario, valor_total } = req.body;
+    if (!descricao || !quantidade) return res.status(400).json({ erro: ['descricao e quantidade são obrigatórios'] });
+    const { rows } = await db.query(
+      `INSERT INTO orcamento_itens (orcamento_id, descricao, quantidade, valor_unitario, valor_total)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.params.id, descricao, quantidade, valor_unitario || 0, valor_total || 0]
+    );
+    // recalc total no orçamento
+    await db.query(
+      `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`,
+      [req.params.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ erro: [e.message] }); }
+});
+
+router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), async (req, res) => {
+  try {
+    const { descricao, quantidade, valor_unitario, valor_total } = req.body;
+    const { rows } = await db.query(
+      `UPDATE orcamento_itens SET descricao=COALESCE($1,descricao), quantidade=COALESCE($2,quantidade),
+       valor_unitario=COALESCE($3,valor_unitario), valor_total=COALESCE($4,valor_total)
+       WHERE id=$5 AND orcamento_id=$6 RETURNING *`,
+      [descricao, quantidade, valor_unitario, valor_total, req.params.itemId, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ erro: ['Item não encontrado'] });
+    await db.query(
+      `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`,
+      [req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ erro: [e.message] }); }
+});
+
+router.delete('/:id/itens/:itemId', requireRole('admin','gestor'), async (req, res) => {
+  try {
+    await db.query(`DELETE FROM orcamento_itens WHERE id=$1 AND orcamento_id=$2`, [req.params.itemId, req.params.id]);
+    await db.query(
+      `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`,
+      [req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ erro: [e.message] }); }
+});
+
 module.exports = router;

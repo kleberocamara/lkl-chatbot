@@ -243,6 +243,14 @@ async function criarLoteC6(ids, uploaderName) {
   return { groupId, quantidade: contas.length };
 }
 
+async function listarLotes() {
+  const r = await query(
+    `SELECT c6_group_id, uploader_name, status, valor_total, quantidade_itens, submetido_em, created_at
+     FROM payment_batches ORDER BY created_at DESC LIMIT 50`
+  );
+  return r.rows;
+}
+
 async function consultarLoteC6(groupId) {
   const [batch, items] = await Promise.all([
     query('SELECT * FROM payment_batches WHERE c6_group_id = $1', [groupId]),
@@ -389,7 +397,7 @@ module.exports = {
   criar, editar, cancelar, pagarManual,
   criarRecorrente,
   sincronizarDDA,
-  criarLoteC6, consultarLoteC6, removerItemLoteC6, submeterLoteC6,
+  listarLotes, criarLoteC6, consultarLoteC6, removerItemLoteC6, submeterLoteC6,
   reconciliar,
   marcarVencidas, contasVencendoEm, atualizarStatusLotesSubmetidos, gerarRecorrentesProximoMes,
 };

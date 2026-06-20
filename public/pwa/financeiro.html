@@ -674,21 +674,20 @@
   }
 
   async function carregarHistoricoLotes() {
-    const contas = await api('GET', '/contas-pagar?status=agendado');
-    if (!contas) return;
-    const grupos = [...new Set(contas.map(c => c.c6_group_id).filter(Boolean))];
+    const lotes = await api('GET', '/contas-pagar/lotes');
     const tbody = document.getElementById('tabela-historico-lotes');
-    if (!grupos.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px">Nenhum lote ainda</td></tr>'; return; }
-    tbody.innerHTML = grupos.map(g => {
-      const itens = contas.filter(c => c.c6_group_id === g);
-      const total = itens.reduce((s, c) => s + parseFloat(c.valor), 0);
+    if (!lotes || !lotes.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px">Nenhum lote ainda</td></tr>'; return; }
+    const badgeClass = { submetido: 'badge-verde', agendado: 'badge-azul', aprovado: 'badge-verde', rejeitado: 'badge-vermelho', cancelado: 'badge-cinza' };
+    tbody.innerHTML = lotes.map(b => {
+      const subEm = b.submetido_em ? new Date(b.submetido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+      const cls = badgeClass[b.status] || 'badge-cinza';
       return `<tr>
-        <td style="font-family:monospace;font-size:11px">${g.substring(0,24)}...</td>
-        <td>—</td>
-        <td>${itens.length}</td>
-        <td>${fmt(total)}</td>
-        <td><span class="badge badge-azul">agendado</span></td>
-        <td>—</td>
+        <td style="font-family:monospace;font-size:11px">${b.c6_group_id.substring(0,24)}...</td>
+        <td>${b.uploader_name || '—'}</td>
+        <td>${b.quantidade_itens}</td>
+        <td>${fmt(parseFloat(b.valor_total))}</td>
+        <td><span class="badge ${cls}">${b.status}</span></td>
+        <td>${subEm}</td>
       </tr>`;
     }).join('');
   }

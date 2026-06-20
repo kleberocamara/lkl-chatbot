@@ -46,6 +46,12 @@ router.get('/dda/sync', admin, async (req, res) => {
   catch (err) { console.error('[CONTAS-PAGAR-DDA]', err); res.status(500).json({ error: 'Erro ao sincronizar DDA' }); }
 });
 
+// Listar histórico de lotes
+router.get('/lotes', admin, async (req, res) => {
+  try { res.json(await service.listarLotes()); }
+  catch (err) { console.error('[CONTAS-PAGAR-LOTE]', err); res.status(500).json({ error: 'Erro ao listar lotes' }); }
+});
+
 // Criar lote C6
 router.post('/lote', admin, async (req, res) => {
   try {

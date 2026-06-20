@@ -359,7 +359,7 @@
 
   function badgeVencimento(venc) {
     const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const d = new Date(venc + 'T00:00:00');
+    const d = new Date(String(venc).substring(0, 10) + 'T00:00:00');
     const diff = Math.ceil((d - hoje) / 86400000);
     if (diff < 0) return `<span class="badge badge-vermelho">Vencido ${Math.abs(diff)}d</span>`;
     if (diff === 0) return `<span class="badge badge-vermelho">Hoje</span>`;
@@ -393,7 +393,8 @@
         <td>${badgeStatus(c.status)}</td>
         <td>${badgeOrigem(c.tipo_entrada)}</td>
         <td style="white-space:nowrap">
-          ${c.status !== 'pago' && c.status !== 'cancelado' ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="pagarManual(${c.id})">Pagar</button>` : ''}
+          ${c.status === 'pendente' ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="abrirModalEditar(${c.id})">✏️</button>` : ''}
+          ${c.status !== 'pago' && c.status !== 'cancelado' ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="pagarManual(${c.id})">Pagar</button>` : ''}
           ${c.status === 'pendente' || c.status === 'vencido' ? `<button class="btn btn-red" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="cancelarConta(${c.id})">✕</button>` : ''}
         </td>
       </tr>`).join('');
@@ -462,8 +463,49 @@
     if (r) { showToast(`✅ ${r.atualizadas} contas marcadas como pagas`); carregarContas(); carregarKPIs(); }
   }
 
-  function abrirModalNova() { document.getElementById('modal-nova').classList.add('open'); }
-  function fecharModal() { document.getElementById('modal-nova').classList.remove('open'); }
+  let editandoId = null;
+
+  function abrirModalNova() {
+    editandoId = null;
+    document.querySelector('#modal-nova h2').textContent = 'Nova Conta a Pagar';
+    document.querySelector('#modal-nova .btn-primary[onclick="salvarConta()"]').textContent = 'Salvar Conta';
+    ['f-descricao','f-fornecedor','f-linha-digitavel','f-pix-content','f-observacao'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('f-tipo-despesa').value = '';
+    document.getElementById('f-valor').value = '';
+    document.getElementById('f-vencimento').value = '';
+    document.getElementById('f-tipo').value = 'boleto';
+    document.getElementById('f-recorrente').checked = false;
+    document.getElementById('grupo-recorrente').style.display = 'none';
+    document.getElementById('grupo-linha-digitavel').style.display = 'block';
+    document.getElementById('grupo-pix').style.display = 'none';
+    document.getElementById('modal-nova').classList.add('open');
+  }
+
+  async function abrirModalEditar(id) {
+    const c = await api('GET', `/contas-pagar?status=pendente`);
+    if (!c) return;
+    const conta = c.find(x => x.id === id);
+    if (!conta) { showToast('❌ Conta não encontrada'); return; }
+    editandoId = id;
+    document.querySelector('#modal-nova h2').textContent = 'Editar Conta';
+    document.querySelector('#modal-nova .btn-primary[onclick="salvarConta()"]').textContent = 'Salvar Alterações';
+    document.getElementById('f-descricao').value = conta.descricao || '';
+    document.getElementById('f-fornecedor').value = conta.fornecedor || '';
+    document.getElementById('f-tipo-despesa').value = conta.tipo_despesa || '';
+    document.getElementById('f-valor').value = conta.valor || '';
+    document.getElementById('f-vencimento').value = String(conta.vencimento).substring(0, 10);
+    document.getElementById('f-tipo').value = conta.tipo || 'boleto';
+    document.getElementById('f-linha-digitavel').value = conta.linha_digitavel || '';
+    document.getElementById('f-pix-content').value = conta.pix_content || '';
+    document.getElementById('f-observacao').value = conta.observacao || '';
+    document.getElementById('f-recorrente').checked = false;
+    document.getElementById('grupo-recorrente').style.display = 'none';
+    document.getElementById('grupo-linha-digitavel').style.display = conta.tipo === 'boleto' ? 'block' : 'none';
+    document.getElementById('grupo-pix').style.display = conta.tipo === 'pix' ? 'block' : 'none';
+    document.getElementById('modal-nova').classList.add('open');
+  }
+
+  function fecharModal() { document.getElementById('modal-nova').classList.remove('open'); editandoId = null; }
   function toggleRecorrente() {
     const on = document.getElementById('f-recorrente').checked;
     document.getElementById('grupo-recorrente').style.display = on ? 'block' : 'none';
@@ -484,11 +526,18 @@
       tipo: document.getElementById('f-tipo').value,
       linha_digitavel: document.getElementById('f-linha-digitavel').value.replace(/\D/g,'') || null,
       pix_content: document.getElementById('f-pix-content').value.trim() || null,
+      observacao: document.getElementById('f-observacao').value.trim() || null,
+    };
+    if (editandoId) {
+      const r = await api('PATCH', `/contas-pagar/${editandoId}`, body);
+      if (r) { showToast('✅ Conta atualizada'); fecharModal(); carregarContas(); }
+      return;
+    }
+    Object.assign(body, {
       recorrente,
       recorrencia_dia: recorrente ? parseInt(document.getElementById('f-recorrencia-dia').value) : null,
       recorrencia_valor_fixo: recorrente ? document.getElementById('f-recorrencia-valor-fixo').value !== 'false' : true,
-      observacao: document.getElementById('f-observacao').value.trim() || null,
-    };
+    });
     const endpoint = recorrente ? '/contas-pagar/recorrente' : '/contas-pagar';
     const r = await api('POST', endpoint, body);
     if (r) {

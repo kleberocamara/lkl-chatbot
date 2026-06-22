@@ -20,6 +20,7 @@ router.use('/orcamentos',
   require('./orcamentos/router'));
 router.use('/os', requireAuthApi, require('./os/router'));
 router.use('/especificacoes', requireAuthApi, require('./especificacoes/router'));
+router.use('/formatos', requireAuthApi, require('./formatos/router'));
 router.use('/nfe', requireAuthApi, require('./nfe/router'));
 router.use('/contas-pagar', requireAuthApi, require('./contas-pagar/router'));
 router.use('/users', requireAuthApi, require('./users/router'));

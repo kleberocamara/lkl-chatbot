@@ -1190,7 +1190,7 @@ async function loadOsMain() {
       const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
       const tipoLabel = o.tipo_servico === 'offset' ? 'Offset' : (o.tipo_servico === 'comunicacao_visual' ? 'Com. Visual' : '—');
       const extraItens = (parseInt(o.itens_count)||1) > 1 ? ` <span style="background:#e8eaf6;color:#3949ab;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600">+${(parseInt(o.itens_count)-1)}</span>` : '';
-      return `<tr>
+      return `<tr style="cursor:pointer" onclick="abrirDetalheOS('${o.id}')">
         <td style="font-weight:600;font-family:monospace">${o.numero_os||o.id.substring(0,8)}</td>
         <td>${o.cliente_nome||'—'}</td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.item_descricao||'—'}${extraItens}<br><span style="font-size:11px;color:#888">${tipoLabel}</span></td>
@@ -1198,6 +1198,77 @@ async function loadOsMain() {
         <td style="font-size:12px;color:#888">${dt}</td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
+}
+
+// ── DETALHE DA OS + FICHA DE PRODUÇÃO ──────────────────────────────────────────
+let _osDetalheId = null;
+let _osMateriais = [];
+function renderViasOS(){}  // stub — substituído na Task 5
+const FV_OPCOES = [['so_frente','Só Frente'],['fv_iguais','Frente e Verso Iguais'],['fv_diferentes','Frente e Verso Diferentes']];
+const UNID_OPCOES = ['FLS','BLS','PCS','JGS','TLS'];
+
+async function abrirDetalheOS(id) {
+  _osDetalheId = id;
+  const os = await api(`/api/v2/os/${id}`);
+  if (!os || os.error) { showToast('Erro ao carregar OS'); return; }
+  _osMateriais = (os.materiais || []).map(m => ({ ...m }));
+
+  const itensTxt = (os.itens||[]).map(i => `${escHtml(i.descricao)} (${i.quantidade})`).join(' · ') || '—';
+  const especsTxt = (os.especificacoes||[]).map(e => escHtml(e.nome)).join(', ') || '—';
+  const isOffset = os.tipo_servico === 'offset';
+  const inp = (id2, val, type='text', extra='') => `<input id="${id2}" type="${type}" value="${val!=null?escHtml(String(val)):''}" ${extra} style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">`;
+  const fvSel = `<select id="of-fv" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">—</option>${FV_OPCOES.map(([v,l])=>`<option value="${v}" ${os.frente_verso===v?'selected':''}>${l}</option>`).join('')}</select>`;
+  const unidSel = `<select id="of-unid" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">—</option>${UNID_OPCOES.map(u=>`<option value="${u}" ${os.tipo_unidade===u?'selected':''}>${u}</option>`).join('')}</select>`;
+
+  const fichaHtml = !isOffset ? '<p style="color:#888;font-size:13px;padding:10px 0">Ficha de produção offset não se aplica a OS de Comunicação Visual.</p>' : `
+    <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">FICHA DE PRODUÇÃO (OFFSET)</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div><label style="font-size:11px;color:#666">Nº Jogos</label>${inp('of-jogos',os.nro_jogos,'number','min="0"')}</div>
+      <div><label style="font-size:11px;color:#666">Nº Vias</label>${inp('of-vias',os.nro_vias,'number','min="0"')}</div>
+      <div><label style="font-size:11px;color:#666">Tipo unidade</label>${unidSel}</div>
+      <div><label style="font-size:11px;color:#666">Frente e Verso</label>${fvSel}</div>
+      <div><label style="font-size:11px;color:#666">Numeração inicial</label>${inp('of-numini',os.numeracao_inicial,'number')}</div>
+      <div><label style="font-size:11px;color:#666">Numeração final</label>${inp('of-numfim',os.numeracao_final,'number')}</div>
+      <div><label style="font-size:11px;color:#666">Formato corte Alt</label>${inp('of-fcalt',os.formato_corte_alt,'number','step="0.01"')}</div>
+      <div><label style="font-size:11px;color:#666">Formato corte Larg</label>${inp('of-fclarg',os.formato_corte_larg,'number','step="0.01"')}</div>
+      <div><label style="font-size:11px;color:#666">Cores das tintas</label>${inp('of-cores',os.cores_tintas)}</div>
+      <div><label style="font-size:11px;color:#666">Imagem Alt</label>${inp('of-imgalt',os.imagem_alt,'number','step="0.01"')}</div>
+      <div><label style="font-size:11px;color:#666">Imagem Larg</label>${inp('of-imglarg',os.imagem_larg,'number','step="0.01"')}</div>
+      <div></div>
+      <div><label style="font-size:11px;color:#666">Imagens/folha</label>${inp('of-imgfolha',os.imagens_folha,'number','min="0"')}</div>
+      <div><label style="font-size:11px;color:#666">Imagens/impressão</label>${inp('of-imgimp',os.imagens_impressao,'number','min="0"')}</div>
+      <div></div>
+    </div>
+    <div id="of-vias-area"></div>
+    <button onclick="salvarFichaOS()" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar ficha de produção</button>`;
+
+  const html = `
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      OS #${os.numero_os||'—'} · <b>${os.tipo_servico==='offset'?'Offset':(os.tipo_servico==='comunicacao_visual'?'Com. Visual':'—')}</b> · ${escHtml(os.cliente_nome||'(multi-cliente)')} · status: ${os.status}
+    </div>
+    <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
+    <div style="font-size:13px;margin-bottom:6px"><b>Especificações:</b> ${especsTxt}</div>
+    ${fichaHtml}`;
+  showModal(`Detalhe da OS #${os.numero_os||''}`, html);
+  if (isOffset) renderViasOS();
+}
+
+async function salvarFichaOS() {
+  const val = id2 => { const e=document.getElementById(id2); return e? e.value : ''; };
+  const body = {
+    nro_jogos: val('of-jogos'), nro_vias: val('of-vias'), tipo_unidade: val('of-unid'),
+    frente_verso: val('of-fv'), numeracao_inicial: val('of-numini'), numeracao_final: val('of-numfim'),
+    formato_corte_alt: val('of-fcalt'), formato_corte_larg: val('of-fclarg'),
+    imagem_alt: val('of-imgalt'), imagem_larg: val('of-imglarg'),
+    imagens_folha: val('of-imgfolha'), imagens_impressao: val('of-imgimp'),
+    cores_tintas: val('of-cores'),
+    materiais: _osMateriais,
+  };
+  const r = await api(`/api/v2/os/${_osDetalheId}/producao`, { method:'PATCH', body: JSON.stringify(body) });
+  if (r?.error || r?.errors) { showToast(r.error || (r.errors||[]).join(', '), 'error'); return; }
+  closeModal();
+  showToast('✅ Ficha de produção salva');
+  loadOsMain();
 }
 
 // ── GERAR OS OFFSET ────────────────────────────────────────────────────────────

@@ -436,6 +436,7 @@
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Produto</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Qtd</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Observações</th>
+            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap"></th>
           </tr>
         </thead>
         <tbody id="ordersBody">
@@ -2599,8 +2600,48 @@ function renderOrderRows(data) {
       <td style="${C}"><span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span></td>
       ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${produtoCel}${td(o.quantidade)}
       <td style="padding:10px;border-bottom:1px solid #f0f0f0;max-width:240px">${_obsPreview(o.observacoes)}</td>
+      <td style="${C}text-align:center"><button onclick="editarPedido('${o.id}')" title="Editar contato/observações" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px">✏️</button></td>
     </tr>`;
   }).join('');
+}
+
+function editarPedido(id) {
+  const o = (ordersData || []).find(x => x.id === id);
+  if (!o) { showToast('Pedido não encontrado'); return; }
+  const prazoVal = o.prazo ? String(o.prazo).slice(0,10) : '';
+  const html = `
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Pedido #${o.numero_os||'—'} · ${escHtml(o.cliente_nome||'—')}</div>
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">E-mail do cliente</label>
+        <input id="ep-email" type="email" value="${escHtml(o.cliente_email||'')}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Celular do cliente</label>
+        <input id="ep-celular" type="tel" value="${escHtml(o.cliente_celular||'')}" oninput="this.value=mascaraCelular(this.value)" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Prazo de entrega</label>
+        <input id="ep-prazo" type="date" value="${prazoVal}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Observações</label>
+        <textarea id="ep-obs" rows="3" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;text-transform:uppercase">${escHtml(o.observacoes||'')}</textarea></div>
+    </div>
+    <button onclick="salvarEdicaoPedido('${o.id}')" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar alterações</button>
+    <p style="font-size:11px;color:#999;margin-top:8px">O e-mail/celular atualizam o cadastro do cliente. Se o orçamento já foi enviado, reenvie pela aba Orçamentos para o contato corrigido receber.</p>`;
+  showModal('Editar Pedido', html);
+}
+
+async function salvarEdicaoPedido(id) {
+  const email = document.getElementById('ep-email').value.trim();
+  const celular = document.getElementById('ep-celular').value.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('E-mail inválido', 'error'); return; }
+  if (celular && !_validaCelular(celular)) { showToast('Celular inválido — use (XX) 9XXXX-XXXX', 'error'); return; }
+  const body = {
+    email: email || null,
+    celular: celular.replace(/\D/g,'') || null,
+    prazo: document.getElementById('ep-prazo').value || null,
+    observacoes: document.getElementById('ep-obs').value.trim() || null,
+  };
+  const r = await api(`/api/v2/orders/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  if (r?.error || r?.errors) { showToast(r.error || (r.errors||[]).join(', '), 'error'); return; }
+  closeModal();
+  showToast('✅ Pedido atualizado');
+  loadOrders();
 }
 
 function filtrarPedidos() {

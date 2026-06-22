@@ -142,6 +142,7 @@ async function buscarPorId(id) {
       `SELECT o.*,
               c.nome   AS cliente_nome,
               c.celular AS cliente_celular,
+              c.email  AS cliente_email,
               u.name   AS vendedor_nome,
               orc.numero AS orcamento_numero,
               orc.status AS orcamento_status,
@@ -219,6 +220,7 @@ async function listar({ page = 1, limit = 50, status, cliente_id, origin_channel
       `SELECT o.*,
               c.nome   AS cliente_nome,
               c.celular AS cliente_celular,
+              c.email  AS cliente_email,
               u.name   AS vendedor_nome,
               orc.numero AS orcamento_numero,
               orc.status AS orcamento_status,
@@ -244,4 +246,36 @@ async function listar({ page = 1, limit = 50, status, cliente_id, origin_channel
   return { orders: rows.rows, total: parseInt(count.rows[0].count), page, limit };
 }
 
-module.exports = { criarOrder, buscarPorId, atualizarStatus, vincularOrcamento, listar, STATUS_VALIDOS, STATUS_VENDEDOR };
+// Edição do pedido: campos do próprio pedido (observações/prazo) e contato do cliente vinculado (email/celular)
+async function atualizarPedido(id, dados) {
+  const sets = [], vals = [];
+  if (dados.observacoes !== undefined) { vals.push(dados.observacoes || null); sets.push(`observacoes=$${vals.length}`); }
+  if (dados.prazo !== undefined) { vals.push(_parseDate(dados.prazo)); sets.push(`prazo=$${vals.length}`); }
+
+  let order;
+  if (sets.length) {
+    vals.push(id);
+    const r = await db.query(
+      `UPDATE orders SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length} RETURNING *`, vals);
+    if (!r.rows[0]) return { erro: ['Pedido não encontrado'] };
+    order = r.rows[0];
+  } else {
+    const r = await db.query('SELECT * FROM orders WHERE id=$1', [id]);
+    if (!r.rows[0]) return { erro: ['Pedido não encontrado'] };
+    order = r.rows[0];
+  }
+
+  // Atualiza contato do cliente vinculado
+  if (order.cliente_id && (dados.email !== undefined || dados.celular !== undefined)) {
+    const cs = [], cv = [];
+    if (dados.email   !== undefined) { cv.push(dados.email   || null); cs.push(`email=$${cv.length}`); }
+    if (dados.celular !== undefined) { cv.push(dados.celular || null); cs.push(`celular=$${cv.length}`); }
+    cv.push(order.cliente_id);
+    await db.query(`UPDATE clientes_lkl SET ${cs.join(', ')} WHERE id=$${cv.length}`, cv);
+  }
+
+  if (global.io) global.io.emit('order_status_update', { orderId: id, status: order.status });
+  return { order };
+}
+
+module.exports = { criarOrder, buscarPorId, atualizarStatus, atualizarPedido, vincularOrcamento, listar, STATUS_VALIDOS, STATUS_VENDEDOR };

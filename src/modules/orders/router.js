@@ -34,6 +34,18 @@ router.post('/', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+// Edição do pedido (contato do cliente + observações/prazo)
+router.patch('/:id',
+  requireRole('admin', 'gestor', 'atendente'),
+  async (req, res) => {
+    try {
+      const result = await service.atualizarPedido(req.params.id, req.body);
+      if (result.erro) return res.status(400).json({ errors: result.erro });
+      res.json(result.order);
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+  }
+);
+
 router.patch('/:id/status',
   requireRole('admin', 'gestor', 'atendente', 'operador', 'analista', 'financeiro'),
   async (req, res) => {

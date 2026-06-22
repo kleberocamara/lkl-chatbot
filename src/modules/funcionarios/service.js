@@ -36,12 +36,12 @@ async function criar(dados) {
   if (dup.rows.length > 0) return { erro: ['CPF já cadastrado'] };
 
   const r = await db.query(
-    `INSERT INTO funcionarios (user_id, nome, cpf, rg, data_nascimento, cargo, salario,
+    `INSERT INTO funcionarios (user_id, nome, cpf, rg, data_nascimento, cargo, setor, salario,
      data_admissao, telefone, celular, email, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'ativo') RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ativo') RETURNING *`,
     [dados.user_id || null, dados.nome, dados.cpf.replace(/\D/g, ''), dados.rg || null,
-     dados.data_nascimento || null, dados.cargo, dados.salario || null, dados.data_admissao,
-     dados.telefone || null, dados.celular || null, dados.email || null]
+     dados.data_nascimento || null, dados.cargo, dados.setor || null, dados.salario || null,
+     dados.data_admissao, dados.telefone || null, dados.celular || null, dados.email || null]
   );
   return { funcionario: r.rows[0] };
 }
@@ -53,12 +53,12 @@ async function atualizar(id, dados) {
   const r = await db.query(
     `UPDATE funcionarios SET nome=COALESCE($1,nome), rg=COALESCE($2,rg),
      data_nascimento=COALESCE($3,data_nascimento), cargo=COALESCE($4,cargo),
-     salario=COALESCE($5,salario), telefone=COALESCE($6,telefone), celular=COALESCE($7,celular),
-     email=COALESCE($8,email), status=COALESCE($9,status), user_id=COALESCE($10,user_id),
-     updated_at=NOW() WHERE id=$11 RETURNING *`,
+     setor=COALESCE($5,setor), salario=COALESCE($6,salario), telefone=COALESCE($7,telefone),
+     celular=COALESCE($8,celular), email=COALESCE($9,email), status=COALESCE($10,status),
+     user_id=COALESCE($11,user_id), updated_at=NOW() WHERE id=$12 RETURNING *`,
     [dados.nome || null, dados.rg || null, dados.data_nascimento || null, dados.cargo || null,
-     dados.salario || null, dados.telefone || null, dados.celular || null, dados.email || null,
-     dados.status || null, dados.user_id || null, id]
+     dados.setor || null, dados.salario || null, dados.telefone || null, dados.celular || null,
+     dados.email || null, dados.status || null, dados.user_id || null, id]
   );
   return { funcionario: r.rows[0] };
 }

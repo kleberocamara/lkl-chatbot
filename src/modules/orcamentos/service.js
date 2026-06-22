@@ -2,14 +2,95 @@ const db = require('../../db');
 const { pool } = require('../../db');
 const c6bank = require('../../services/c6bank');
 const mercadopago = require('../../services/mercadopago');
+const { enviarOrcamentoCliente } = require('../../services/email');
+const whatsapp = require('../../services/whatsapp');
+const fcm = require('../../services/fcm');
+const { gerarOrcamentoPDF } = require('../../services/pdf');
 
-const STATUS_VALIDOS = ['rascunho', 'enviado', 'aprovado', 'cancelado'];
+// Sync de status do pedido vinculado — fire-and-forget
+async function _syncPedidoStatus(orcamentoId, novoStatus) {
+  try {
+    const MAP = {
+      enviado:   'aguardando_aprovacao',
+      aprovado:  'aprovado',
+      reprovado: 'reprovado',
+      cancelado: 'cancelado',
+    };
+    const pedidoStatus = MAP[novoStatus];
+    if (!pedidoStatus) return;
+    await db.query(
+      `UPDATE orders SET status=$1, updated_at=NOW()
+       WHERE orcamento_id=(SELECT id FROM orcamentos WHERE id=$2)
+         AND status NOT IN ('pago','entregue','cancelado')`,
+      [pedidoStatus, orcamentoId]
+    );
+  } catch (e) {
+    console.warn('[ORC-SYNC]', e.message);
+  }
+}
+
+// Notifica o vendedor responsável quando o cliente responde ao orçamento — PWA (FCM) + WhatsApp
+async function _notifyVendedorResposta(orcamentoId, novoStatus) {
+  if (novoStatus !== 'aprovado' && novoStatus !== 'reprovado') return;
+  try {
+    const r = await db.query(
+      `SELECT o.numero, o.vendedor_id, c.nome AS cliente_nome, u.celular AS vendedor_celular
+       FROM orcamentos o
+       LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+       LEFT JOIN users u ON u.id = o.vendedor_id
+       WHERE o.id = $1`,
+      [orcamentoId]
+    );
+    const orc = r.rows[0];
+    if (!orc || !orc.vendedor_id) return;
+    const aprovado = novoStatus === 'aprovado';
+    const titulo = aprovado
+      ? `Orçamento #${orc.numero} aprovado 👍`
+      : `Orçamento #${orc.numero} reprovado 👎`;
+    const corpo = `${orc.cliente_nome || 'Cliente'} ${aprovado ? 'aprovou' : 'reprovou'} o orçamento.`;
+
+    // PWA (push)
+    fcm.sendToUser(orc.vendedor_id, {
+      title: titulo,
+      body: corpo,
+      data: { orcamento_id: String(orcamentoId), status: novoStatus },
+    }).catch(e => console.warn('[ORC-VENDEDOR-FCM]', e.message));
+
+    // WhatsApp
+    if (orc.vendedor_celular) {
+      const emoji = aprovado ? '✅' : '❌';
+      whatsapp.sendMessage(orc.vendedor_celular, `${emoji} *${titulo}*\n${corpo}`)
+        .catch(e => console.warn('[ORC-VENDEDOR-WA]', e.message));
+    }
+  } catch (e) {
+    console.warn('[ORC-VENDEDOR-NOTIFY]', e.message);
+  }
+}
+
+// Status do fluxo novo
+const STATUS_VALIDOS = [
+  'rascunho', 'aprovado_interno',          // legado congelado
+  'em_orcamento', 'em_revisao', 'concluido',
+  'enviado', 'aprovado', 'reprovado', 'cancelado',
+];
+
+const TRANSICOES_VALIDAS = {
+  em_revisao:  ['em_orcamento'],
+  concluido:   ['em_orcamento', 'em_revisao'],
+  enviado:     ['concluido'],
+  aprovado:    ['enviado'],
+  reprovado:   ['enviado'],
+  cancelado:   ['em_orcamento', 'em_revisao', 'concluido', 'enviado'],
+};
 
 async function buscarPorId(id) {
   const r = await db.query(
     `SELECT o.*,
-            c.nome AS cliente_nome,
-            u.name AS vendedor_nome
+            c.nome    AS cliente_nome,
+            c.celular AS cliente_celular,
+            c.email   AS cliente_email,
+            c.cpf_cnpj AS cpf_cnpj,
+            u.name    AS vendedor_nome
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
      LEFT JOIN users u ON u.id = o.vendedor_id
@@ -35,7 +116,7 @@ async function buscarPorId(id) {
   return { ...orcamento, itens: itensR.rows, ordens_servico: osR.rows, boletos_parcelas: boletosR.rows };
 }
 
-async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, itens }) {
+async function criar({ cliente_id, vendedor_id, pedido_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, itens }) {
   if (!itens || !Array.isArray(itens) || itens.length === 0) {
     return { erro: ['itens deve ser um array não vazio'] };
   }
@@ -45,10 +126,10 @@ async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dia
     await client.query('BEGIN');
 
     const oR = await client.query(
-      `INSERT INTO orcamentos (cliente_id, vendedor_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'rascunho')
+      `INSERT INTO orcamentos (cliente_id, vendedor_id, pedido_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'em_orcamento')
        RETURNING *`,
-      [cliente_id, vendedor_id, condicao_pagamento || null, validade_dias || null, prazo_entrega || null, observacao || null]
+      [cliente_id, vendedor_id, pedido_id || null, condicao_pagamento || null, validade_dias || null, prazo_entrega || null, observacao || null]
     );
     const orcamento = oR.rows[0];
 
@@ -77,6 +158,15 @@ async function criar({ cliente_id, vendedor_id, condicao_pagamento, validade_dia
         ]
       );
       insertedItens.push(iR.rows[0]);
+    }
+
+    // Vincula o pedido ao orçamento recém-criado
+    if (pedido_id) {
+      await client.query(
+        `UPDATE orders SET orcamento_id=$1, status='em_orcamento', updated_at=NOW()
+         WHERE id=$2 AND orcamento_id IS NULL`,
+        [orcamento.id, pedido_id]
+      );
     }
 
     await client.query('COMMIT');
@@ -114,11 +204,8 @@ async function mudarStatus(id, novoStatus, extra = {}) {
   if (!current.rows[0]) return { erro: ['Orçamento não encontrado'] };
   const currentStatus = current.rows[0].status;
 
-  const validTransitions = {
-    enviado: ['rascunho'],
-    cancelado: ['rascunho', 'enviado'],
-  };
-  if (validTransitions[novoStatus] && !validTransitions[novoStatus].includes(currentStatus)) {
+  const permitidos = TRANSICOES_VALIDAS[novoStatus];
+  if (permitidos && !permitidos.includes(currentStatus)) {
     return { erro: [`Transição inválida: orçamento está '${currentStatus}', não pode ir para '${novoStatus}'`] };
   }
 
@@ -126,11 +213,15 @@ async function mudarStatus(id, novoStatus, extra = {}) {
   const params = [novoStatus];
 
   if (novoStatus === 'aprovado') {
-    updates.push(`aprovado_em = NOW()`);
-    if (extra.aprovado_via) {
-      params.push(extra.aprovado_via);
-      updates.push(`aprovado_via = $${params.length}`);
-    }
+    updates.push('aprovado_em = NOW()');
+    if (extra.aprovado_via) { params.push(extra.aprovado_via); updates.push(`aprovado_via = $${params.length}`); }
+  }
+  if (novoStatus === 'reprovado') {
+    updates.push('reprovado_em = NOW()');
+    if (extra.reprovado_via) { params.push(extra.reprovado_via); updates.push(`reprovado_via = $${params.length}`); }
+  }
+  if (novoStatus === 'enviado') {
+    updates.push('enviado_em = NOW()');
   }
 
   params.push(id);
@@ -139,7 +230,188 @@ async function mudarStatus(id, novoStatus, extra = {}) {
     params
   );
   if (!r.rows[0]) return { erro: ['Orçamento não encontrado'] };
+
+  _syncPedidoStatus(id, novoStatus);
+  _notifyVendedorResposta(id, novoStatus);
+
   return { orcamento: r.rows[0] };
+}
+
+// Marca como concluído e dispara envio imediato ao cliente (WA + e-mail)
+async function concluir(id, userId) {
+  const orc = await buscarPorId(id);
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+
+  const permitidos = TRANSICOES_VALIDAS['concluido'];
+  if (!permitidos.includes(orc.status)) {
+    return { erro: [`Orçamento está '${orc.status}', não pode ser concluído agora`] };
+  }
+
+  // Marca concluido e já atualiza para enviado em uma transação
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Recalcula o total a partir dos itens antes de enviar
+    await client.query(
+      `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`,
+      [id]
+    );
+    await client.query(
+      `UPDATE orcamentos SET status='concluido', concluido_em=NOW(), concluido_por=$1, updated_at=NOW() WHERE id=$2`,
+      [userId, id]
+    );
+    await client.query(
+      `UPDATE orcamentos SET status='enviado', enviado_em=NOW(), updated_at=NOW() WHERE id=$1`,
+      [id]
+    );
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    client.release();
+    return { erro: [e.message] };
+  }
+  client.release();
+
+  const atualizado = await buscarPorId(id);
+
+  // Disparo fire-and-forget: WA + e-mail
+  _dispararNotificacoesEnvio(atualizado).catch(e =>
+    console.warn('[ORC] Falha ao notificar cliente:', e.message)
+  );
+
+  return { orcamento: atualizado };
+}
+
+async function _dispararNotificacoesEnvio(orc) {
+  const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
+  const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=aprovado`;
+  const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=reprovado`;
+
+  const totalFmt = `R$ ${parseFloat(orc.total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+
+  // Gera o PDF (com links de aprovação) uma única vez para reutilizar
+  let pdfBuffer = null;
+  try {
+    pdfBuffer = await gerarOrcamentoPDF(orc);
+  } catch (e) {
+    console.warn('[ORC] Falha ao gerar PDF para envio:', e.message);
+  }
+
+  // WhatsApp
+  if (orc.cliente_celular) {
+    const msg =
+      `Olá, ${orc.cliente_nome || 'cliente'}! 🖨\n\n` +
+      `A Gráfica LKL preparou seu *Orçamento #${orc.numero}* no valor de *${totalFmt}*.\n\n` +
+      `Prazo de entrega: ${orc.prazo_entrega || 'a combinar'}\n` +
+      `Validade: ${orc.validade_dias || 30} dias\n\n` +
+      `Para aprovar, responda *SIM*.\n` +
+      `Para reprovar, responda *NÃO*.\n\n` +
+      `Ou clique para aprovar: ${urlAprovar}`;
+    await whatsapp.sendMessage(orc.cliente_celular, msg);
+
+    // Registra pendência de confirmação WA
+    await db.query(
+      `INSERT INTO orcamento_confirmacao_wa (phone, orcamento_id, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '1 hour')
+       ON CONFLICT (phone) DO UPDATE SET orcamento_id=$2, expires_at=NOW() + INTERVAL '1 hour'`,
+      [orc.cliente_celular, orc.id]
+    );
+  }
+
+  // E-mail
+  if (orc.cliente_email) {
+    await enviarOrcamentoCliente({
+      clienteNome:   orc.cliente_nome,
+      clienteEmail:  orc.cliente_email,
+      numero:        orc.numero,
+      total:         orc.total,
+      validade_dias: orc.validade_dias,
+      prazo_entrega: orc.prazo_entrega,
+      itens:         orc.itens,
+      token:         orc.token_aprovacao,
+      pdfBuffer,
+    });
+  }
+}
+
+// Resposta via link de e-mail (token)
+async function processarRespostaToken(token, resposta) {
+  const { rows } = await db.query(
+    `SELECT id, status FROM orcamentos WHERE token_aprovacao=$1`, [token]
+  );
+  if (!rows[0]) return { erro: ['Link inválido ou expirado'] };
+  const orc = rows[0];
+
+  if (!['enviado'].includes(orc.status)) {
+    return { erro: [`Orçamento já foi ${orc.status}`] };
+  }
+
+  const novoStatus = resposta === 'aprovado' ? 'aprovado' : 'reprovado';
+  return mudarStatus(orc.id, novoStatus, { [`${novoStatus}_via`]: 'email' });
+}
+
+// Processa resposta WA: SIM/NÃO com confirmação em 2 etapas
+// Retorna { mensagem } para enviar ao cliente, ou null se não havia orçamento pendente
+async function processarRespostaWA(phone, texto) {
+  const norm = texto.trim().toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const isSim = norm === 'SIM';
+  const isNao = norm === 'NAO' || norm === 'NÃO' || norm === 'NAO';
+
+  if (!isSim && !isNao) return null;
+
+  const { rows } = await db.query(
+    `SELECT oc.orcamento_id, oc.aguardando_confirmacao, oc.ultima_intencao,
+            o.numero, o.total, o.status
+     FROM orcamento_confirmacao_wa oc
+     JOIN orcamentos o ON o.id = oc.orcamento_id
+     WHERE oc.phone = $1 AND oc.expires_at > NOW()`,
+    [phone]
+  );
+  if (!rows.length) return null;
+
+  const { orcamento_id, aguardando_confirmacao, ultima_intencao, numero, total, status } = rows[0];
+  const totalFmt = `R$ ${parseFloat(total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+
+  if (status !== 'enviado') {
+    await db.query('DELETE FROM orcamento_confirmacao_wa WHERE phone=$1', [phone]);
+    return { mensagem: `O Orçamento #${numero} já está *${status}*. Obrigado!` };
+  }
+
+  if (!aguardando_confirmacao) {
+    // 1ª etapa: registra intenção e pede confirmação
+    const intencao = isSim ? 'aprovado' : 'reprovado';
+    const verbo    = isSim ? 'aprovar'  : 'reprovar';
+    await db.query(
+      `UPDATE orcamento_confirmacao_wa
+       SET aguardando_confirmacao=true, ultima_intencao=$1, expires_at=NOW() + INTERVAL '30 minutes'
+       WHERE phone=$2`,
+      [intencao, phone]
+    );
+    return {
+      mensagem:
+        `Confirmando: deseja *${verbo}* o Orçamento *#${numero}* no valor de *${totalFmt}*?\n\n` +
+        `Responda *SIM* para confirmar ou *NÃO* para cancelar.`,
+    };
+  }
+
+  // 2ª etapa: processa definitivamente
+  await db.query('DELETE FROM orcamento_confirmacao_wa WHERE phone=$1', [phone]);
+
+  if (isSim) {
+    await mudarStatus(orcamento_id, ultima_intencao, { [`${ultima_intencao}_via`]: 'whatsapp' });
+    const verboPassado = ultima_intencao === 'aprovado' ? 'aprovado' : 'reprovado';
+    return { mensagem: `✅ Orçamento #${numero} *${verboPassado}* com sucesso! Obrigado, em breve entraremos em contato.` };
+  } else {
+    return { mensagem: `Ok! Nenhuma alteração feita. Se precisar de ajuda, fale com nossa equipe.` };
+  }
+}
+
+async function reprovar(id, reprovado_via) {
+  const orc = await buscarPorId(id);
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+  if (orc.status !== 'enviado') return { erro: ['Orçamento precisa estar "enviado" para ser reprovado'] };
+  return mudarStatus(id, 'reprovado', { reprovado_via: reprovado_via || 'manual' });
 }
 
 async function aprovar(id, aprovado_via) {
@@ -147,48 +419,24 @@ async function aprovar(id, aprovado_via) {
   if (!existing) return { erro: ['Orçamento não encontrado'] };
   if (existing.status !== 'enviado') return { erro: ['Orçamento precisa estar com status "enviado" para ser aprovado'] };
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  const updates = ['status = $1', 'updated_at = NOW()', 'aprovado_em = NOW()'];
+  const params = ['aprovado'];
+  if (aprovado_via) { params.push(aprovado_via); updates.push(`aprovado_via = $${params.length}`); }
+  params.push(id);
 
-    const updates = ['status = $1', 'updated_at = NOW()', 'aprovado_em = NOW()'];
-    const params = ['aprovado'];
-    if (aprovado_via) {
-      params.push(aprovado_via);
-      updates.push(`aprovado_via = $${params.length}`);
-    }
-    params.push(id);
-    const uR = await client.query(
-      `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
-      params
-    );
-    const orcamento = uR.rows[0];
+  const r = await db.query(
+    `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  const orcamento = r.rows[0];
 
-    const ordens = [];
-    for (const item of existing.itens) {
-      const statusInicial = item.tem_arte ? 'impressao' : 'aguardando';
-      const osR = await client.query(
-        `INSERT INTO ordens_servico (orcamento_id, orcamento_item_id, status)
-         VALUES ($1, $2, $3)
-         RETURNING *`,
-        [id, item.id, statusInicial]
-      );
-      ordens.push(osR.rows[0]);
-    }
+  // Sync pedido → aprovado (OS será criada manualmente pelo gestor)
+  _syncPedidoStatus(id, 'aprovado');
+  _notifyVendedorResposta(id, 'aprovado');
 
-    await client.query('COMMIT');
+  if (global.io) global.io.emit('orcamento_aprovado', { orcamento_id: id });
 
-    if (global.io) {
-      global.io.emit('orcamento_aprovado', { orcamento_id: id });
-    }
-
-    return { orcamento, ordens_servico: ordens };
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
-  }
+  return { orcamento };
 }
 
 async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } = {}) {
@@ -338,6 +586,8 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
         [p1.boletoId, p1.linhaDigitavel, p1.pdfUrl, p1.vencimento, id]
       );
 
+      _syncPedidoStatus(id, 'enviado'); // reutiliza map: aguardando_pagamento via campo direto abaixo
+      await db.query(`UPDATE orders SET status='aguardando_pagamento', updated_at=NOW() WHERE orcamento_id=$1 AND status NOT IN ('pago','cancelado')`, [id]);
       return { tipo: 'boleto', parcelas, intervaloDias, boletos: boletosGerados, valor };
     } else if (tipo === 'pix') {
       const txid = crypto.randomBytes(16).toString('hex').slice(0, 32);
@@ -346,18 +596,19 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
         valor,
         nomeDevedor: nomeSacado,
         cpfCnpjDevedor: cpfCnpj,
-        solicitacao: `${seuNumero} - LKL Gráfica`,
+        solicitacao: `${seuNumero} - Gráfica LKL`,
       });
       await db.query(
         `UPDATE orcamentos SET tipo_cobranca='pix', status_pagamento='aguardando_pagamento',
          pix_txid=$1, pix_copia_cola=$2, updated_at=NOW() WHERE id=$3`,
         [pix.txid, pix.pixCopiaECola, id]
       );
+      await db.query(`UPDATE orders SET status='aguardando_pagamento', updated_at=NOW() WHERE orcamento_id=$1 AND status NOT IN ('pago','cancelado')`, [id]);
       return { tipo: 'pix', txid: pix.txid, pixCopiaECola: pix.pixCopiaECola, valor };
     } else {
       // link_mp — Mercado Pago checkout
       const pref = await mercadopago.criarPreference({
-        titulo: `Orçamento #${orc.numero} — LKL Gráfica`,
+        titulo: `Orçamento #${orc.numero} — Gráfica LKL`,
         valor,
         orcamentoNumero: orc.numero,
         clienteNome: nomeSacado,
@@ -369,6 +620,7 @@ async function cobrar(id, tipo, dataVencimento, parcelas = 1, intervaloDias = 30
          mp_preference_id=$1, mp_checkout_url=$2, updated_at=NOW() WHERE id=$3`,
         [pref.preferenceId, pref.checkoutUrl, id]
       );
+      await db.query(`UPDATE orders SET status='aguardando_pagamento', updated_at=NOW() WHERE orcamento_id=$1 AND status NOT IN ('pago','cancelado')`, [id]);
       return { tipo: 'link_mp', preferenceId: pref.preferenceId, checkoutUrl: pref.checkoutUrl, valor };
     }
   } catch (e) {
@@ -441,6 +693,12 @@ async function confirmarPagamento({ tipo, txid, boletoId }) {
   } finally {
     client.release();
   }
+
+  // Sync pedido → pago
+  await db.query(
+    `UPDATE orders SET status='pago', updated_at=NOW() WHERE orcamento_id=$1 AND status NOT IN ('cancelado')`,
+    [orcId]
+  );
 
   return { confirmado: true, orcamento_id: orcId };
 }
@@ -539,4 +797,4 @@ async function cancelarBoletoDireto(orcamentoId) {
   return { cancelado: true, boleto_id: orc.boleto_id };
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, aprovar, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp };
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp };

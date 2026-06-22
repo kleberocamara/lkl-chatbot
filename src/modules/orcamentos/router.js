@@ -6,12 +6,38 @@ const whatsapp = require('../../services/whatsapp');
 
 const router = express.Router();
 
+// GET /resposta?token=xxx&r=aprovado|reprovado — rota PÚBLICA (link do e-mail)
+router.get('/resposta', async (req, res) => {
+  const { token, r } = req.query;
+  if (!token || !['aprovado', 'reprovado'].includes(r)) {
+    return res.status(400).send('Link inválido.');
+  }
+  const result = await service.processarRespostaToken(token, r);
+  if (result.erro) {
+    return res.send(`<html><body style="font-family:Arial;text-align:center;padding:60px">
+      <h2>⚠️ ${result.erro[0]}</h2>
+      <p>Entre em contato com a Gráfica LKL se precisar de ajuda.</p>
+    </body></html>`);
+  }
+  const msg = r === 'aprovado'
+    ? '✅ Orçamento aprovado! Nossa equipe entrará em contato em breve.'
+    : '❌ Orçamento reprovado. Entre em contato conosco se desejar renegociar.';
+  res.send(`<html><body style="font-family:Arial;text-align:center;padding:60px;background:#f5f5f5">
+    <div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+      <img src="https://app.graficalkl.com.br/logo.png" alt="Gráfica LKL" style="height:60px;margin-bottom:24px" onerror="this.style.display='none'">
+      <h2 style="color:${r === 'aprovado' ? '#2e7d32' : '#c62828'}">${msg}</h2>
+      <p style="color:#555">Obrigado por utilizar a Gráfica LKL!</p>
+    </div>
+  </body></html>`);
+});
+
 // POST / — create orçamento (any authenticated user)
 router.post('/', async (req, res) => {
   try {
-    const { cliente_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, itens } = req.body;
+    const { cliente_id, pedido_id, condicao_pagamento, validade_dias, prazo_entrega, observacao, itens } = req.body;
     const result = await service.criar({
       cliente_id,
+      pedido_id: pedido_id || null,
       vendedor_id: req.user.id,
       condicao_pagamento,
       validade_dias,
@@ -75,28 +101,15 @@ router.patch('/:id/precificar', requireRole('admin'), async (req, res) => {
   }
 });
 
-// PATCH /:id/enviar — admin only
-router.patch('/:id/enviar', requireRole('admin'), async (req, res) => {
+// PATCH /:id/concluir — analista, gestor, admin
+// Marca como concluído e dispara envio imediato (WA + e-mail)
+router.patch('/:id/concluir', requireRole('admin', 'gestor', 'analista', 'atendente'), async (req, res) => {
   try {
-    const result = await service.mudarStatus(req.params.id, 'enviado');
+    const result = await service.concluir(req.params.id, req.user.id);
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrado'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
     }
-    // WhatsApp notification (fire-and-forget)
-    service.buscarPorId(req.params.id).then(orc => {
-      if (orc?.cliente_celular) {
-        const msg =
-          `Olá! A LKL Gráfica enviou uma proposta para você.\n\n` +
-          `*Proposta/Orçamento #${orc.numero}*\n` +
-          `Validade: ${orc.validade_dias || 35} dias\n` +
-          `Prazo de entrega: ${orc.prazo_entrega || 'A combinar'}\n\n` +
-          `Para aprovar, responda *SIM* ou entre em contato conosco.`;
-        whatsapp.sendMessage(orc.cliente_celular, msg).catch(e =>
-          console.warn('[WA] Falha ao notificar cliente:', e.message)
-        );
-      }
-    }).catch(() => {});
     res.json(result);
   } catch (err) {
     console.error(err);
@@ -104,11 +117,11 @@ router.patch('/:id/enviar', requireRole('admin'), async (req, res) => {
   }
 });
 
-// PATCH /:id/aprovar — admin only
-router.patch('/:id/aprovar', requireRole('admin'), async (req, res) => {
+// PATCH /:id/aprovar — atendente, analista, gestor, admin (aprovação manual)
+router.patch('/:id/aprovar', requireRole('admin', 'gestor', 'analista', 'atendente'), async (req, res) => {
   try {
     const { aprovado_via } = req.body || {};
-    const result = await service.aprovar(req.params.id, aprovado_via);
+    const result = await service.aprovar(req.params.id, aprovado_via || 'manual');
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrado'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
@@ -120,8 +133,24 @@ router.patch('/:id/aprovar', requireRole('admin'), async (req, res) => {
   }
 });
 
-// PATCH /:id/cancelar — admin only
-router.patch('/:id/cancelar', requireRole('admin'), async (req, res) => {
+// PATCH /:id/reprovar — atendente, analista, gestor, admin
+router.patch('/:id/reprovar', requireRole('admin', 'gestor', 'analista', 'atendente'), async (req, res) => {
+  try {
+    const { reprovado_via } = req.body || {};
+    const result = await service.reprovar(req.params.id, reprovado_via || 'manual');
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrado'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /:id/cancelar — gestor, admin
+router.patch('/:id/cancelar', requireRole('admin', 'gestor'), async (req, res) => {
   try {
     const result = await service.mudarStatus(req.params.id, 'cancelado');
     if (result.erro) {
@@ -217,7 +246,7 @@ router.get('/:id/boleto/:parcela/pdf', requireRole('admin'), async (req, res) =>
 
     const pdfRes = await axios.get(`${BASE_URL}/v1/bank_slips/${boleto_id}/pdf`, {
       httpsAgent: agent,
-      headers: { Authorization: `Bearer ${token}`, 'partner-software-name': 'LKL Grafica', 'partner-software-version': '1.0.0' },
+      headers: { Authorization: `Bearer ${token}`, 'partner-software-name': 'Grafica LKL', 'partner-software-version': '1.0.0' },
       responseType: 'arraybuffer',
     });
 
@@ -255,7 +284,7 @@ router.get('/:id/boleto/pdf', requireRole('admin'), async (req, res) => {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'partner-software-name': 'LKL Grafica',
+        'partner-software-name': 'Grafica LKL',
         'partner-software-version': '1.0.0',
       },
       responseType: 'arraybuffer',
@@ -286,14 +315,14 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
       if (!orc?.cliente_celular) return;
       let msg;
       if (result.tipo === 'boleto') {
-        msg = `Olá! Segue o boleto referente ao *ORC #${orc.numero}* — LKL Gráfica.\n\n` +
+        msg = `Olá! Segue o boleto referente ao *ORC #${orc.numero}* — Gráfica LKL.\n\n` +
               `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n` +
               `📅 *Vencimento:* ${new Date(result.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
               `*Linha digitável:*\n${result.linhaDigitavel}\n\n` +
               (result.pdfUrl ? `PDF: ${result.pdfUrl}\n\n` : '') +
               `Em caso de dúvidas, entre em contato conosco. Obrigado! 😊`;
       } else {
-        msg = `Olá! Segue a cobrança PIX referente ao *ORC #${orc.numero}* — LKL Gráfica.\n\n` +
+        msg = `Olá! Segue a cobrança PIX referente ao *ORC #${orc.numero}* — Gráfica LKL.\n\n` +
               `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n\n` +
               `*PIX Copia e Cola:*\n${result.pixCopiaECola}\n\n` +
               `Cole o código no app do seu banco para pagar. Obrigado! 😊`;

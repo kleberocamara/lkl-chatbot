@@ -174,6 +174,37 @@ function gerarOrcamentoPDF(orc) {
       y += 15;
     }
 
+    // ── APROVAÇÃO ONLINE ───────────────────────────────────────────────────
+    if (orc.token_aprovacao) {
+      const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
+      const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=aprovado`;
+      const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=reprovado`;
+
+      y += 18;
+      if (y + 60 > 800) { doc.addPage({ size: 'A4', margin: 0 }); y = 40; }
+
+      doc.fontSize(9).fillColor('#555').font('Helvetica-Bold')
+         .text('Aprove ou reprove este orçamento com um clique:', L, y);
+      y += 16;
+
+      const btnW = (CW - 16) / 2;
+      const btnH = 30;
+
+      doc.roundedRect(L, y, btnW, btnH, 6).fill('#2e7d32');
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11)
+         .text('APROVAR ORCAMENTO', L, y + 9, { width: btnW, align: 'center', link: urlAprovar });
+
+      const bx2 = L + btnW + 16;
+      doc.roundedRect(bx2, y, btnW, btnH, 6).fill('#c62828');
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11)
+         .text('REPROVAR', bx2, y + 9, { width: btnW, align: 'center', link: urlReprovar });
+
+      y += btnH + 6;
+      doc.fontSize(7).fillColor('#999').font('Helvetica')
+         .text('Ao clicar, sua resposta sera registrada automaticamente no sistema da Grafica LKL.', L, y, { width: CW, align: 'center' });
+      y += 4;
+    }
+
     // ── ASSINATURAS ────────────────────────────────────────────────────────
     y += 20;
     if (y > 720) { doc.addPage({ size: 'A4', margin: 0 }); y = 40; }

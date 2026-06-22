@@ -14,6 +14,26 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Busca cliente pelo celular ou pelo WhatsApp (contacts.phone)
+router.get('/por-telefone', async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
+  try {
+    const db = require('../../db');
+    const digits = phone.replace(/\D/g, '');
+    const r = await db.query(
+      `SELECT cl.id, cl.nome, cl.celular, cl.email, ct.phone AS whatsapp
+       FROM clientes_lkl cl
+       LEFT JOIN contacts ct ON ct.id = cl.contact_id
+       WHERE REGEXP_REPLACE(cl.celular, '[^0-9]', '', 'g') LIKE $1
+          OR REGEXP_REPLACE(ct.phone,   '[^0-9]', '', 'g') LIKE $1
+       LIMIT 5`,
+      [`%${digits}`]
+    );
+    res.json(r.rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 router.get('/busca', async (req, res) => {
   if (!req.query.q) return res.status(400).json({ error: 'Parâmetro q é obrigatório' });
   try {

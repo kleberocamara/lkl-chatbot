@@ -60,10 +60,10 @@ function calcScheduledAt(sentAtUtc, attempt) {
 }
 
 const FOLLOW_UP_MESSAGES = [
-  (nome) => `Olá${nome ? ' ' + nome : ''}! 😊 Passando para verificar se recebeu nosso orçamento da LKL Gráfica. Ficou alguma dúvida? Estamos à disposição!`,
+  (nome) => `Olá${nome ? ' ' + nome : ''}! 😊 Passando para verificar se recebeu nosso orçamento da Gráfica LKL. Ficou alguma dúvida? Estamos à disposição!`,
   (nome) => `Oi${nome ? ' ' + nome : ''}! Gostaria de saber se você teve a chance de analisar o orçamento que enviamos. Podemos ajudar com alguma informação adicional? 🙂`,
   (nome) => `Olá${nome ? ' ' + nome : ''}! Nossa equipe está disponível caso queira ajustar algum detalhe do orçamento ou tirar dúvidas. É só chamar! 😊`,
-  (nome) => `Oi${nome ? ' ' + nome : ''}! Passando mais uma vez pela LKL Gráfica — seu orçamento ainda está disponível. Qualquer dúvida, estamos aqui!`,
+  (nome) => `Oi${nome ? ' ' + nome : ''}! Passando mais uma vez pela Gráfica LKL — seu orçamento ainda está disponível. Qualquer dúvida, estamos aqui!`,
   (nome) => `Olá${nome ? ' ' + nome : ''}! Esta é nossa última mensagem sobre o orçamento enviado. Quando quiser retomar, basta nos chamar. Obrigado! 😊`,
 ];
 

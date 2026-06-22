@@ -34,4 +34,12 @@ router.put('/:id', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+router.patch('/:id', async (req, res) => {
+  try {
+    const result = await service.atualizar(req.params.id, req.body);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.json(result.fornecedor);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 module.exports = router;

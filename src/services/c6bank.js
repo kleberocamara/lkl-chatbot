@@ -74,7 +74,7 @@ function authHeaders(token) {
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
-    'partner-software-name': 'LKL Grafica',
+    'partner-software-name': 'Grafica LKL',
     'partner-software-version': '1.0.0',
   };
 }

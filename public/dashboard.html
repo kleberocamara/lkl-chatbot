@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LKL Gráfica — Painel</title>
+<title>Gráfica LKL — Painel</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -237,7 +237,7 @@
 
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <img src="/logo.png" alt="LKL Gráfica">
+    <img src="/logo.png" alt="Gráfica LKL">
     <span>Painel de Atendimento</span>
   </div>
   <nav id="sidebar-nav"></nav>
@@ -395,45 +395,51 @@
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <h1>Pedidos</h1>
-        <p>Solicitações capturadas pelo chatbot</p>
+        <p>Entrada unificada: chatbot, vendedor, balcão</p>
       </div>
-      <div style="display:flex;gap:10px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="abrirNovoPedido()">+ Novo Pedido</button>
         <button class="btn btn-outline" onclick="loadOrders()">🔄 Atualizar</button>
-        <button class="btn btn-primary" onclick="exportCSV()">⬇️ Exportar CSV</button>
-        <button class="btn btn-outline" onclick="copyShareLink()">🔗 Compartilhar</button>
+        <button class="btn btn-outline" onclick="exportCSV()">⬇️ CSV</button>
       </div>
     </div>
-    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
-      <input type="text" id="orders-search" placeholder="🔍 Buscar por #pedido, nome ou telefone..."
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="orders-search" placeholder="🔍 Buscar por #, cliente ou produto..."
         oninput="filtrarPedidos()"
-        style="flex:1;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;max-width:400px">
+        style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;max-width:340px">
+      <select id="orders-filter-status" onchange="loadOrders()"
+        style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <option value="">Todos os status</option>
+        <option value="novo">Novo</option>
+        <option value="em_orcamento">Em orçamento</option>
+        <option value="aguardando_aprovacao">Aguard. aprovação</option>
+        <option value="aprovado">Aprovado</option>
+        <option value="em_producao">Em produção</option>
+        <option value="concluido">Concluído</option>
+        <option value="entregue">Entregue</option>
+        <option value="aguardando_pagamento">Aguard. pagamento</option>
+        <option value="pago">Pago</option>
+        <option value="reprovado">Reprovado</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
       <span id="orders-count" style="font-size:12px;color:#999"></span>
     </div>
     <div class="card" style="padding:0;overflow:auto">
       <table id="ordersTable" style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr style="background:#f5f7ff;text-align:left">
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">#Pedido</th>
+            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">#</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Status</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Alterar Status</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Data</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Nome</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Telefone</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Contato</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">E-mail</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Serviço</th>
+            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Cliente</th>
+            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Canal</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Produto</th>
             <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Qtd</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Tamanho</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Material</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Arte</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Prazo</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Entrega</th>
-            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff;white-space:nowrap">Observações</th>
+            <th style="padding:12px 10px;border-bottom:2px solid #e0e6ff">Observações</th>
           </tr>
         </thead>
         <tbody id="ordersBody">
-          <tr><td colspan="13" style="padding:24px;text-align:center;color:#aaa">Carregando...</td></tr>
+          <tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">Carregando...</td></tr>
         </tbody>
       </table>
     </div>
@@ -479,6 +485,7 @@
         <button class="btn btn-outline" onclick="loadOrcamentosMain()">🔄</button>
       </div>
     </div>
+    <div id="orc-status-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
     <div id="orc-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
   </div>
 
@@ -567,9 +574,10 @@
         <button class="btn btn-primary" onclick="abrirModalClienteMain()">+ Novo</button>
       </div>
     </div>
-    <div class="card" style="padding:0;overflow-x:auto">
+    <div class="card" style="padding:0;overflow:auto">
       <div id="list-clientes-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
     </div>
+    <div id="pag-clientes" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
   </div>
 
   <!-- FORNECEDORES -->
@@ -583,8 +591,53 @@
         <button class="btn btn-primary" onclick="abrirModalFornecedorMain()">+ Novo</button>
       </div>
     </div>
-    <div class="card" style="padding:0;overflow-x:auto">
+    <div class="card" style="padding:0;overflow:auto">
       <div id="list-forn-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+    <div id="pag-forn" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
+  </div>
+
+  <!-- MATERIAIS -->
+  <div class="page" id="page-materiais">
+    <div class="page-header">
+      <h1>📦 Materiais</h1>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" id="busca-mat-main" placeholder="Buscar por nome..."
+          oninput="debouncedLoadMateriais()"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="abrirNovoMaterial()">+ Novo</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <div id="list-mat-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+    <div id="pag-mat" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
+  </div>
+
+  <!-- FUNCIONÁRIOS -->
+  <div class="page" id="page-funcionarios">
+    <div class="page-header">
+      <h1>🧑 Funcionários</h1>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-primary" onclick="abrirNovoFuncionario()">+ Novo</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <div id="list-func-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+    <div id="pag-func" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
+  </div>
+
+  <!-- MODAL EDIÇÃO CADASTROS -->
+  <div id="modal-cadastro" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
+    <div style="background:white;border-radius:12px;max-width:560px;margin:40px auto;padding:28px;position:relative">
+      <button onclick="fecharModalCadastro()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+      <h3 id="modal-cadastro-title" style="margin-bottom:20px">Editar</h3>
+      <div id="modal-cadastro-body"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+        <button class="btn btn-outline" onclick="fecharModalCadastro()">Cancelar</button>
+        <button class="btn btn-primary" id="modal-cadastro-save">Salvar</button>
+      </div>
     </div>
   </div>
 
@@ -603,9 +656,12 @@
           <input id="nu2-email" type="email" placeholder="email@lkl.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Senha</label>
           <input id="nu2-password" type="password" placeholder="Senha inicial" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Celular</label>
+          <input id="nu2-celular" type="tel" placeholder="(21) 99999-9999" oninput="this.value=mascaraCelular(this.value)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Perfil</label>
           <select id="nu2-role" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
             <option value="atendente">Atendente</option>
+            <option value="vendedor">Vendedor</option>
             <option value="analista">Analista</option>
             <option value="operador">Operador</option>
             <option value="financeiro">Financeiro</option>
@@ -620,10 +676,10 @@
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="data-table">
         <thead><tr>
-          <th>Matrícula</th><th>Nome</th><th>E-mail</th>
+          <th>Matrícula</th><th>Nome</th><th>E-mail</th><th>Celular</th>
           <th>Perfil</th><th>Setor</th><th>Status</th><th>Último Login</th><th>Ações</th>
         </tr></thead>
-        <tbody id="users2-body"><tr><td colspan="8" style="text-align:center;padding:32px;color:#aaa">Carregando...</td></tr></tbody>
+        <tbody id="users2-body"><tr><td colspan="9" style="text-align:center;padding:32px;color:#aaa">Carregando...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -673,6 +729,8 @@ function buildSidebar(role) {
     { section: 'Cadastros', roles: ['admin','gestor','analista','atendente'], children: [
       { id: 'clientes',     label: 'Clientes',     icon: '👥', roles: ['admin','gestor','analista','atendente'] },
       { id: 'fornecedores', label: 'Fornecedores', icon: '🏢', roles: ['admin','gestor','analista','atendente'] },
+      { id: 'materiais',    label: 'Materiais',    icon: '📦', roles: ['admin','gestor','analista'] },
+      { id: 'funcionarios', label: 'Funcionários', icon: '🧑', roles: ['admin','gestor'] },
       { id: 'usuarios',     label: 'Usuários',     icon: '👤', roles: ['admin','gestor','analista','atendente'] },
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
@@ -770,7 +828,8 @@ async function api(url, options = {}) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('API error:', res.status, err);
-      return { error: err.error || 'Erro desconhecido', status: res.status };
+      const msg = err.error || (Array.isArray(err.errors) ? err.errors.join(', ') : null) || (Array.isArray(err.erro) ? err.erro.join(', ') : err.erro) || 'Erro desconhecido';
+      return { error: msg, errors: err.errors, status: res.status };
     }
     return res.json();
   } catch(e) { console.error('API fetch error:', e); return null; }
@@ -786,8 +845,6 @@ function showToast(msg) {
 function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
-const debouncedLoadClientes     = debounce(() => loadClientesMain(), 400);
-const debouncedLoadFornecedores = debounce(() => loadFornecedoresMain(), 400);
 
 function showSubPage(id) {
   ['cp-lista','cp-lote','cp-historico'].forEach(s => {
@@ -816,8 +873,10 @@ function showPage(page, el) {
     os:           loadOsMain,
     arte_final:   loadArteFinalMain,
     contas_pagar: () => { showSubPage('cp-lista'); },
-    clientes:     loadClientesMain,
-    fornecedores: loadFornecedoresMain,
+    clientes:     () => loadClientesMain(1),
+    fornecedores: () => loadFornecedoresMain(1),
+    materiais:    () => loadMateriaisMain(1),
+    funcionarios: () => loadFuncionariosMain(1),
     usuarios:     loadUsuarios2,
   };
   if (loaders[page]) loaders[page]();
@@ -825,18 +884,110 @@ function showPage(page, el) {
 
 // ── ORÇAMENTOS (na nova página) ────────────────────────────────────────────────
 let orcamentosMainData = [];
+let orcStatusFilter = 'em_orcamento';
+
+const ORC_FILTER_CHIPS = [
+  { key: 'em_orcamento', label: 'Em Orçamento' },
+  { key: 'concluido',    label: 'Concluído' },
+  { key: 'enviado',      label: 'Enviado' },
+  { key: 'aprovado',     label: 'Aprovado' },
+  { key: 'reprovado',    label: 'Reprovado' },
+  { key: 'todos',        label: 'Todos' },
+];
+
+function renderOrcChips() {
+  const bar = document.getElementById('orc-status-chips');
+  if (!bar) return;
+  bar.innerHTML = ORC_FILTER_CHIPS.map(c => {
+    const n = c.key === 'todos'
+      ? orcamentosMainData.length
+      : orcamentosMainData.filter(o => o.status === c.key).length;
+    const active = orcStatusFilter === c.key;
+    return `<button onclick="setOrcStatusFilter('${c.key}')"
+      style="padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
+      border:1px solid ${active ? '#1a237e' : 'var(--border)'};
+      background:${active ? '#1a237e' : '#fff'};color:${active ? '#fff' : '#555'}">
+      ${c.label} <span style="opacity:.7">(${n})</span></button>`;
+  }).join('');
+}
+
+function setOrcStatusFilter(key) {
+  orcStatusFilter = key;
+  renderOrcChips();
+  aplicarFiltrosOrc();
+}
+
+function aplicarFiltrosOrc() {
+  const q = (document.getElementById('orc-search')?.value || '').toLowerCase().trim();
+  let data = orcamentosMainData;
+  if (orcStatusFilter !== 'todos') data = data.filter(o => o.status === orcStatusFilter);
+  if (q) data = data.filter(o =>
+    String(o.numero||'').includes(q) ||
+    (o.cliente_nome||'').toLowerCase().includes(q) ||
+    (o.status||'').includes(q)
+  );
+  renderOrcamentoCards(data);
+}
 
 const ORC_STATUS = {
-  rascunho:           { label:'Rascunho',            bg:'#fff9c4', col:'#f57f17' },
-  pendente_aprovacao: { label:'Pendente aprovação',  bg:'#fff3e0', col:'#e65100' },
-  enviado:            { label:'Enviado',              bg:'#e3f2fd', col:'#0277bd' },
+  // legado congelado
+  rascunho:           { label:'Rascunho (legado)',    bg:'#f5f5f5', col:'#999' },
+  aprovado_interno:   { label:'Aprovado interno',     bg:'#f5f5f5', col:'#999' },
+  pendente_aprovacao: { label:'Pendente aprovação',   bg:'#f5f5f5', col:'#999' },
+  // fluxo novo
+  em_orcamento:       { label:'Em orçamento',         bg:'#fff9c4', col:'#f57f17' },
+  em_revisao:         { label:'Em revisão',           bg:'#fff3e0', col:'#e65100' },
+  concluido:          { label:'Concluído',            bg:'#e8f5e9', col:'#388e3c' },
+  enviado:            { label:'Enviado ao cliente',   bg:'#e3f2fd', col:'#0277bd' },
   aprovado:           { label:'Aprovado',             bg:'#e8f5e9', col:'#2e7d32' },
+  reprovado:          { label:'Reprovado',            bg:'#fce4ec', col:'#ad1457' },
   cancelado:          { label:'Cancelado',            bg:'#fce4ec', col:'#c62828' },
 };
 
 function orcBadge(s) {
   const st = ORC_STATUS[s] || { label: s||'—', bg:'#f5f5f5', col:'#555' };
   return `<span style="background:${st.bg};color:${st.col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${st.label}</span>`;
+}
+
+function orcAcoesBtns(o) {
+  const s = o.status;
+  const btn = (label, fn, bg) =>
+    `<button onclick="event.stopPropagation();${fn}" style="background:${bg};border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:white;cursor:pointer">${label}</button>`;
+
+  if (s === 'em_orcamento' || s === 'em_revisao') {
+    return btn('✅ Concluir', `orcConcluir('${o.id}')`, '#388e3c');
+  }
+  if (s === 'enviado') {
+    return [
+      btn('👍 Aprovar', `orcAprovar('${o.id}')`, '#2e7d32'),
+      btn('👎 Reprovar', `orcReprovar('${o.id}')`, '#ad1457'),
+    ].join(' ');
+  }
+  return '';
+}
+
+async function orcConcluir(id) {
+  if (!confirm('Marcar orçamento como concluído e enviar ao cliente agora?')) return;
+  const res = await api(`/api/v2/orcamentos/${id}/concluir`, { method: 'PATCH' });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error), 'error'); return; }
+  showToast('✅ Orçamento enviado ao cliente!');
+  loadOrcamentosMain();
+}
+
+async function orcAprovar(id) {
+  if (!confirm('Confirmar aprovação manual deste orçamento?')) return;
+  const res = await api(`/api/v2/orcamentos/${id}/aprovar`, { method: 'PATCH', body: JSON.stringify({ aprovado_via: 'manual' }) });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error), 'error'); return; }
+  showToast('✅ Orçamento aprovado!');
+  loadOrcamentosMain();
+}
+
+async function orcReprovar(id) {
+  if (!confirm('Confirmar reprovação deste orçamento?')) return;
+  const res = await api(`/api/v2/orcamentos/${id}/reprovar`, { method: 'PATCH', body: JSON.stringify({ reprovado_via: 'manual' }) });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error), 'error'); return; }
+  showToast('❌ Orçamento reprovado.');
+  loadOrcamentosMain();
 }
 
 function renderOrcamentoCards(data) {
@@ -859,7 +1010,10 @@ function renderOrcamentoCards(data) {
           </div>
           <div style="font-size:12px;color:#888;margin-top:3px">${dt} ${o.status_pagamento ? '· Pgto: '+o.status_pagamento : ''}</div>
         </div>
-        <div style="font-size:16px;font-weight:700;color:#1a237e;white-space:nowrap">${val}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:16px;font-weight:700;color:#1a237e;white-space:nowrap">${val}</div>
+          ${orcAcoesBtns(o)}
+        </div>
       </div>
       <div id="orc-items-${o.id}" style="display:none;border-top:1px solid #e8eaf6;background:#fafbff;padding:0 18px 14px"></div>
     </div>`;
@@ -884,27 +1038,41 @@ async function toggleOrcItems(id) {
   renderOrcItens(id, res.itens || []);
 }
 
+const STATUS_TRAVADO = ['aprovado', 'reprovado', 'cancelado', 'enviado'];
+
+function orcTravado(orcId) {
+  const orc = orcamentosMainData.find(o => o.id === orcId);
+  return orc ? STATUS_TRAVADO.includes(orc.status) : false;
+}
+
 function renderOrcItens(orcId, itens) {
   const panel = document.getElementById(`orc-items-${orcId}`);
+  const travado = orcTravado(orcId);
   if (!itens.length) { panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Sem itens cadastrados</p>'; return; }
+  const aviso = travado
+    ? `<div style="background:#fff3e0;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:12px;color:#e65100">
+         🔒 Orçamento aprovado — itens bloqueados para edição
+       </div>` : '';
   panel.innerHTML = `
     <div style="margin-top:14px">
-      <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin-bottom:8px">PRODUTOS / SERVIÇOS</div>
+      ${aviso}
+      <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:12px 0 8px">PRODUTOS / SERVIÇOS</div>
       ${itens.map((it, i) => `
       <div id="orc-item-row-${it.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:8px;margin-bottom:4px;background:${i%2===0?'#fff':'#f0f2ff'}">
         <div style="width:90px;font-size:12px;color:#666;flex-shrink:0">${it.quantidade} Unidade(s)</div>
         <div style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(it.descricao)}">${escHtml(it.descricao)}</div>
         <div style="width:110px;text-align:right;font-size:13px;color:#555;flex-shrink:0">a R$ ${parseFloat(it.valor_unitario||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
         <div style="width:130px;text-align:right;font-weight:700;font-size:13px;flex-shrink:0">Total R$ ${parseFloat(it.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        ${travado ? '<div style="width:62px;flex-shrink:0"></div>' : `
         <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}',${it.quantidade},${it.valor_unitario||0})"
           style="background:none;border:none;cursor:pointer;font-size:18px;color:#5c6bc0;padding:2px 4px;flex-shrink:0" title="Editar">✏️</button>
         <button onclick="excluirItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}')"
-          style="background:#e53935;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:white;font-size:16px;line-height:1;flex-shrink:0" title="Excluir">−</button>
+          style="background:#e53935;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:white;font-size:16px;line-height:1;flex-shrink:0" title="Excluir">−</button>`}
       </div>`).join('')}
-      <div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
+      ${travado ? '' : `<div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
         <button onclick="abrirAdicionarItemOrc('${orcId}')"
           style="background:#43a047;border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;color:white;font-size:20px;line-height:1" title="Adicionar item">+</button>
-      </div>
+      </div>`}
     </div>`;
 }
 
@@ -988,13 +1156,7 @@ async function adicionarItemOrc(orcId) {
 }
 
 function filtrarOrcamentos() {
-  const q = (document.getElementById('orc-search')?.value || '').toLowerCase().trim();
-  if (!q) { renderOrcamentoCards(orcamentosMainData); return; }
-  renderOrcamentoCards(orcamentosMainData.filter(o =>
-    String(o.numero||'').includes(q) ||
-    (o.cliente_nome||'').toLowerCase().includes(q) ||
-    (o.status||'').includes(q)
-  ));
+  aplicarFiltrosOrc();
 }
 
 async function loadOrcamentosMain() {
@@ -1005,7 +1167,8 @@ async function loadOrcamentosMain() {
   orcamentosMainData = res.data || res;
   const search = document.getElementById('orc-search');
   if (search) search.value = '';
-  renderOrcamentoCards(orcamentosMainData);
+  renderOrcChips();
+  aplicarFiltrosOrc();
 }
 
 // ── OS (na nova página) ────────────────────────────────────────────────────────
@@ -1090,55 +1253,465 @@ async function loadHistoricoLotes() {
     </tr>`).join('')}</tbody></table></div>`;
 }
 
+// ── HELPERS PAGINAÇÃO ───────────────────────────────────────────────────────────
+function renderPagControls(containerId, page, total, limit, loadFn) {
+  const totalPages = Math.ceil(total / limit) || 1;
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const btn = (label, p, disabled) =>
+    `<button onclick="${loadFn}(${p})" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:${p===page?'var(--primary)':'white'};color:${p===page?'white':'inherit'};cursor:${disabled?'default':'pointer'};opacity:${disabled?.4:1}" ${disabled?'disabled':''}>${label}</button>`;
+  const info = `<span style="color:#666">${(page-1)*limit+1}–${Math.min(page*limit,total)} de ${total}</span>`;
+  el.innerHTML = btn('«',1,page===1) + btn('‹',page-1,page===1) + info + btn('›',page+1,page===totalPages) + btn('»',totalPages,page===totalPages);
+}
+
 // ── CLIENTES ───────────────────────────────────────────────────────────────────
-async function loadClientesMain() {
+let _clientePag = 1;
+const debouncedLoadClientes = debounce(() => loadClientesMain(1), 400);
+async function loadClientesMain(page = _clientePag) {
+  _clientePag = page;
   const el = document.getElementById('list-clientes-main');
   const q = document.getElementById('busca-clientes-main')?.value || '';
-  const data = await api(`/api/v2/clientes?q=${encodeURIComponent(q)}&limit=50`);
-  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro</p>'; return; }
-  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum cliente</p>'; return; }
+  const data = await api(`/api/v2/clientes?q=${encodeURIComponent(q)}&page=${page}&limit=20`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const clientes = data.clientes || [];
+  if (!clientes.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum cliente</p>'; document.getElementById('pag-clientes').innerHTML=''; return; }
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>Nome</th><th>CPF/CNPJ</th><th>Celular</th><th>E-mail</th><th>Cidade</th><th>Status</th></tr></thead>
-    <tbody>${data.map(c => `<tr>
+    <thead><tr><th>Nome</th><th>CPF/CNPJ</th><th>Celular</th><th>E-mail</th><th>Cidade</th><th>Status</th><th>Ação</th></tr></thead>
+    <tbody>${clientes.map(c => `<tr>
       <td style="font-weight:600">${c.nome||'—'}</td>
       <td style="font-family:monospace;font-size:12px">${c.cpf_cnpj||'—'}</td>
       <td>${c.celular||c.telefone||'—'}</td>
       <td style="font-size:12px">${c.email||'—'}</td>
-      <td>${c.cidade||'—'}</td>
+      <td>${c.cidade||'—'} ${c.uf?'/'+c.uf:''}</td>
       <td><span style="background:${c.status==='ativo'?'#e8f5e9':'#fce4ec'};color:${c.status==='ativo'?'#2e7d32':'#c62828'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${c.status||'—'}</span></td>
+      <td><button onclick="editarCliente(${JSON.stringify(c).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
     </tr>`).join('')}</tbody></table>`;
+  renderPagControls('pag-clientes', page, data.total, 20, 'loadClientesMain');
 }
-function abrirModalClienteMain() { showToast('Use a seção Cadastros no Admin para criar clientes'); }
+function _formCliente(c={}) {
+  const INP = 'width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box';
+  const sel = (id,val,opts) => `<select id="${id}" style="${INP}">${opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o==='PF'?'Pessoa Física':o==='PJ'?'Pessoa Jurídica':o}</option>`).join('')}</select>`;
+  const inp = (id,val='',ph='',extra='') => `<input id="${id}" value="${val||''}" placeholder="${ph}" style="${INP}" ${extra}>`;
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>${sel('c-tipo',c.tipo_pessoa||'PJ',['PF','PJ'])}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">CPF/CNPJ</label>${inp('c-cpfcnpj',c.cpf_cnpj,'Somente números','onblur="validarCampoCPFCNPJ(this)"')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nome / Razão Social *</label>${inp('c-nome',c.nome)}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Fantasia</label>${inp('c-fantasia',c.fantasia)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">E-mail</label>${inp('c-email',c.email,'','onblur="validarCampoEmail(this)"')}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Celular</label>${inp('c-celular',c.celular,'(21) 99999-9999','onblur="validarCampoCelular(this)"')}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Telefone</label>${inp('c-telefone',c.telefone,'(21) 2222-3333')}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">CEP</label>${inp('c-cep',c.cep,'00000000','maxlength="9" onblur="buscarCEPModal(this.value,\'c-\')"')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Logradouro</label>${inp('c-logradouro',c.logradouro)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:12px;margin-top:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Número</label>${inp('c-numero',c.numero)}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Bairro</label>${inp('c-bairro',c.bairro)}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cidade</label>${inp('c-cidade',c.cidade)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:12px;margin-top:12px">
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">UF</label>${inp('c-uf',c.uf)}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">IE</label>${inp('c-ie',c.ie)}</div>
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Status</label>${sel('c-status',c.status||'ativo',['ativo','inativo'])}</div>
+    </div>`;
+}
+function _salvarCliente(id) {
+  const cpfcnpj = v('c-cpfcnpj').replace(/\D/g,'');
+  const tipo = v('c-tipo');
+  if (cpfcnpj) {
+    if (tipo==='PF' && !_validaCPF(cpfcnpj)) { showToast('CPF inválido','error'); return null; }
+    if (tipo==='PJ' && !_validaCNPJ(cpfcnpj)) { showToast('CNPJ inválido','error'); return null; }
+  }
+  if (!_validaEmail(v('c-email'))) { showToast('E-mail inválido','error'); return null; }
+  if (v('c-celular') && !_validaCelular(v('c-celular'))) { showToast('Celular inválido','error'); return null; }
+  return { tipo_pessoa: tipo, nome: v('c-nome'), fantasia: v('c-fantasia'), cpf_cnpj: cpfcnpj||null, celular: v('c-celular').replace(/\D/g,'')||null, telefone: v('c-telefone').replace(/\D/g,'')||null, email: v('c-email')||null, cep: v('c-cep').replace(/\D/g,'')||null, logradouro: v('c-logradouro')||null, numero: v('c-numero')||null, bairro: v('c-bairro')||null, cidade: v('c-cidade')||null, uf: v('c-uf')||null, ie: v('c-ie')||null, status: v('c-status') };
+}
+function abrirModalClienteMain() {
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Cliente';
+  document.getElementById('modal-cadastro-body').innerHTML = _formCliente();
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    const body = _salvarCliente(); if (!body) return;
+    if (!body.nome) { showToast('Nome é obrigatório','error'); return; }
+    const r = await api('/api/v2/clientes', { method:'POST', body: JSON.stringify(body) });
+    if (r?.erro||r?.errors) { showToast((r.erro||r.errors||['Erro']).join?.(', ')||'Erro','error'); return; }
+    showToast('Cliente cadastrado'); fecharModalCadastro(); loadClientesMain(1);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+function editarCliente(c) {
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Cliente — ' + c.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = _formCliente(c);
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    const body = _salvarCliente(); if (!body) return;
+    if (!body.nome) { showToast('Nome é obrigatório','error'); return; }
+    const r = await api(`/api/v2/clientes/${c.id}`, { method:'PATCH', body: JSON.stringify(body) });
+    if (r?.erro) { showToast(Array.isArray(r.erro)?r.erro.join(', '):r.erro,'error'); return; }
+    showToast('Cliente atualizado'); fecharModalCadastro(); loadClientesMain(_clientePag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
 
 // ── FORNECEDORES ───────────────────────────────────────────────────────────────
-async function loadFornecedoresMain() {
+let _fornPag = 1;
+const debouncedLoadFornecedores = debounce(() => loadFornecedoresMain(1), 400);
+async function loadFornecedoresMain(page = _fornPag) {
+  _fornPag = page;
   const el = document.getElementById('list-forn-main');
   const q = document.getElementById('busca-forn-main')?.value || '';
-  const data = await api(`/api/v2/fornecedores?q=${encodeURIComponent(q)}&limit=50`);
-  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro</p>'; return; }
-  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum fornecedor</p>'; return; }
+  const data = await api(`/api/v2/fornecedores?q=${encodeURIComponent(q)}&page=${page}&limit=20`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const fornecedores = data.fornecedores || [];
+  if (!fornecedores.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum fornecedor</p>'; document.getElementById('pag-forn').innerHTML=''; return; }
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>Nome</th><th>CNPJ</th><th>Contato</th><th>Cidade</th><th>Status</th></tr></thead>
-    <tbody>${data.map(f => `<tr>
+    <thead><tr><th>Nome</th><th>CNPJ</th><th>Contato</th><th>Telefone</th><th>Cidade</th><th>Status</th><th>Ação</th></tr></thead>
+    <tbody>${fornecedores.map(f => `<tr>
       <td style="font-weight:600">${f.nome||'—'}</td>
       <td style="font-family:monospace;font-size:12px">${f.cnpj||'—'}</td>
       <td>${f.contato||'—'}</td>
-      <td>${f.cidade||'—'}</td>
+      <td>${f.telefone?'('+f.ddd+') '+f.telefone:'—'}</td>
+      <td>${f.cidade||'—'} ${f.uf?'/'+f.uf:''}</td>
       <td><span style="background:${f.status==='ativo'?'#e8f5e9':'#fce4ec'};color:${f.status==='ativo'?'#2e7d32':'#c62828'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${f.status||'—'}</span></td>
+      <td><button onclick="editarFornecedor(${JSON.stringify(f).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
     </tr>`).join('')}</tbody></table>`;
+  renderPagControls('pag-forn', page, data.total, 20, 'loadFornecedoresMain');
 }
-function abrirModalFornecedorMain() { showToast('Use a seção Cadastros no Admin para criar fornecedores'); }
+function _foneCompleto(ddd, tel) {
+  const d = (ddd||'').replace(/\D/g,'');
+  const t = (tel||'').replace(/\D/g,'');
+  if (!d && !t) return '';
+  if (d && t) return `(${d}) ${t}`;
+  return t || d;
+}
+function _formFornecedor(f={}) {
+  const INP = 'width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box';
+  const sel = (id,val,opts) => `<select id="${id}" style="${INP}">${opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select>`;
+  const inp = (id,val='',ph='',extra='') => `<input id="${id}" value="${val||''}" placeholder="${ph}" style="${INP}" ${extra}>`;
+  const foneVal = _foneCompleto(f.ddd, f.telefone);
+  const LBL = 'font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase';
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label style="${LBL}">Nome *</label>${inp('f-nome',f.nome)}</div>
+      <div><label style="${LBL}">CNPJ</label>${inp('f-cnpj',f.cnpj,'Somente números','maxlength="18" onblur="validarCNPJ(this)"')}</div>
+      <div><label style="${LBL}">Contato</label>${inp('f-contato',f.contato)}</div>
+      <div><label style="${LBL}">E-mail</label>${inp('f-email',f.email,'','onblur="validarCampoEmail(this)"')}</div>
+      <div><label style="${LBL}">Telefone Fixo</label>${inp('f-telefone',foneVal,'(21) 2222-3333','onblur="validarCampoTelefone(this)"')}</div>
+      <div><label style="${LBL}">Celular</label>${inp('f-celular',f.celular,'(21) 99999-9999','onblur="validarCampoCelular(this)"')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div><label style="${LBL}">CEP</label>${inp('f-cep',f.cep,'00000-000','maxlength="9" onblur="buscarCEPModal(this.value,\'f-\')"')}</div>
+      <div><label style="${LBL}">Logradouro</label>${inp('f-logradouro',f.logradouro)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 80px 1fr;gap:12px;margin-top:12px">
+      <div><label style="${LBL}">Cidade</label>${inp('f-cidade',f.cidade)}</div>
+      <div><label style="${LBL}">UF</label>${inp('f-uf',f.uf)}</div>
+      <div><label style="${LBL}">Categoria</label>${inp('f-categoria',f.categoria)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div><label style="${LBL}">Status</label>${sel('f-status',f.status||'ativo',['ativo','inativo'])}</div>
+    </div>`;
+}
+function _salvarFornecedor() {
+  const cnpj = v('f-cnpj').replace(/\D/g,'');
+  if (cnpj && !_validaCNPJ(cnpj)) { showToast('CNPJ inválido','error'); return null; }
+  if (v('f-email') && !_validaEmail(v('f-email'))) { showToast('E-mail inválido','error'); return null; }
+  const foneRaw = v('f-telefone').replace(/\D/g,'');
+  const ddd = foneRaw.slice(0,2)||null;
+  const tel = foneRaw.slice(2)||null;
+  const celular = v('f-celular').replace(/\D/g,'')||null;
+  return { nome: v('f-nome'), cnpj: cnpj||null, contato: v('f-contato')||null, email: v('f-email')||null, ddd, telefone: tel, celular, cep: v('f-cep').replace(/\D/g,'')||null, logradouro: v('f-logradouro')||null, cidade: v('f-cidade')||null, uf: v('f-uf')||null, categoria: v('f-categoria')||null, status: v('f-status') };
+}
+function abrirModalFornecedorMain() {
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Fornecedor';
+  document.getElementById('modal-cadastro-body').innerHTML = _formFornecedor();
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    const body = _salvarFornecedor(); if (!body) return;
+    if (!body.nome) { showToast('Nome é obrigatório','error'); return; }
+    const r = await api('/api/v2/fornecedores', { method:'POST', body: JSON.stringify(body) });
+    if (r?.erro||r?.errors) { showToast((r.erro||r.errors||['Erro']).join?.(', ')||'Erro','error'); return; }
+    showToast('Fornecedor cadastrado'); fecharModalCadastro(); loadFornecedoresMain(1);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+function editarFornecedor(f) {
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Fornecedor — ' + f.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = _formFornecedor(f);
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    const body = _salvarFornecedor(); if (!body) return;
+    const r = await api(`/api/v2/fornecedores/${f.id}`, { method:'PATCH', body: JSON.stringify(body) });
+    if (r?.erro) { showToast(Array.isArray(r.erro)?r.erro.join(', '):r.erro,'error'); return; }
+    showToast('Fornecedor atualizado'); fecharModalCadastro(); loadFornecedoresMain(_fornPag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+// ── MATERIAIS ──────────────────────────────────────────────────────────────────
+let _matPag = 1;
+const debouncedLoadMateriais = debounce(() => loadMateriaisMain(1), 400);
+const CATEGORIAS_MAT = ['PAPEL','PAPEL ADESIVO','ENVELOPE','FORMULARIO','LONA','VINIL','TINTA'];
+const UNIDADES_MAT = ['FL','UN','MT','KG','LT','M²','PC','RL'];
+
+async function loadMateriaisMain(page = _matPag) {
+  _matPag = page;
+  const el = document.getElementById('list-mat-main');
+  const q = document.getElementById('busca-mat-main')?.value || '';
+  const data = await api(`/api/v2/materiais?busca=${encodeURIComponent(q)}&page=${page}&limit=20`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const materiais = data.materiais || [];
+  if (!materiais.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum material</p>'; document.getElementById('pag-mat').innerHTML=''; return; }
+  const fmt2 = n => parseFloat(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Cód</th><th>Nome</th><th>Categoria</th><th>UN</th><th>Qt.Emb</th><th>Estoque</th><th>Mín</th><th>Máx</th><th>Custo Médio</th><th>Ação</th></tr></thead>
+    <tbody>${materiais.map(m => `<tr>
+      <td style="font-family:monospace;font-size:12px">${m.codigo||'—'}</td>
+      <td style="font-weight:600;font-size:12px">${m.nome||'—'}</td>
+      <td style="font-size:11px">${m.categoria||'—'}</td>
+      <td style="text-align:center">${m.unidade||'—'}</td>
+      <td style="text-align:right;font-size:12px">${fmt2(m.qt_embalagem)}</td>
+      <td style="text-align:right;font-weight:700;${parseFloat(m.estoque_atual)<parseFloat(m.estoque_minimo)?'color:#c62828':''}">${fmt2(m.estoque_atual)}</td>
+      <td style="text-align:right;font-size:12px">${fmt2(m.estoque_minimo)}</td>
+      <td style="text-align:right;font-size:12px">${fmt2(m.estoque_maximo)}</td>
+      <td style="text-align:right">R$ ${fmt2(m.custo_medio)}</td>
+      <td><button onclick="editarMaterial(${JSON.stringify(m).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
+    </tr>`).join('')}</tbody></table>`;
+  renderPagControls('pag-mat', page, data.total, 20, 'loadMateriaisMain');
+}
+function _formMaterial(m = {}) {
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${campoEdit('Nome *','m-nome',m.nome,'text','oninput="this.value=this.value.toUpperCase()"')}
+      ${campoEdit('Código','m-codigo',m.codigo)}
+      ${campoSelect('Categoria','m-categoria',m.categoria,CATEGORIAS_MAT)}
+      ${campoSelect('Unidade *','m-unidade',m.unidade,UNIDADES_MAT)}
+      ${campoEdit('Qt. Embalagem','m-qtemb',m.qt_embalagem||0,'number')}
+      ${campoEdit('Estoque Atual','m-estoque',m.estoque_atual||0,'number')}
+      ${campoEdit('Estoque Mínimo','m-estoquemin',m.estoque_minimo||0,'number')}
+      ${campoEdit('Estoque Máximo','m-estoquemax',m.estoque_maximo||0,'number')}
+      ${campoEdit('Custo Médio (R$)','m-custo',m.custo_medio||0,'number')}
+    </div>`;
+}
+function _bodyMaterial() {
+  return { nome: v('m-nome'), codigo: v('m-codigo')||null, categoria: v('m-categoria')||null,
+    unidade: v('m-unidade'), qt_embalagem: parseFloat(v('m-qtemb'))||0,
+    estoque_atual: parseFloat(v('m-estoque'))||0, estoque_minimo: parseFloat(v('m-estoquemin'))||0,
+    estoque_maximo: parseFloat(v('m-estoquemax'))||0, custo_medio: parseFloat(v('m-custo'))||0 };
+}
+function editarMaterial(m) {
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Material — ' + m.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = _formMaterial(m);
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('m-nome').trim()) { showToast('Nome é obrigatório','error'); return; }
+    const r = await api(`/api/v2/materiais/${m.id}`, { method:'PATCH', body: JSON.stringify(_bodyMaterial()) });
+    if (r?.error || r?.erro) { showToast(r.error||(Array.isArray(r.erro)?r.erro.join(', '):r.erro),'error'); return; }
+    showToast('Material atualizado'); fecharModalCadastro(); loadMateriaisMain(_matPag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+// ── FUNCIONÁRIOS ───────────────────────────────────────────────────────────────
+let _funcPag = 1;
+async function loadFuncionariosMain(page = _funcPag) {
+  _funcPag = page;
+  const el = document.getElementById('list-func-main');
+  const data = await api(`/api/v2/funcionarios?page=${page}&limit=20`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const funcionarios = data.funcionarios || [];
+  if (!funcionarios.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum funcionário</p>'; document.getElementById('pag-func').innerHTML=''; return; }
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Matrícula</th><th>Nome</th><th>CPF</th><th>Cargo</th><th>Setor</th><th>Telefone</th><th>Status</th><th>Ação</th></tr></thead>
+    <tbody>${funcionarios.map(f => `<tr>
+      <td style="font-family:monospace;font-size:12px">${f.matricula||'—'}</td>
+      <td style="font-weight:600">${f.nome||'—'}</td>
+      <td style="font-family:monospace;font-size:12px">${f.cpf||'—'}</td>
+      <td>${f.cargo||'—'}</td>
+      <td>${f.setor||'—'}</td>
+      <td>${f.telefone||'—'}</td>
+      <td><span style="background:${f.status==='ativo'?'#e8f5e9':'#fce4ec'};color:${f.status==='ativo'?'#2e7d32':'#c62828'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${f.status||'—'}</span></td>
+      <td><button onclick="editarFuncionario(${JSON.stringify(f).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
+    </tr>`).join('')}</tbody></table>`;
+  renderPagControls('pag-func', page, data.total, 20, 'loadFuncionariosMain');
+}
+const SETORES_FN = ['ATENDIMENTO','IMPRESSAO','CORTE','ADESIVACAO','ENTREGA','GERENCIA','FINANCEIRO','ADMINISTRACAO'];
+function editarFuncionario(f) {
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Funcionário — ' + f.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${campoEdit('Matrícula','fn-matricula',f.matricula||'','text','readonly style="background:#f5f5f5;color:#999;cursor:not-allowed"')}
+      ${campoEdit('Nome','fn-nome',f.nome,'text','oninput="this.value=this.value.toUpperCase()"')}
+      ${campoEdit('CPF','fn-cpf',f.cpf,'text','maxlength="14" onblur="validarCampoFnCPF(this)"')}
+      ${campoEdit('Cargo','fn-cargo',f.cargo,'text','oninput="this.value=this.value.toUpperCase()"')}
+      ${campoSelect('Setor','fn-setor',f.setor,SETORES_FN)}
+      ${campoEdit('Telefone','fn-tel',f.telefone)}
+      ${campoEdit('E-mail','fn-email',f.email,'text','onblur="validarCampoEmail(this)"')}
+      ${campoSelect('Status','fn-status',f.status,['ativo','inativo','ferias','licenca'])}
+    </div>`;
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (v('fn-email') && !_validaEmail(v('fn-email'))) { showToast('E-mail inválido','error'); return; }
+    const body = { nome: v('fn-nome'), cargo: v('fn-cargo'), setor: v('fn-setor'), telefone: v('fn-tel').replace(/\D/g,'')||null, email: v('fn-email')||null, status: v('fn-status') };
+    const r = await api(`/api/v2/funcionarios/${f.id}`, { method:'PATCH', body: JSON.stringify(body) });
+    if (r?.error || r?.erro || r?.errors) { showToast(r.error||(Array.isArray(r.erro||r.errors)?(r.erro||r.errors).join(', '):'Erro ao salvar'),'error'); return; }
+    showToast('Funcionário atualizado'); fecharModalCadastro(); loadFuncionariosMain(_funcPag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+function abrirNovoMaterial() {
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Material';
+  document.getElementById('modal-cadastro-body').innerHTML = _formMaterial();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('m-nome').trim()) { showToast('Nome é obrigatório','error'); return; }
+    if (!v('m-unidade')) { showToast('Unidade é obrigatória','error'); return; }
+    const r = await api('/api/v2/materiais', { method:'POST', body: JSON.stringify(_bodyMaterial()) });
+    if (r?.error || r?.erro || r?.errors) { showToast(r.error||(Array.isArray(r.erro||r.errors)?(r.erro||r.errors).join(', '):'Erro ao salvar'),'error'); return; }
+    showToast('Material cadastrado'); fecharModalCadastro(); loadMateriaisMain(1);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+function abrirNovoFuncionario() {
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Funcionário';
+  document.getElementById('modal-cadastro-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${campoEdit('Nome *','fn-nome','','text','oninput="this.value=this.value.toUpperCase()"')}
+      ${campoEdit('CPF *','fn-cpf','','text','maxlength="14" onblur="validarCampoFnCPF(this)"')}
+      ${campoEdit('Cargo','fn-cargo','','text','oninput="this.value=this.value.toUpperCase()"')}
+      ${campoSelect('Setor','fn-setor','',SETORES_FN)}
+      ${campoEdit('Telefone','fn-tel','')}
+      ${campoEdit('E-mail','fn-email','','text','onblur="validarCampoEmail(this)"')}
+      ${campoEdit('Data Admissão','fn-admissao','','date')}
+      ${campoSelect('Status','fn-status','ativo',['ativo','inativo','ferias','licenca'])}
+    </div>`;
+  aplicarMascaras();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    const cpfRaw = v('fn-cpf').replace(/\D/g,'');
+    if (!cpfRaw) { showToast('CPF é obrigatório','error'); return; }
+    if (!_validaCPF(cpfRaw)) { showToast('CPF inválido','error'); return; }
+    if (v('fn-email') && !_validaEmail(v('fn-email'))) { showToast('E-mail inválido','error'); return; }
+    if (!v('fn-nome').trim()) { showToast('Nome é obrigatório','error'); return; }
+    const body = { nome: v('fn-nome'), cpf: cpfRaw, cargo: v('fn-cargo'), setor: v('fn-setor'), telefone: v('fn-tel').replace(/\D/g,'')||null, email: v('fn-email')||null, data_admissao: v('fn-admissao')||null, status: v('fn-status') };
+    const r = await api('/api/v2/funcionarios', { method:'POST', body: JSON.stringify(body) });
+    if (r?.error || r?.erro || r?.errors) { showToast(r.error||(Array.isArray(r.erro||r.errors)?(r.erro||r.errors).join(', '):'Erro ao salvar'),'error'); return; }
+    showToast('Funcionário cadastrado'); fecharModalCadastro(); loadFuncionariosMain(1);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+// ── VALIDAÇÕES E BUSCA DE CEP (copiado do admin.html) ──────────────────────────
+function _validaCPF(cpf) {
+  cpf = cpf.replace(/\D/g,'');
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+  let s = 0, r;
+  for (let i=0;i<9;i++) s += +cpf[i]*(10-i);
+  r = 11 - s%11; if(r>=10) r=0; if(r !== +cpf[9]) return false;
+  s=0;
+  for (let i=0;i<10;i++) s += +cpf[i]*(11-i);
+  r = 11 - s%11; if(r>=10) r=0;
+  return r === +cpf[10];
+}
+function _validaCNPJ(c) {
+  c = c.replace(/\D/g,'');
+  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
+  const calc = (n) => { let s=0, p=n-7; for (let i=n;i>=1;i--) { s += +c[n-i]*p--; if(p<2) p=9; } return s%11<2 ? 0 : 11-s%11; };
+  return calc(12) === +c[12] && calc(13) === +c[13];
+}
+function _validaEmail(e) { return !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+function _validaCelular(c) { return !c || /^\(?\d{2}\)?\s?9\d{4}[-\s]?\d{4}$/.test(c.replace(/\s/g,'')); }
+function mascaraCelular(v) {
+  const d = (v||'').replace(/\D/g,'').slice(0,11);
+  if (d.length <= 2) return d.length ? '(' + d : d;
+  if (d.length <= 7) return '(' + d.slice(0,2) + ') ' + d.slice(2);
+  return '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
+}
+function _fieldErr(id, msg) {
+  const fld = document.getElementById(id); if (!fld) return;
+  let span = document.getElementById(id + '_err');
+  if (!span) { span = document.createElement('span'); span.id = id+'_err'; span.style.cssText='color:#c62828;font-size:11px;margin-top:2px;display:block'; fld.parentNode.appendChild(span); }
+  span.textContent = msg || ''; fld.style.borderColor = msg ? '#e53935' : '';
+}
+function validarCampoCPFCNPJ(el) {
+  const tipo = document.getElementById('c-tipo')?.value || 'PJ';
+  const val = el.value.replace(/\D/g,'');
+  if (!val) { _fieldErr(el.id, ''); return; }
+  if (tipo === 'PF' && !_validaCPF(val)) _fieldErr(el.id, 'CPF inválido — verifique os dígitos');
+  else if (tipo === 'PJ' && !_validaCNPJ(val)) _fieldErr(el.id, 'CNPJ inválido — verifique os dígitos');
+  else _fieldErr(el.id, '');
+}
+function validarCNPJ(el) {
+  const val = el.value.replace(/\D/g,'');
+  if (!val) { _fieldErr(el.id, ''); return; }
+  _fieldErr(el.id, _validaCNPJ(val) ? '' : 'CNPJ inválido — verifique os dígitos');
+}
+function validarCPF(el) {
+  const val = el.value.replace(/\D/g,'');
+  if (!val) { _fieldErr(el.id, ''); return; }
+  _fieldErr(el.id, _validaCPF(val) ? '' : 'CPF inválido — verifique os dígitos');
+}
+function validarCampoEmail(el) { _fieldErr(el.id, _validaEmail(el.value.trim()) ? '' : 'E-mail inválido'); }
+function validarCampoCelular(el) { _fieldErr(el.id, _validaCelular(el.value.trim()) ? '' : 'Use o formato (XX) 9XXXX-XXXX'); }
+function validarCampoTelefone(el) { const v = el.value.trim(); if (!v) { _fieldErr(el.id,''); return; } const d = v.replace(/\D/g,''); _fieldErr(el.id, d.length >= 10 ? '' : 'Use o formato (XX) XXXX-XXXX'); }
+function validarCampoFnCPF(el) {
+  const d = el.value.replace(/\D/g,'').slice(0,11);
+  if (d) el.value = d.replace(/(\d{3})(\d{0,3})(\d{0,3})(\d{0,2})/,(_,a,b,c,e)=>[a,b,c].filter(Boolean).join('.')+(e?'-'+e:'')).replace(/\.$/,'');
+  _fieldErr(el.id, !d || _validaCPF(d) ? '' : 'CPF inválido');
+}
+async function buscarCEPModal(cep, pfx) {
+  const c = cep.replace(/\D/g,'');
+  if (c.length !== 8) return;
+  const r = await api(`/api/v2/utils/cep/${c}`);
+  if (r && !r.error) {
+    const set = (sfx, val) => { const el = document.getElementById(pfx+sfx); if (el) el.value = val||''; };
+    set('logradouro', r.logradouro); set('bairro', r.bairro); set('cidade', r.cidade); set('uf', r.uf);
+  }
+}
+function aplicarMascaras() {
+  const digits = s => s.replace(/\D/g,'');
+  const onInput = (id, fn) => { const el = document.getElementById(id); if (!el) return; el.addEventListener('input', e => { const p=e.target.selectionStart; e.target.value=fn(e.target.value); try{e.target.setSelectionRange(p,p);}catch(ex){} }); };
+  // CPF/CNPJ auto-detecta pelo tamanho
+  onInput('c-cpfcnpj', s => { const d=digits(s).slice(0,14); return d.length<=11 ? d.replace(/(\d{3})(\d{0,3})(\d{0,3})(\d{0,2})/,(_,a,b,c,e)=>[a,b,c].filter(Boolean).join('.')+(e?'-'+e:'')).replace(/\.$/,'') : d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,'$1.$2.$3/$4-$5').replace(/-$/,''); });
+  onInput('c-celular', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
+  onInput('c-telefone', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{4,5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
+  onInput('c-cep', s => digits(s).slice(0,8).replace(/(\d{5})(\d{0,3})/,'$1-$2').replace(/-$/,''));
+  onInput('f-cnpj', s => digits(s).slice(0,14).replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,'$1.$2.$3/$4-$5').replace(/-$/,''));
+  onInput('f-telefone', s => { const d=digits(s).slice(0,10); return d.replace(/(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
+  onInput('f-celular', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
+  onInput('f-cep', s => digits(s).slice(0,8).replace(/(\d{5})(\d{0,3})/,'$1-$2').replace(/-$/,''));
+  // fn-cpf: sem máscara onInput (evita cursor quebrado); formata + valida no onblur via validarCampoFnCPF
+  onInput('fn-tel', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{4,5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
+}
+
+function campoEdit(label, id, val, type='text', extra='') {
+  return `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">${label}</label>
+    <input id="${id}" type="${type}" value="${val||''}" ${extra} style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box"></div>`;
+}
+function campoSelect(label, id, val, opts) {
+  const blank = val ? '' : '<option value="">— selecione —</option>';
+  return `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">${label}</label>
+    <select id="${id}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">${blank}${opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+}
+function v(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+function fecharModalCadastro() { document.getElementById('modal-cadastro').style.display = 'none'; }
 
 // ── USUÁRIOS (novo) ────────────────────────────────────────────────────────────
 async function loadUsuarios2() {
   const el = document.getElementById('users2-body');
   const data = await api('/api/v2/users');
-  if (!data || data.error) { el.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#aaa">Erro ao carregar</td></tr>'; return; }
+  if (!data || data.error) { el.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#aaa">Erro ao carregar</td></tr>'; return; }
   const fmt = dt => dt ? new Date(dt).toLocaleDateString('pt-BR') : '—';
   el.innerHTML = data.map(u => `<tr>
     <td style="font-family:monospace;font-size:12px;font-weight:600">${u.matricula||'—'}</td>
     <td style="font-weight:600">${u.name}</td>
     <td style="font-size:12px">${u.email}</td>
+    <td style="font-size:12px">${u.celular ? mascaraCelular(u.celular) : '—'}</td>
     <td><span class="role-badge" style="background:rgba(26,35,126,.1);color:#1a237e">${ROLE_LABELS[u.role]||u.role}</span></td>
     <td style="font-size:12px">${u.setor||'—'}</td>
     <td><span style="background:${u.active?'#e8f5e9':'#f5f5f5'};color:${u.active?'#2e7d32':'#888'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${u.active?'Ativo':'Inativo'}</span></td>
@@ -1152,18 +1725,22 @@ async function loadUsuarios2() {
 }
 
 async function criarUsuario2() {
+  const celular = document.getElementById('nu2-celular').value.trim();
   const body = {
     name:     document.getElementById('nu2-name').value,
     email:    document.getElementById('nu2-email').value,
     password: document.getElementById('nu2-password').value,
     role:     document.getElementById('nu2-role').value,
     setor:    document.getElementById('nu2-setor').value,
+    celular:  celular.replace(/\D/g,'') || null,
   };
   if (!body.name||!body.email||!body.password) return showToast('Preencha nome, email e senha');
+  if (celular && !_validaCelular(celular)) return showToast('Celular inválido — use (XX) 9XXXX-XXXX');
+  if (body.role === 'vendedor' && !body.celular) return showToast('Vendedor precisa de celular para receber notificações por WhatsApp');
   const r = await api('/api/v2/users', { method:'POST', body: JSON.stringify(body) });
   if (r?.error) return showToast('Erro: ' + r.error);
   showToast('✅ Usuário criado — Matrícula: ' + (r.matricula||'gerada'));
-  ['nu2-name','nu2-email','nu2-password','nu2-setor'].forEach(id => document.getElementById(id).value='');
+  ['nu2-name','nu2-email','nu2-password','nu2-setor','nu2-celular'].forEach(id => document.getElementById(id).value='');
   loadUsuarios2();
 }
 
@@ -1510,7 +2087,7 @@ init();
 let orcamentosData = [];
 let currentOrcId = null;
 
-const ORC_STATUS = {
+const ORC_STATUS_V1 = {
   pendente_aprovacao: { label: '⏳ Aguardando aprovação', color: '#f59e0b' },
   aprovado_interno:   { label: '✅ Aprovado — pronto envio', color: '#3b82f6' },
   enviado:            { label: '📤 Enviado ao cliente', color: '#6366f1' },
@@ -1527,7 +2104,7 @@ async function loadOrcamentos() {
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:#aaa">Nenhum orçamento gerado ainda.</td></tr>'; return; }
   tbody.innerHTML = data.map((o, i) => {
     const bg = i % 2 === 0 ? 'white' : '#fafbff';
-    const st = ORC_STATUS[o.status] || { label: o.status, color: '#999' };
+    const st = ORC_STATUS_V1[o.status] || { label: o.status, color: '#999' };
     const total = 'R$ ' + parseFloat(o.total).toLocaleString('pt-BR', {minimumFractionDigits:2});
     const dt = new Date(o.created_at).toLocaleDateString('pt-BR');
     const itens = (o.itens || []).map(it => escHtml(it.descricao)).join('<br>');
@@ -1576,7 +2153,7 @@ function openOrcModal(id) {
     document.getElementById('orc-itens').closest('table').insertAdjacentElement('beforebegin', aviso);
   }
 
-  renderOrcItens(o.itens || [], o.desconto_pct || 0);
+  renderOrcItensModal(o.itens || [], o.desconto_pct || 0);
 
   const actions = document.getElementById('orc-actions');
   const btnCancelar = (o.status !== 'cancelado' && o.status !== 'aprovado')
@@ -1592,7 +2169,7 @@ function openOrcModal(id) {
   document.getElementById('orcModal').style.display = 'flex';
 }
 
-function renderOrcItens(itens, descontoPct) {
+function renderOrcItensModal(itens, descontoPct) {
   const inp = s => `style="width:100%;border:1px solid #ddd;border-radius:6px;padding:4px 6px;font-size:12px;box-sizing:border-box"`;
   document.getElementById('orc-itens').innerHTML = itens.map((it, i) => `
     <tr data-idx="${i}">
@@ -1655,14 +2232,14 @@ function orcUpdateTotals(pct) {
 function orcRemoveItem(idx) {
   const itens = orcGetItens().filter((_, i) => i !== idx);
   const pct = parseFloat(document.getElementById('orc-desconto').value) || 0;
-  renderOrcItens(itens, pct);
+  renderOrcItensModal(itens, pct);
 }
 
 function orcAddItem() {
   const itens = orcGetItens();
   itens.push({ descricao: 'Novo item', quantidade: 1, valor_unitario: 0, unidade: 'm2', total: 0 });
   const pct = parseFloat(document.getElementById('orc-desconto').value) || 0;
-  renderOrcItens(itens, pct);
+  renderOrcItensModal(itens, pct);
   // Foca no novo item
   const rows = document.querySelectorAll('#orc-itens tr[data-idx]');
   if (rows.length) rows[rows.length-1].querySelector('.orc-desc').focus();
@@ -1740,12 +2317,14 @@ async function cancelarOrcamento(id) {
 }
 
 // ── CRIAR ORÇAMENTO MANUAL ────────────────────────────────────────────────────
-let criarOrcConvId = null;
+let _criarOrcPedidoId = null;
+let _criarOrcClienteId = null;
 
-function abrirCriarOrcamento(convId, pedidoNumero, clientName) {
-  criarOrcConvId = convId;
+function abrirCriarOrcamento(pedidoId, pedidoNumero, clienteNome, clienteId) {
+  _criarOrcPedidoId = pedidoId;
+  _criarOrcClienteId = clienteId || null;
   document.getElementById('criar-orc-num').textContent = '#' + pedidoNumero;
-  document.getElementById('criar-orc-client').textContent = clientName;
+  document.getElementById('criar-orc-client').textContent = clienteNome;
   document.getElementById('criar-orc-itens-body').innerHTML = '';
   document.getElementById('criar-orc-total').textContent = 'R$ 0,00';
   adicionarItemCriar();
@@ -1779,7 +2358,7 @@ function recalcCriar() {
 }
 
 async function salvarCriarOrcamento() {
-  if (!criarOrcConvId) return;
+  if (!_criarOrcPedidoId) return;
   const itens = [];
   let valid = true;
   document.querySelectorAll('#criar-orc-itens-body tr').forEach(tr => {
@@ -1793,7 +2372,7 @@ async function salvarCriarOrcamento() {
   if (!valid || itens.length === 0) { showToast('⚠️ Preencha a descrição de todos os itens'); return; }
   const subtotal = itens.reduce((s, i) => s + i.total, 0);
   const obs = document.getElementById('criar-orc-obs').value;
-  const res = await api('/api/orcamentos', { method: 'POST', body: JSON.stringify({ conversation_id: criarOrcConvId, itens, subtotal, total: subtotal, observacoes: obs }) });
+  const res = await api('/api/v2/orcamentos', { method: 'POST', body: JSON.stringify({ pedido_id: _criarOrcPedidoId, cliente_id: _criarOrcClienteId, itens, subtotal, total: subtotal, observacoes: obs }) });
   if (res?.ok) {
     document.getElementById('criarOrcModal').style.display = 'none';
     showToast('✅ Orçamento criado! Acesse a aba Orçamentos para aprovar e enviar.');
@@ -1837,103 +2416,376 @@ async function savePrice(id) {
 // ── PEDIDOS ───────────────────────────────────────────────────────────────────
 let ordersData = [];
 
-const STATUS_OPTIONS = [
-  { value: 'em_orcamento',        label: 'Em orçamento',       color: '#f59e0b' },
-  { value: 'orcamento_concluido', label: 'Orçamento concluído',color: '#3b82f6' },
-  { value: 'orcamento_enviado',   label: 'Orçamento enviado',  color: '#6366f1' },
-  { value: 'orcamento_aprovado',  label: 'Orçamento aprovado', color: '#10b981' },
-  { value: 'orcamento_reprovado', label: 'Orçamento reprovado',color: '#ef4444' },
-  { value: 'servico_em_execucao', label: 'Serviço em execução',color: '#8b5cf6' },
-  { value: 'servico_executado',   label: 'Serviço executado',  color: '#06b6d4' },
-  { value: 'saiu_para_entrega',   label: 'Saiu para entrega',  color: '#f97316' },
-  { value: 'servico_entregue',    label: 'Serviço entregue',   color: '#22c55e' },
-  { value: 'orcamento_sem_retorno', label: 'Orçamento sem retorno', color: '#6b7280' },
+const PRODUTOS_LKL = [
+  { produto: 'ACRILICO',           tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'ADESIVOS',           tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'BANNERS',            tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'BLOCK LETTER',       tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'CARTAZ',             tipo: 'OFFSET' },
+  { produto: 'CARTOES DE VISITA',  tipo: 'OFFSET' },
+  { produto: 'CATÁLOGO',           tipo: 'OFFSET' },
+  { produto: 'ENVELOPAMENTO',      tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'ENVELOPES',          tipo: 'OFFSET' },
+  { produto: 'ETIQUETA ADESIVA',   tipo: 'OFFSET' },
+  { produto: 'FOLDER',             tipo: 'OFFSET' },
+  { produto: 'ILUMINAÇÃO',         tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'JORNAL',             tipo: 'OFFSET' },
+  { produto: 'LÂMINAS',            tipo: 'OFFSET' },
+  { produto: 'LETREIRO',           tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'LIVROS',             tipo: 'OFFSET' },
+  { produto: 'NOTAS',              tipo: 'OFFSET' },
+  { produto: 'PAINEL',             tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'PAINEL ACM',         tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'PEDIDOS',            tipo: 'OFFSET' },
+  { produto: 'RECEITUÁRIOS',       tipo: 'OFFSET' },
+  { produto: 'RECORTE ELETRÔNICO', tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'REVISTA',            tipo: 'OFFSET' },
+  { produto: 'ROUTER',             tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'SINALIZAÇÃO',        tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'TAG',                tipo: 'OFFSET' },
+  { produto: 'TIMBRADOS',          tipo: 'OFFSET' },
+  { produto: 'WIND BANNER',        tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'OUTROS/OFFSET',      tipo: 'OFFSET' },
 ];
 
-function statusLabel(s) { return STATUS_OPTIONS.find(x => x.value === s)?.label || s; }
-function statusColor(s) { return STATUS_OPTIONS.find(x => x.value === s)?.color || '#999'; }
+function tipoPorProduto(nome) {
+  return PRODUTOS_LKL.find(p => p.produto === nome)?.tipo || '';
+}
+
+function selectProduto(id, onchange) {
+  const opts = PRODUTOS_LKL.map(p =>
+    `<option value="${p.produto}">${p.produto}</option>`
+  ).join('');
+  return `<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">PRODUTO / SERVIÇO *</label>
+    <select id="${id}" onchange="${onchange}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
+      <option value="">Selecione...</option>${opts}
+    </select>
+  </div>`;
+}
+
+function campoTipoProd(id) {
+  return `<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">TIPO DE PRODUÇÃO</label>
+    <input id="${id}" type="text" readonly value="" style="width:100%;padding:8px 12px;border:1px solid #e8e8e8;border-radius:8px;font-size:13px;box-sizing:border-box;background:#f8f9fa;color:#555;cursor:default">
+  </div>`;
+}
+
+const PEDIDO_STATUS = [
+  { value: 'novo',                 label: 'Novo',               color: '#64748b' },
+  { value: 'em_orcamento',         label: 'Em orçamento',       color: '#f59e0b' },
+  { value: 'aguardando_aprovacao', label: 'Aguard. aprovação',  color: '#6366f1' },
+  { value: 'aprovado',             label: 'Aprovado',           color: '#10b981' },
+  { value: 'em_producao',          label: 'Em produção',        color: '#8b5cf6' },
+  { value: 'concluido',            label: 'Concluído',          color: '#0ea5e9' },
+  { value: 'entregue',             label: 'Entregue',           color: '#22c55e' },
+  { value: 'aguardando_pagamento', label: 'Aguard. pagamento',  color: '#f97316' },
+  { value: 'pago',                 label: 'Pago',               color: '#16a34a' },
+  { value: 'reprovado',            label: 'Reprovado',          color: '#ef4444' },
+  { value: 'cancelado',            label: 'Cancelado',          color: '#9ca3af' },
+];
+const STATUS_OPTIONS = PEDIDO_STATUS; // compatibilidade
+
+function statusLabel(s) { return PEDIDO_STATUS.find(x => x.value === s)?.label || s; }
+function statusColor(s) { return PEDIDO_STATUS.find(x => x.value === s)?.color || '#999'; }
+
+function _orcBadge(o) {
+  if (!o.orcamento_numero) return '<span style="color:#ccc;font-size:11px">—</span>';
+  const cor = { em_orcamento:'#f59e0b', concluido:'#0ea5e9', enviado:'#6366f1', aprovado:'#10b981', reprovado:'#ef4444', cancelado:'#9ca3af' }[o.orcamento_status] || '#64748b';
+  return `<span style="background:${cor};color:white;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">#${o.orcamento_numero}</span>`;
+}
+
+function _acoesPedido(o) {
+  const btns = [];
+  if (o.status === 'novo') {
+    btns.push(`<button class="btn btn-primary" style="font-size:11px;padding:4px 9px" onclick="abrirCriarOrcamento('${o.id}','${o.numero_os||''}','${escHtml(o.cliente_nome||'')}','${o.cliente_id||''}')">➕ Orçamento</button>`);
+  }
+  if (o.orcamento_id) {
+    btns.push(`<button class="btn btn-outline" style="font-size:11px;padding:4px 9px" onclick="showPage('orcamentos');setTimeout(loadOrcamentosMain,100)">Ver Orc.</button>`);
+  }
+  return btns.join(' ');
+}
+
+function _obsPreview(obs) {
+  if (!obs) return '<span style="color:#ccc">—</span>';
+  const txt = obs.length > 60 ? obs.slice(0, 60) + '…' : obs;
+  return `<span title="${escHtml(obs)}" style="font-size:12px;color:#555">${escHtml(txt)}</span>`;
+}
 
 function renderOrderRows(data) {
   const tbody = document.getElementById('ordersBody');
   const countEl = document.getElementById('orders-count');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="18" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido encontrado.</td></tr>';
     if (countEl) countEl.textContent = '';
     return;
   }
   if (countEl) countEl.textContent = `${data.length} pedido${data.length !== 1 ? 's' : ''}`;
+  const C = 'padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;';
+  const td = (val) => `<td style="${C}max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(String(val||''))}">${escHtml(String(val||'—'))}</td>`;
   tbody.innerHTML = data.map((o, i) => {
     const bg = i % 2 === 0 ? 'white' : '#fafbff';
-    const dt = new Date(o.data).toLocaleDateString('pt-BR');
-    const td = (v) => `<td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(String(v||''))}">${escHtml(String(v||'-'))}</td>`;
-    const statusBadge = `<td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap"><span style="background:${statusColor(o.pedido_status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.pedido_status)}</span></td>`;
-    const statusSelect = `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;white-space:nowrap">
-      <select onchange="updateOrderStatus('${o.id}', this.value, this)" style="font-size:12px;padding:4px 6px;border:1px solid #ddd;border-radius:6px;cursor:pointer">
-        ${STATUS_OPTIONS.map(s => `<option value="${s.value}" ${s.value===o.pedido_status?'selected':''}>${s.label}</option>`).join('')}
-      </select>
-    </td>`;
-    const numCell = `<td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;font-weight:700;color:#1a237e">#${o.pedido_numero}</td>`;
-    const btnCriarOrc = (o.pedido_status === 'em_orcamento' || o.pedido_status === 'aguardando_orcamento')
-      ? `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0"><button class="btn btn-primary" style="font-size:11px;padding:5px 10px" onclick="abrirCriarOrcamento('${o.id}','${o.pedido_numero}','${escHtml(o.nome)}')">➕ Criar Orçamento</button></td>`
-      : `<td style="padding:6px 10px;border-bottom:1px solid #f0f0f0"></td>`;
-    return `<tr style="background:${bg}">${numCell}${statusBadge}${statusSelect}${td(dt)}${td(o.nome)}${td(o.telefone)}${td(o.contato)}${td(o.email)}${td(o.servico)}${td(o.produto)}${td(o.quantidade)}${td(o.tamanho)}${td(o.material)}${td(o.arte)}${td(o.prazo)}${td(o.entrega)}${td(o.observacoes)}${btnCriarOrc}</tr>`;
+    const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
+    return `<tr style="background:${bg}">
+      <td style="${C}font-weight:700;color:#1a237e">#${o.numero_os||'—'}</td>
+      <td style="${C}"><span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span></td>
+      ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${td(o.produto)}${td(o.quantidade)}
+      <td style="padding:10px;border-bottom:1px solid #f0f0f0;max-width:240px">${_obsPreview(o.observacoes)}</td>
+    </tr>`;
   }).join('');
 }
 
 function filtrarPedidos() {
   const q = (document.getElementById('orders-search')?.value || '').toLowerCase().trim();
   if (!q) { renderOrderRows(ordersData); return; }
-  const filtered = ordersData.filter(o =>
-    String(o.pedido_numero || '').includes(q) ||
-    (o.nome || '').toLowerCase().includes(q) ||
-    (o.telefone || '').includes(q)
-  );
-  renderOrderRows(filtered);
+  renderOrderRows(ordersData.filter(o =>
+    String(o.numero_os || '').includes(q) ||
+    (o.cliente_nome || '').toLowerCase().includes(q) ||
+    (o.produto || '').toLowerCase().includes(q)
+  ));
 }
 
 async function loadOrders() {
-  const orders = await api('/api/orders');
-  ordersData = orders || [];
+  const status = document.getElementById('orders-filter-status')?.value || '';
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  const r = await api(`/api/v2/orders${qs}`);
+  ordersData = r?.data || [];
   const search = document.getElementById('orders-search');
   if (search) search.value = '';
   if (!ordersData.length) {
-    document.getElementById('ordersBody').innerHTML = '<tr><td colspan="18" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido registrado ainda.</td></tr>';
+    document.getElementById('ordersBody').innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido registrado.</td></tr>';
+    const countEl = document.getElementById('orders-count');
+    if (countEl) countEl.textContent = '';
     return;
   }
   renderOrderRows(ordersData);
 }
 
-async function updateOrderStatus(id, newStatus, selectEl) {
-  const res = await api(`/api/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status: newStatus }) });
-  if (res && res.ok) {
-    showToast('✅ Status atualizado!');
-    await loadOrders();
+async function updateOrderStatus(id, newStatus) {
+  const r = await api(`/api/v2/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: newStatus }) });
+  if (r?.error || r?.errors) { showToast(r.error || (r.errors||[]).join(', '), 'error'); return; }
+  showToast('Status atualizado'); loadOrders();
+}
+
+// ── Novo Pedido ───────────────────────────────────────────────────────────────
+let _novoPedidoClienteId = null;
+let _npSearchTimer;
+
+function _npCanalHtml(selecionado) {
+  const opts = [
+    ['balcao','Balcão'],['vendedor','Vendedor'],['whatsapp','WhatsApp'],
+    ['telefone','Telefone'],['site','Site'],['chatbot','Chatbot'],
+  ].map(([v,l]) => `<option value="${v}"${v===selecionado?' selected':''}>${l}</option>`).join('');
+  return `<div>
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">CANAL *</label>
+    <select id="np-canal" onchange="npAtualizarCamposContato()" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">${opts}</select>
+  </div>`;
+}
+
+function abrirNovoPedido() {
+  _novoPedidoClienteId = null;
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Pedido';
+  document.getElementById('modal-cadastro-body').innerHTML = `
+    <div style="display:grid;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Cliente</label>
+        <input id="np-cli-search" type="text" placeholder="Digite para buscar e selecione da lista..." autocomplete="off"
+          style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase();_novoPedidoClienteId=null;npMarcaCliente(false);buscarClienteNP(this.value)"
+          onblur="setTimeout(()=>{ document.getElementById('np-cli-list').style.display='none'; }, 200)">
+        <div id="np-cli-list" style="background:white;border:1px solid #ddd;border-radius:8px;max-height:140px;overflow:auto;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+        <div id="np-cli-badge" style="display:none;margin-top:4px;font-size:12px;color:#16a34a;font-weight:600">✓ Cliente vinculado</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${selectProduto('np-produto', "document.getElementById('np-tipo').value = tipoPorProduto(this.value)")}
+        ${_npCanalHtml('balcao')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${campoTipoProd('np-tipo')}
+        ${campoEdit('QUANTIDADE','np-qtd','','number')}
+      </div>
+      <div id="np-contato-area"></div>
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">PRAZO DE ENTREGA</label>
+        <input id="np-prazo" type="date" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">OBSERVAÇÕES *</label>
+        <textarea id="np-obs" rows="4" oninput="this.value=this.value.toUpperCase()"
+          placeholder="DIMENSÕES: (ex: 1,20 x 0,80 M) | ARTE: POSSUI / NÃO POSSUI | ENTREGA: RETIRADA NA LOJA / ENTREGA EM ..."
+          style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;text-transform:uppercase"></textarea>
+        <div style="font-size:11px;color:#888;margin-top:3px">Informe: dimensões · possui arte · retirada ou entrega</div>
+      </div>
+    </div>`;
+  document.getElementById('modal-cadastro-save').onclick = salvarNovoPedido;
+  document.getElementById('modal-cadastro').style.display = 'block';
+  npAtualizarCamposContato();
+}
+
+function npAtualizarCamposContato() {
+  const canal = document.getElementById('np-canal')?.value;
+  const area = document.getElementById('np-contato-area');
+  if (!area) return;
+  if (canal === 'chatbot') {
+    area.innerHTML = `<div>
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">WHATSAPP (nº com DDD)</label>
+      <input id="np-whatsapp" type="tel" placeholder="21 99999-9999" autocomplete="off"
+        style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"
+        oninput="buscarClientePorWhatsapp(this.value)"
+        onblur="setTimeout(()=>{ document.getElementById('np-wa-list').style.display='none'; }, 200)">
+      <div id="np-wa-list" style="background:white;border:1px solid #ddd;border-radius:8px;max-height:120px;overflow:auto;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+    </div>`;
   } else {
-    showToast('❌ Erro ao atualizar status');
+    area.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">CELULAR</label>
+        <input id="np-celular" type="tel" placeholder="(21) 99999-9999"
+          style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">E-MAIL</label>
+        <input id="np-email" type="email" placeholder="cliente@email.com"
+          style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
+      </div>
+    </div>`;
   }
+}
+
+let _npWaTimer = null;
+async function buscarClientePorWhatsapp(q) {
+  const list = document.getElementById('np-wa-list');
+  clearTimeout(_npWaTimer);
+  const digits = q.replace(/\D/g, '');
+  if (digits.length < 8) { list.style.display = 'none'; return; }
+  _npWaTimer = setTimeout(async () => {
+    const r = await api(`/api/v2/clientes/por-telefone?phone=${encodeURIComponent(digits)}`);
+    const clientes = Array.isArray(r) ? r : [];
+    if (!clientes.length) { list.innerHTML = '<div style="padding:8px 12px;font-size:13px;color:#888">Nenhum cliente encontrado — será criado no cadastro</div>'; list.style.display = 'block'; return; }
+    list.innerHTML = clientes.map(c =>
+      `<div onclick="selecionarClienteNP('${c.id}','${escHtml(c.nome)}',true)"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
+            onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''">
+        ${escHtml(c.nome)} · ${c.whatsapp || c.celular || ''}</div>`
+    ).join('');
+    list.style.display = 'block';
+  }, 300);
+}
+
+async function buscarClienteNP(q) {
+  const list = document.getElementById('np-cli-list');
+  clearTimeout(_npSearchTimer);
+  if (q.length < 2) { list.style.display = 'none'; return; }
+  _npSearchTimer = setTimeout(async () => {
+    const r = await api(`/api/v2/clientes?q=${encodeURIComponent(q)}&limit=6`);
+    const clientes = r?.clientes || r?.data || [];
+    if (!clientes.length) { list.style.display = 'none'; return; }
+    list.innerHTML = clientes.map(c =>
+      `<div onclick="selecionarClienteNP('${c.id}','${escHtml(c.nome)}')"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
+            onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''"
+       >${escHtml(c.nome)}${c.celular ? ' · ' + c.celular : ''}</div>`
+    ).join('');
+    list.style.display = 'block';
+  }, 250);
+}
+
+function npMarcaCliente(vinculado) {
+  const badge = document.getElementById('np-cli-badge');
+  const input = document.getElementById('np-cli-search');
+  if (!badge) return;
+  badge.style.display = vinculado ? 'block' : 'none';
+  if (input) input.style.borderColor = vinculado ? '#16a34a' : '#ddd';
+}
+
+function selecionarClienteNP(id, nome, fromWa) {
+  _novoPedidoClienteId = id;
+  if (fromWa) {
+    document.getElementById('np-wa-list').style.display = 'none';
+  } else {
+    document.getElementById('np-cli-search').value = nome;
+    document.getElementById('np-cli-list').style.display = 'none';
+  }
+  npMarcaCliente(true);
+}
+
+async function salvarNovoPedido() {
+  const produto = document.getElementById('np-produto').value;
+  if (!produto) { showToast('Produto/serviço é obrigatório', 'error'); return; }
+  const canal = document.getElementById('np-canal').value;
+  const tipo_producao = document.getElementById('np-tipo').value;
+
+  let celular = null, email = null;
+  if (canal !== 'chatbot') {
+    celular = document.getElementById('np-celular')?.value?.trim() || null;
+    email   = document.getElementById('np-email')?.value?.trim()   || null;
+    if (celular) {
+      const digits = celular.replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 13) {
+        showToast('Celular inválido — informe DDD + número (10 ou 11 dígitos)', 'error'); return;
+      }
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('E-mail inválido', 'error'); return;
+    }
+  }
+
+  const observacoes = document.getElementById('np-obs')?.value?.trim() || '';
+  if (!observacoes) { showToast('Observações é obrigatório — informe dimensões, arte e entrega', 'error'); return; }
+
+  // Validações de cliente e contato
+  const nomeDigitado = document.getElementById('np-cli-search')?.value?.trim();
+  if (!nomeDigitado) { showToast('Nome do cliente é obrigatório', 'error'); return; }
+  if (canal !== 'chatbot') {
+    if (!celular) { showToast('Celular é obrigatório', 'error'); return; }
+    if (!email)   { showToast('E-mail é obrigatório', 'error'); return; }
+  }
+
+  // Cliente existente ou criação automática
+  let clienteId = _novoPedidoClienteId || null;
+  if (!clienteId) {
+    const novoCliente = await api('/api/v2/clientes', {
+      method: 'POST',
+      body: JSON.stringify({ nome: nomeDigitado, celular: celular || null, email: email || null, tipo_pessoa: 'PF' }),
+    });
+    if (novoCliente?.id) {
+      clienteId = novoCliente.id;
+    } else {
+      showToast('Erro ao criar cliente: ' + (novoCliente?.error || 'tente novamente'), 'error'); return;
+    }
+  }
+
+  const body = {
+    origin_channel: canal,
+    produto,
+    tipo_producao: tipo_producao || null,
+    quantidade: parseFloat(v('np-qtd')) || null,
+    prazo: document.getElementById('np-prazo')?.value || null,
+    observacoes,
+    cliente_id: clienteId,
+    celular,
+    email,
+  };
+  const r = await api('/api/v2/orders', { method: 'POST', body: JSON.stringify(body) });
+  if (r?.error || r?.errors) { showToast(r.error || (r.errors || []).join(', '), 'error'); return; }
+  showToast(!_novoPedidoClienteId ? 'Pedido criado — cliente cadastrado automaticamente' : 'Pedido criado');
+  fecharModalCadastro(); loadOrders();
 }
 
 function exportCSV() {
   if (!ordersData.length) { showToast('Nenhum pedido para exportar.'); return; }
-  const headers = ['#Pedido','Status','Data','Nome','Telefone','Contato','E-mail','Serviço','Produto','Quantidade','Tamanho','Material','Arte','Prazo','Entrega','Observações'];
+  const headers = ['#','Status','Data','Cliente','Vendedor','Canal','Produto','Qtd','Orçamento'];
   const rows = ordersData.map(o => [
-    o.pedido_numero, statusLabel(o.pedido_status),
-    new Date(o.data).toLocaleDateString('pt-BR'),
-    o.nome, o.telefone, o.contato, o.email, o.servico, o.produto,
-    o.quantidade, o.tamanho, o.material, o.arte, o.prazo, o.entrega, o.observacoes
-  ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(';'));
+    o.numero_os, statusLabel(o.status),
+    o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '',
+    o.cliente_nome, o.vendedor_nome, o.origin_channel, o.produto, o.quantidade, o.orcamento_numero||''
+  ].map(val => `"${String(val||'').replace(/"/g,'""')}"`).join(';'));
   const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url;
   a.download = `pedidos_lkl_${new Date().toISOString().slice(0,10)}.csv`;
   a.click(); URL.revokeObjectURL(url);
-  showToast('✅ CSV exportado!');
-}
-
-function copyShareLink() {
-  const url = window.location.origin + '/dashboard#orders';
-  navigator.clipboard.writeText(url).then(() => showToast('🔗 Link copiado!'));
+  showToast('CSV exportado');
 }
 </script>
 

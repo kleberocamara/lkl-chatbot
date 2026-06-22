@@ -161,7 +161,7 @@
 
 <div class="header">
   <div>
-    <div class="header-title">LKL Gráfica</div>
+    <div class="header-title">Gráfica LKL</div>
     <div class="header-user" id="header-user">—</div>
   </div>
   <button class="logout-btn" onclick="logout()">Sair</button>
@@ -347,26 +347,31 @@ function showNovErr(msg) {
 
 // ── Carteira ──────────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
-  criada: 'Criada',
-  gerando_arquivo_impressao: 'Gerando arte',
-  arte_enviada_cliente: 'Arte enviada',
-  arte_aprovada_cliente: 'Arte aprovada',
-  arte_reprovada_cliente: 'Arte reprovada',
-  em_producao: 'Em produção',
-  concluido: 'Concluído',
-  entregue: 'Entregue',
-  cancelado: 'Cancelado',
+  novo:                 'Novo',
+  em_orcamento:         'Em orçamento',
+  aguardando_aprovacao: 'Aguard. aprovação',
+  aprovado:             'Aprovado',
+  em_producao:          'Em produção',
+  concluido:            'Concluído',
+  entregue:             'Entregue',
+  aguardando_pagamento: 'Aguard. pagamento',
+  pago:                 'Pago',
+  reprovado:            'Reprovado',
+  cancelado:            'Cancelado',
 };
 
+// Vendedor só vê os três status relevantes para ele
+const STATUS_VENDEDOR = ['novo', 'em_producao', 'entregue'];
+
 function badgeClass(status) {
-  const known = ['criada','em_producao','concluido','entregue','cancelado'];
+  const known = ['novo','em_producao','entregue','cancelado'];
   return 'badge badge-' + (known.includes(status) ? status : 'default');
 }
 
 async function carregarPedidos() {
   document.getElementById('carteira-loading').style.display = 'block';
   document.getElementById('carteira-lista').innerHTML = '';
-  const data = await api('GET', '/api/v2/orders?limit=50');
+  const data = await api('GET', '/api/v2/orders?limit=50&status=' + STATUS_VENDEDOR.join(','));
   document.getElementById('carteira-loading').style.display = 'none';
   if (!data || !data.data || !data.data.length) {
     document.getElementById('carteira-lista').innerHTML =

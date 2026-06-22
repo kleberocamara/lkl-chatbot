@@ -67,7 +67,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PATCH /:id/status — admin ou operador
-router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'analyst'), async (req, res) => {
+router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'analista'), async (req, res) => {
   try {
     const { status, responsavel_id } = req.body;
     if (!status) return res.status(400).json({ errors: ['status é obrigatório'] });
@@ -84,7 +84,7 @@ router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'analy
 });
 
 // PATCH /:id/enviar-arte — atendente/admin envia imagem da arte ao cliente via WhatsApp
-router.patch('/:id/enviar-arte', requireRole('admin', 'atendente', 'analyst'), uploadArtes.single('arte'), async (req, res) => {
+router.patch('/:id/enviar-arte', requireRole('admin', 'atendente', 'analista'), uploadArtes.single('arte'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ errors: ['Arquivo de arte é obrigatório'] });
     const arquivo_url = `/uploads/artes/${req.file.filename}`;

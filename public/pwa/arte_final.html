@@ -61,7 +61,7 @@
   requireAuth();
 
   var user = getUser();
-  if (!user || ['admin','atendente','analyst'].indexOf(user.role) === -1) {
+  if (!user || ['admin','atendente','analista'].indexOf(user.role) === -1) {
     window.location.href = '/pwa/login.html';
     return;
   }

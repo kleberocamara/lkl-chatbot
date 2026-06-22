@@ -439,7 +439,7 @@ router.post('/users', requireAdmin, async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   const result = await db.query(
     `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role`,
-    [name, email, hash, role || 'analyst']
+    [name, email, hash, role || 'analista']
   );
   res.json(result.rows[0]);
 });
@@ -453,12 +453,12 @@ router.post('/users/:id', requireAdmin, async (req, res) => {
       const hash = await bcrypt.hash(password, 10);
       await db.query(
         `UPDATE users SET name=$1, email=$2, role=$3, password_hash=$4 WHERE id=$5`,
-        [name, email, role || 'analyst', hash, req.params.id]
+        [name, email, role || 'analista', hash, req.params.id]
       );
     } else {
       await db.query(
         `UPDATE users SET name=$1, email=$2, role=$3 WHERE id=$4`,
-        [name, email, role || 'analyst', req.params.id]
+        [name, email, role || 'analista', req.params.id]
       );
     }
     await log('user_updated', `Usuário ${req.params.id} atualizado por ${req.user.name}`, { userId: req.user.id });

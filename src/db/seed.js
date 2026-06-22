@@ -9,7 +9,7 @@ async function seed() {
   await db.query(`
     INSERT INTO users (name, email, password_hash, role) VALUES
       ('Administrador LKL', 'admin@lklgrafica.com.br', $1, 'admin'),
-      ('Analista LKL', 'analista@lklgrafica.com.br', $2, 'analyst')
+      ('Analista LKL', 'analista@lklgrafica.com.br', $2, 'analista')
     ON CONFLICT (email) DO NOTHING
   `, [adminPass, analystPass]);
 

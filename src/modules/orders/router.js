@@ -35,7 +35,7 @@ router.post('/', async (req, res) => {
 });
 
 router.patch('/:id/status',
-  requireRole('admin', 'gestor', 'atendente', 'operador', 'analyst', 'financeiro'),
+  requireRole('admin', 'gestor', 'atendente', 'operador', 'analista', 'financeiro'),
   async (req, res) => {
     try {
       const { status } = req.body;

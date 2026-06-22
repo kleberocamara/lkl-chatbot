@@ -2526,10 +2526,14 @@ function renderOrderRows(data) {
   tbody.innerHTML = data.map((o, i) => {
     const bg = i % 2 === 0 ? 'white' : '#fafbff';
     const dt = o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
+    const extras = (parseInt(o.itens_count) || 1) - 1;
+    const produtoCel = extras > 0
+      ? `<td style="${C}max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(String(o.produto||''))}">${escHtml(String(o.produto||'—'))} <span style="background:#e8eaf6;color:#3949ab;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600">+${extras}</span></td>`
+      : td(o.produto);
     return `<tr style="background:${bg}">
       <td style="${C}font-weight:700;color:#1a237e">#${o.numero_os||'—'}</td>
       <td style="${C}"><span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span></td>
-      ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${td(o.produto)}${td(o.quantidade)}
+      ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${produtoCel}${td(o.quantidade)}
       <td style="padding:10px;border-bottom:1px solid #f0f0f0;max-width:240px">${_obsPreview(o.observacoes)}</td>
     </tr>`;
   }).join('');
@@ -2582,8 +2586,67 @@ function _npCanalHtml(selecionado) {
   </div>`;
 }
 
+let _npItemSeq = 0;
+
+function npItemRowHtml(i) {
+  return `<div class="np-item-row" data-idx="${i}" style="border:1px solid #e8eaf6;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafbff">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span class="np-item-num" style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px">ITEM</span>
+      <button type="button" onclick="npRemoveItem(${i})" title="Remover item"
+        style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;font-size:15px;line-height:1;cursor:pointer">−</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${selectProduto('np-produto-' + i, "document.getElementById('np-tipo-" + i + "').value = tipoPorProduto(this.value)")}
+      ${campoTipoProd('np-tipo-' + i)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:8px">
+      ${campoEdit('QUANTIDADE', 'np-qtd-' + i, '', 'number', 'min="1"')}
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">Especificação</label>
+        <input id="np-espec-${i}" type="text" placeholder="Ex: 1,20 x 0,80 M · COM ARTE" oninput="this.value=this.value.toUpperCase()"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;text-transform:uppercase"></div>
+    </div>
+  </div>`;
+}
+
+function npRenumItens() {
+  document.querySelectorAll('#np-itens .np-item-row .np-item-num')
+    .forEach((el, idx) => { el.textContent = 'ITEM ' + (idx + 1); });
+}
+
+function npAddItem() {
+  const wrap = document.getElementById('np-itens');
+  if (!wrap) return;
+  const i = _npItemSeq++;
+  wrap.insertAdjacentHTML('beforeend', npItemRowHtml(i));
+  npRenumItens();
+}
+
+function npRemoveItem(i) {
+  const rows = document.querySelectorAll('#np-itens .np-item-row');
+  if (rows.length <= 1) { showToast('O pedido precisa de ao menos 1 item'); return; }
+  document.querySelector(`#np-itens .np-item-row[data-idx="${i}"]`)?.remove();
+  npRenumItens();
+}
+
+function npColetarItens() {
+  const itens = [];
+  document.querySelectorAll('#np-itens .np-item-row').forEach(row => {
+    const i = row.dataset.idx;
+    const produto = document.getElementById('np-produto-' + i)?.value || '';
+    if (!produto) return;
+    itens.push({
+      produto,
+      tipo_producao: document.getElementById('np-tipo-' + i)?.value || null,
+      quantidade: parseInt(document.getElementById('np-qtd-' + i)?.value) || null,
+      especificacao: document.getElementById('np-espec-' + i)?.value?.trim() || null,
+    });
+  });
+  return itens;
+}
+
 function abrirNovoPedido() {
   _novoPedidoClienteId = null;
+  _npItemSeq = 0;
   document.getElementById('modal-cadastro-title').textContent = 'Novo Pedido';
   document.getElementById('modal-cadastro-body').innerHTML = `
     <div style="display:grid;gap:12px">
@@ -2596,13 +2659,13 @@ function abrirNovoPedido() {
         <div id="np-cli-list" style="background:white;border:1px solid #ddd;border-radius:8px;max-height:140px;overflow:auto;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
         <div id="np-cli-badge" style="display:none;margin-top:4px;font-size:12px;color:#16a34a;font-weight:600">✓ Cliente vinculado</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        ${selectProduto('np-produto', "document.getElementById('np-tipo').value = tipoPorProduto(this.value)")}
-        ${_npCanalHtml('balcao')}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        ${campoTipoProd('np-tipo')}
-        ${campoEdit('QUANTIDADE','np-qtd','','number')}
+      <div>${_npCanalHtml('balcao')}</div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555">Itens do pedido *</label>
+          <button type="button" onclick="npAddItem()" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer">+ Adicionar item</button>
+        </div>
+        <div id="np-itens"></div>
       </div>
       <div id="np-contato-area"></div>
       <div>
@@ -2619,6 +2682,7 @@ function abrirNovoPedido() {
     </div>`;
   document.getElementById('modal-cadastro-save').onclick = salvarNovoPedido;
   document.getElementById('modal-cadastro').style.display = 'block';
+  npAddItem();
   npAtualizarCamposContato();
 }
 
@@ -2709,10 +2773,12 @@ function selecionarClienteNP(id, nome, fromWa) {
 }
 
 async function salvarNovoPedido() {
-  const produto = document.getElementById('np-produto').value;
-  if (!produto) { showToast('Produto/serviço é obrigatório', 'error'); return; }
+  const itens = npColetarItens();
+  if (!itens.length) { showToast('Adicione ao menos 1 item com produto/serviço', 'error'); return; }
+  for (const it of itens) {
+    if (!it.quantidade || it.quantidade <= 0) { showToast('Informe a quantidade de cada item', 'error'); return; }
+  }
   const canal = document.getElementById('np-canal').value;
-  const tipo_producao = document.getElementById('np-tipo').value;
 
   let celular = null, email = null;
   if (canal !== 'chatbot') {
@@ -2756,9 +2822,7 @@ async function salvarNovoPedido() {
 
   const body = {
     origin_channel: canal,
-    produto,
-    tipo_producao: tipo_producao || null,
-    quantidade: parseFloat(v('np-qtd')) || null,
+    itens,
     prazo: document.getElementById('np-prazo')?.value || null,
     observacoes,
     cliente_id: clienteId,

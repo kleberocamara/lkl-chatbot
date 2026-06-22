@@ -31,12 +31,41 @@ const FCM_LABELS = {
   pago:             'Pagamento confirmado ✅',
 };
 
+// Normaliza os itens recebidos: aceita array `itens` ou cai no produto único (legado/chatbot)
+function _normalizarItens(dados) {
+  let itens = Array.isArray(dados.itens) ? dados.itens : [];
+  itens = itens
+    .map(it => ({
+      produto: (it.produto || '').trim(),
+      tipo_producao: it.tipo_producao || null,
+      quantidade: parseInt(it.quantidade) || 1,
+      especificacao: (it.especificacao || '').trim() || null,
+      tem_arte: !!it.tem_arte,
+    }))
+    .filter(it => it.produto);
+  if (!itens.length && dados.produto) {
+    itens = [{
+      produto: dados.produto,
+      tipo_producao: dados.tipo_producao || null,
+      quantidade: parseInt(dados.quantidade) || 1,
+      especificacao: null,
+      tem_arte: dados.tem_arte || false,
+    }];
+  }
+  return itens;
+}
+
 async function criarOrder(dados, userId) {
   const erros = [];
   if (!dados.origin_channel || !CANAIS_VALIDOS.includes(dados.origin_channel))
     erros.push(`origin_channel deve ser: ${CANAIS_VALIDOS.join(', ')}`);
-  if (!dados.produto) erros.push('produto é obrigatório');
+
+  const itens = _normalizarItens(dados);
+  if (!itens.length) erros.push('ao menos um item (produto) é obrigatório');
   if (erros.length > 0) return { erro: erros };
+
+  // O pedido guarda o 1º item como resumo (compatível com a listagem atual)
+  const principal = itens[0];
 
   const r = await db.query(
     `INSERT INTO orders
@@ -44,12 +73,25 @@ async function criarOrder(dados, userId) {
       tem_arte, prazo, valor_orcamento, observacoes)
      VALUES ($1,$2,$3,'novo',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [dados.origin_channel, dados.cliente_id || null, dados.vendedor_id || userId || null,
-     dados.produto, dados.tipo_producao || null, dados.quantidade || null, dados.material || null, dados.acabamento || null,
-     dados.tem_arte || false, _parseDate(dados.prazo), dados.valor_orcamento || null,
+     principal.produto, principal.tipo_producao, principal.quantidade, dados.material || null, dados.acabamento || null,
+     principal.tem_arte || false, _parseDate(dados.prazo), dados.valor_orcamento || null,
      dados.observacoes || null]
   );
 
   const order = r.rows[0];
+
+  // Persiste todos os itens do pedido
+  try {
+    for (const it of itens) {
+      await db.query(
+        `INSERT INTO order_items (order_id, produto, quantidade, acabamento, especificacao, valor_unitario, valor_total)
+         VALUES ($1,$2,$3,$4,$5,0,0)`,
+        [order.id, it.produto, it.quantidade, dados.acabamento || null, it.especificacao]
+      );
+    }
+  } catch (e) {
+    console.warn('[ORDER-ITEMS] Falha ao salvar itens do pedido:', e.message);
+  }
 
   // Atualizar celular/email no cadastro do cliente se informados
   if (order.cliente_id && (dados.celular || dados.email)) {
@@ -61,7 +103,7 @@ async function criarOrder(dados, userId) {
     await db.query(`UPDATE clientes_lkl SET ${sets.join(',')} WHERE id=$${vals.length}`, vals);
   }
 
-  // Auto-cria orçamento 'em_orcamento' linkado ao pedido, com o produto pré-carregado
+  // Auto-cria orçamento 'em_orcamento' linkado ao pedido, com todos os itens pré-carregados
   try {
     const orcR = await db.query(
       `INSERT INTO orcamentos (cliente_id, vendedor_id, pedido_id, status, total)
@@ -70,11 +112,15 @@ async function criarOrder(dados, userId) {
     );
     const orcamentoId = orcR.rows[0].id;
 
-    await db.query(
-      `INSERT INTO orcamento_itens (orcamento_id, codigo, descricao, quantidade, valor_unitario, valor_total, tem_arte)
-       VALUES ($1, 1, $2, $3, 0, 0, $4)`,
-      [orcamentoId, order.produto, order.quantidade || 1, order.tem_arte || false]
-    );
+    let codigo = 1;
+    for (const it of itens) {
+      const descricao = it.especificacao ? `${it.produto} — ${it.especificacao}` : it.produto;
+      await db.query(
+        `INSERT INTO orcamento_itens (orcamento_id, codigo, descricao, quantidade, valor_unitario, valor_total, tem_arte)
+         VALUES ($1, $2, $3, $4, 0, 0, $5)`,
+        [orcamentoId, codigo++, descricao, it.quantidade, it.tem_arte || false]
+      );
+    }
 
     await db.query(
       `UPDATE orders SET orcamento_id=$1, status='em_orcamento', updated_at=NOW() WHERE id=$2`,
@@ -99,7 +145,8 @@ async function buscarPorId(id) {
               u.name   AS vendedor_nome,
               orc.numero AS orcamento_numero,
               orc.status AS orcamento_status,
-              (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total
+              (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itens_count
        FROM orders o
        LEFT JOIN clientes_lkl c  ON c.id  = o.cliente_id
        LEFT JOIN users u          ON u.id  = o.vendedor_id
@@ -175,7 +222,8 @@ async function listar({ page = 1, limit = 50, status, cliente_id, origin_channel
               u.name   AS vendedor_nome,
               orc.numero AS orcamento_numero,
               orc.status AS orcamento_status,
-              (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total
+              (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total,
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itens_count
        FROM orders o
        LEFT JOIN clientes_lkl c  ON c.id  = o.cliente_id
        LEFT JOIN users u          ON u.id  = o.vendedor_id

@@ -1,0 +1,13 @@
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nro_jogos          INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS nro_vias           INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS tipo_unidade       VARCHAR(5);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS frente_verso       VARCHAR(20);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS numeracao_inicial  INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS numeracao_final    INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS formato_corte_alt  NUMERIC(8,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS formato_corte_larg NUMERIC(8,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS imagem_alt         NUMERIC(8,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS imagem_larg        NUMERIC(8,2);
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS imagens_folha      INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS imagens_impressao  INTEGER;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS cores_tintas       VARCHAR(50);

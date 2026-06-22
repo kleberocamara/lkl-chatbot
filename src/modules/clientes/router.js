@@ -5,8 +5,8 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { page, limit, busca, status } = req.query;
-    const result = await service.listar({ page: parseInt(page) || 1, limit: parseInt(limit) || 20, busca, status });
+    const { page, limit, busca, q, status } = req.query;
+    const result = await service.listar({ page: parseInt(page) || 1, limit: parseInt(limit) || 20, busca: busca || q, status });
     res.json(result);
   } catch (err) {
     console.error(err);

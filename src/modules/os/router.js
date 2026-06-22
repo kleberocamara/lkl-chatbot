@@ -117,6 +117,18 @@ router.patch('/:id/enviar-arte', requireRole('admin', 'atendente', 'analista'), 
   }
 });
 
+// Ficha de produção offset (parâmetros + vias/materiais)
+router.patch('/:id/producao', requireRole('admin','gestor','analista','operador'), async (req, res) => {
+  try {
+    const result = await service.atualizarFichaProducao(req.params.id, req.body);
+    if (result.erro) {
+      const nf = result.erro.some(e => e.includes('não encontrada'));
+      return res.status(nf ? 404 : 400).json(nf ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result.os);
+  } catch (e) { console.error('[OS-PRODUCAO]', e); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 // PATCH /:id/entregar — motorista ou admin
 router.patch('/:id/entregar', requireRole('admin', 'motorista'), upload.single('foto_documento'), async (req, res) => {
   try {

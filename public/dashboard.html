@@ -1203,7 +1203,76 @@ async function loadOsMain() {
 // ── DETALHE DA OS + FICHA DE PRODUÇÃO ──────────────────────────────────────────
 let _osDetalheId = null;
 let _osMateriais = [];
-function renderViasOS(){}  // stub — substituído na Task 5
+function renderViasOS() {
+  const area = document.getElementById('of-vias-area');
+  if (!area) return;
+  const linhas = _osMateriais.map((m, idx) => `
+    <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr 0.5fr 0.5fr auto;gap:6px;align-items:center;margin-bottom:6px">
+      <input value="${escHtml(m.descricao||m.material_nome||'')}" readonly placeholder="Material..."
+        onclick="buscarMaterialVia(${idx})" title="Clique para buscar material"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#fafbff">
+      <input value="${escHtml(m.cor_papel||'')}" placeholder="Cor papel" oninput="_osMateriais[${idx}].cor_papel=this.value"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+      <input value="${escHtml(m.cores_tintas||'')}" placeholder="Tintas" oninput="_osMateriais[${idx}].cores_tintas=this.value"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+      <input value="${escHtml(m.tipo_impressao||'')}" placeholder="Impressão" oninput="_osMateriais[${idx}].tipo_impressao=this.value"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+      <input value="${m.cores_frente!=null?m.cores_frente:''}" type="number" min="0" placeholder="Fre" oninput="_osMateriais[${idx}].cores_frente=this.value"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+      <input value="${m.cores_verso!=null?m.cores_verso:''}" type="number" min="0" placeholder="Ver" oninput="_osMateriais[${idx}].cores_verso=this.value"
+        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+      <button onclick="removerViaOS(${idx})" title="Remover via" style="background:#e53935;border:none;border-radius:50%;width:24px;height:24px;color:white;cursor:pointer">−</button>
+    </div>`).join('');
+  area.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">VIAS / MATERIAIS</div>
+    <div style="font-size:10px;color:#999;display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr 0.5fr 0.5fr auto;gap:6px;margin-bottom:4px">
+      <span>Material</span><span>Cor papel</span><span>Tintas</span><span>Impressão</span><span>Fre</span><span>Ver</span><span></span></div>
+    ${linhas || '<p style="font-size:12px;color:#999">Nenhuma via. Adicione abaixo.</p>'}
+    <button onclick="adicionarViaOS()" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;margin-top:6px">+ Adicionar via</button>`;
+}
+
+function adicionarViaOS() {
+  _osMateriais.push({ via: _osMateriais.length+1, material_id:null, descricao:'', cor_papel:'', cores_tintas:'', tipo_impressao:'', cores_frente:'', cores_verso:'' });
+  renderViasOS();
+}
+function removerViaOS(idx) { _osMateriais.splice(idx,1); renderViasOS(); }
+
+// Busca INLINE dentro da área de vias (não usa modal — preserva a ficha já preenchida)
+async function buscarMaterialVia(idx) {
+  const area = document.getElementById('of-vias-area');
+  if (!area) return;
+  area.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">SELECIONAR MATERIAL — VIA ${idx+1}</div>
+    <input id="of-mat-busca" placeholder="Código ou nome do material..." autofocus
+      oninput="buscarMaterialViaQuery(${idx}, this.value)"
+      style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">
+    <div id="of-mat-result" style="max-height:200px;overflow:auto;border:1px solid #eee;border-radius:6px;margin-top:6px"></div>
+    <button onclick="renderViasOS()" style="background:none;border:1px solid #ddd;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-top:8px">← Voltar</button>`;
+}
+
+let _osMatTimer = null;
+function buscarMaterialViaQuery(idx, q) {
+  clearTimeout(_osMatTimer);
+  _osMatTimer = setTimeout(async () => {
+    const result = document.getElementById('of-mat-result');
+    if (!result) return;
+    if (!q || !q.trim()) { result.innerHTML = ''; return; }
+    const res = await api(`/api/v2/materiais?busca=${encodeURIComponent(q.trim())}&limit=12`);
+    const lista = res?.data || res || [];
+    if (!lista.length) { result.innerHTML = '<div style="padding:8px;color:#999;font-size:12px">Nenhum material</div>'; return; }
+    result.innerHTML = lista.map(m => `
+      <div onclick="selecionarMaterialVia(${idx},'${m.id}','${escHtml(((m.codigo?m.codigo+' - ':'')+m.nome)).replace(/'/g,"\\'")}')"
+        style="padding:8px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px"
+        onmouseenter="this.style.background='#f5f7ff'" onmouseleave="this.style.background='#fff'">
+        <b>${escHtml(m.codigo||'')}</b> ${escHtml(m.nome)} <span style="color:#888;font-size:11px">${m.unidade||''}</span></div>`).join('');
+  }, 250);
+}
+
+function selecionarMaterialVia(idx, materialId, descricao) {
+  _osMateriais[idx].material_id = materialId;
+  _osMateriais[idx].descricao = descricao;
+  renderViasOS();
+}
 const FV_OPCOES = [['so_frente','Só Frente'],['fv_iguais','Frente e Verso Iguais'],['fv_diferentes','Frente e Verso Diferentes']];
 const UNID_OPCOES = ['FLS','BLS','PCS','JGS','TLS'];
 

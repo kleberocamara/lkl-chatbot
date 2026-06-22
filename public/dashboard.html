@@ -3071,8 +3071,12 @@ function selecionarClienteNP(id, fromWa) {
 }
 
 async function salvarNovoPedido() {
+  const totalLinhas = document.querySelectorAll('#np-itens .np-item-row').length;
   const itens = npColetarItens();
   if (!itens.length) { showToast('Adicione ao menos 1 item com produto/serviço', 'error'); return; }
+  if (itens.length < totalLinhas) {
+    showToast(`Há ${totalLinhas - itens.length} item(ns) sem produto selecionado — escolha o produto ou remova a linha`, 'error'); return;
+  }
   for (const it of itens) {
     if (!it.quantidade || it.quantidade <= 0) { showToast('Informe a quantidade de cada item', 'error'); return; }
   }

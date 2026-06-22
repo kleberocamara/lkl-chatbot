@@ -2853,6 +2853,7 @@ async function updateOrderStatus(id, newStatus) {
 
 // ── Novo Pedido ───────────────────────────────────────────────────────────────
 let _novoPedidoClienteId = null;
+let _npClienteMap = {};
 let _npSearchTimer;
 
 function _npCanalHtml(selecionado) {
@@ -2992,6 +2993,14 @@ function npAtualizarCamposContato() {
           style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
       </div>
     </div>`;
+    // Re-preenche o contato se já houver cliente selecionado (ex.: trocou o canal depois de escolher)
+    const c = _npClienteMap[_novoPedidoClienteId];
+    if (c) {
+      const celEl = document.getElementById('np-celular');
+      const emailEl = document.getElementById('np-email');
+      if (celEl)   celEl.value   = c.celular || '';
+      if (emailEl) emailEl.value = c.email   || '';
+    }
   }
 }
 
@@ -3005,8 +3014,9 @@ async function buscarClientePorWhatsapp(q) {
     const r = await api(`/api/v2/clientes/por-telefone?phone=${encodeURIComponent(digits)}`);
     const clientes = Array.isArray(r) ? r : [];
     if (!clientes.length) { list.innerHTML = '<div style="padding:8px 12px;font-size:13px;color:#888">Nenhum cliente encontrado — será criado no cadastro</div>'; list.style.display = 'block'; return; }
+    clientes.forEach(c => { _npClienteMap[c.id] = { ...c, celular: c.celular || c.whatsapp }; });
     list.innerHTML = clientes.map(c =>
-      `<div onclick="selecionarClienteNP('${c.id}','${escHtml(c.nome)}',true)"
+      `<div onclick="selecionarClienteNP('${c.id}',true)"
             style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
             onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''">
         ${escHtml(c.nome)} · ${c.whatsapp || c.celular || ''}</div>`
@@ -3023,8 +3033,9 @@ async function buscarClienteNP(q) {
     const r = await api(`/api/v2/clientes?q=${encodeURIComponent(q)}&limit=6`);
     const clientes = r?.clientes || r?.data || [];
     if (!clientes.length) { list.style.display = 'none'; return; }
+    clientes.forEach(c => { _npClienteMap[c.id] = c; });
     list.innerHTML = clientes.map(c =>
-      `<div onclick="selecionarClienteNP('${c.id}','${escHtml(c.nome)}')"
+      `<div onclick="selecionarClienteNP('${c.id}')"
             style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
             onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''"
        >${escHtml(c.nome)}${c.celular ? ' · ' + c.celular : ''}</div>`
@@ -3041,14 +3052,21 @@ function npMarcaCliente(vinculado) {
   if (input) input.style.borderColor = vinculado ? '#16a34a' : '#ddd';
 }
 
-function selecionarClienteNP(id, nome, fromWa) {
+function selecionarClienteNP(id, fromWa) {
+  const c = _npClienteMap[id] || {};
   _novoPedidoClienteId = id;
+  const search = document.getElementById('np-cli-search');
+  if (search) search.value = (c.nome || '').toUpperCase();
   if (fromWa) {
-    document.getElementById('np-wa-list').style.display = 'none';
+    const wa = document.getElementById('np-wa-list'); if (wa) wa.style.display = 'none';
   } else {
-    document.getElementById('np-cli-search').value = nome;
-    document.getElementById('np-cli-list').style.display = 'none';
+    const lst = document.getElementById('np-cli-list'); if (lst) lst.style.display = 'none';
   }
+  // Preenche contato automaticamente se o cliente já tem na base (campos existem em canal não-chatbot)
+  const celEl = document.getElementById('np-celular');
+  const emailEl = document.getElementById('np-email');
+  if (celEl)   celEl.value   = c.celular || '';
+  if (emailEl) emailEl.value = c.email   || '';
   npMarcaCliente(true);
 }
 

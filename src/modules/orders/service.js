@@ -116,9 +116,9 @@ async function criarOrder(dados, userId) {
     for (const it of itens) {
       const descricao = it.especificacao ? `${it.produto} — ${it.especificacao}` : it.produto;
       await db.query(
-        `INSERT INTO orcamento_itens (orcamento_id, codigo, descricao, quantidade, valor_unitario, valor_total, tem_arte)
-         VALUES ($1, $2, $3, $4, 0, 0, $5)`,
-        [orcamentoId, codigo++, descricao, it.quantidade, it.tem_arte || false]
+        `INSERT INTO orcamento_itens (orcamento_id, codigo, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao)
+         VALUES ($1, $2, $3, $4, 0, 0, $5, $6)`,
+        [orcamentoId, codigo++, descricao, it.quantidade, it.tem_arte || false, it.tipo_producao || null]
       );
     }
 

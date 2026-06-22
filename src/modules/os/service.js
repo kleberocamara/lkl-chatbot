@@ -267,4 +267,34 @@ async function entregar(id, { nome_recebedor, foto_url }) {
   return { os };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte };
+// Cria 1 OS com TODOS os itens de Comunicação Visual de um orçamento aprovado.
+// Idempotente: ignora itens que já estão em alguma OS.
+async function criarOSComunicacaoVisual(orcamentoId) {
+  const itens = await db.query(
+    `SELECT oi.id, oi.quantidade
+     FROM orcamento_itens oi
+     WHERE oi.orcamento_id = $1
+       AND oi.tipo_producao = 'COMUNICAÇÃO VISUAL'
+       AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)`,
+    [orcamentoId]
+  );
+  if (!itens.rows.length) return null;
+
+  const orc = await db.query('SELECT cliente_id, prazo_entrega FROM orcamentos WHERE id=$1', [orcamentoId]);
+  const clienteId = orc.rows[0]?.cliente_id || null;
+  const qtdTotal = itens.rows.reduce((s, i) => s + (parseInt(i.quantidade) || 0), 0);
+
+  const osR = await db.query(
+    `INSERT INTO ordens_servico (orcamento_id, status, tipo_servico, cliente_id, quantidade)
+     VALUES ($1, 'aguardando', 'comunicacao_visual', $2, $3) RETURNING id, numero_os`,
+    [orcamentoId, clienteId, qtdTotal]
+  );
+  const osId = osR.rows[0].id;
+  for (const it of itens.rows) {
+    await db.query(`INSERT INTO os_itens (os_id, orcamento_item_id) VALUES ($1,$2)`, [osId, it.id]);
+  }
+  if (global.io) global.io.emit('nova_os', { os_id: osId, orcamento_id: orcamentoId });
+  return { os_id: osId, numero_os: osR.rows[0].numero_os, itens: itens.rows.length };
+}
+
+module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual };

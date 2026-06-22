@@ -6,6 +6,7 @@ const { enviarOrcamentoCliente } = require('../../services/email');
 const whatsapp = require('../../services/whatsapp');
 const fcm = require('../../services/fcm');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
+const osService = require('../os/service');
 
 // Sync de status do pedido vinculado — fire-and-forget
 async function _syncPedidoStatus(orcamentoId, novoStatus) {
@@ -233,6 +234,9 @@ async function mudarStatus(id, novoStatus, extra = {}) {
 
   _syncPedidoStatus(id, novoStatus);
   _notifyVendedorResposta(id, novoStatus);
+  if (novoStatus === 'aprovado') {
+    osService.criarOSComunicacaoVisual(id).catch(e => console.warn('[OS-CV]', e.message));
+  }
 
   return { orcamento: r.rows[0] };
 }
@@ -433,6 +437,7 @@ async function aprovar(id, aprovado_via) {
   // Sync pedido → aprovado (OS será criada manualmente pelo gestor)
   _syncPedidoStatus(id, 'aprovado');
   _notifyVendedorResposta(id, 'aprovado');
+  osService.criarOSComunicacaoVisual(id).catch(e => console.warn('[OS-CV]', e.message));
 
   if (global.io) global.io.emit('orcamento_aprovado', { orcamento_id: id });
 

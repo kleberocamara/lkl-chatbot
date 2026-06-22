@@ -154,7 +154,16 @@ async function buscarPorId(id) {
      WHERE oe.os_id = $1 ORDER BY e.nome`,
     [id]
   );
-  return { ...os, itens: itens.rows, especificacoes: especs.rows };
+  const mats = await db.query(
+    `SELECT m.id, m.via, m.material_id, m.descricao, m.cor_papel, m.cores_tintas,
+            m.tipo_impressao, m.cores_frente, m.cores_verso,
+            mat.codigo AS material_codigo, mat.nome AS material_nome
+     FROM os_materiais m
+     LEFT JOIN materiais mat ON mat.id = m.material_id
+     WHERE m.os_id = $1 ORDER BY m.via`,
+    [id]
+  );
+  return { ...os, itens: itens.rows, especificacoes: especs.rows, materiais: mats.rows };
 }
 
 async function atualizarStatus(id, novoStatus, responsavel_id) {
@@ -353,4 +362,42 @@ async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produt
   return { os_id: osId, numero_os: osR.rows[0].numero_os, itens: val.rows.length };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset };
+// Atualiza a ficha de produção da OS e substitui as vias/materiais
+async function atualizarFichaProducao(osId, dados) {
+  const COLS = ['nro_jogos','nro_vias','tipo_unidade','frente_verso','numeracao_inicial',
+    'numeracao_final','formato_corte_alt','formato_corte_larg','imagem_alt','imagem_larg',
+    'imagens_folha','imagens_impressao','cores_tintas'];
+  const sets = [], vals = [];
+  for (const c of COLS) {
+    if (dados[c] !== undefined) { vals.push(dados[c] === '' ? null : dados[c]); sets.push(`${c}=$${vals.length}`); }
+  }
+  if (sets.length) {
+    vals.push(osId);
+    const r = await db.query(
+      `UPDATE ordens_servico SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length} RETURNING id`, vals);
+    if (!r.rows[0]) return { erro: ['OS não encontrada'] };
+  } else {
+    const r = await db.query('SELECT id FROM ordens_servico WHERE id=$1', [osId]);
+    if (!r.rows[0]) return { erro: ['OS não encontrada'] };
+  }
+
+  if (Array.isArray(dados.materiais)) {
+    await db.query('DELETE FROM os_materiais WHERE os_id=$1', [osId]);
+    let via = 1;
+    for (const m of dados.materiais) {
+      await db.query(
+        `INSERT INTO os_materiais (os_id, via, material_id, descricao, cor_papel, cores_tintas, tipo_impressao, cores_frente, cores_verso)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [osId, m.via || via, m.material_id || null, m.descricao || null, m.cor_papel || null,
+         m.cores_tintas || null, m.tipo_impressao || null,
+         m.cores_frente != null && m.cores_frente !== '' ? parseInt(m.cores_frente) : null,
+         m.cores_verso  != null && m.cores_verso  !== '' ? parseInt(m.cores_verso)  : null]
+      );
+      via++;
+    }
+  }
+  const os = await buscarPorId(osId);
+  return { os };
+}
+
+module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset, atualizarFichaProducao };

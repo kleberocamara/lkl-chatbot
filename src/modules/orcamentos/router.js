@@ -9,10 +9,20 @@ const router = express.Router();
 // GET /resposta?token=xxx&r=aprovado|reprovado — rota PÚBLICA (link do e-mail)
 router.get('/resposta', async (req, res) => {
   const { token, r } = req.query;
-  if (!token || !['aprovado', 'reprovado'].includes(r)) {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!token || !UUID_RE.test(token) || !['aprovado', 'reprovado'].includes(r)) {
     return res.status(400).send('Link inválido.');
   }
-  const result = await service.processarRespostaToken(token, r);
+  let result;
+  try {
+    result = await service.processarRespostaToken(token, r);
+  } catch (e) {
+    console.error('[ORC-RESPOSTA]', e.message);
+    return res.status(500).send(`<html><body style="font-family:Arial;text-align:center;padding:60px">
+      <h2>⚠️ Não foi possível processar sua resposta agora</h2>
+      <p>Tente novamente em instantes ou fale com a Gráfica LKL.</p>
+    </body></html>`);
+  }
   if (result.erro) {
     return res.send(`<html><body style="font-family:Arial;text-align:center;padding:60px">
       <h2>⚠️ ${result.erro[0]}</h2>

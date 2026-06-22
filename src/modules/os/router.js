@@ -54,6 +54,23 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Itens offset aprovados sem OS (fila de agrupamento)
+router.get('/itens-disponiveis', requireRole('admin','gestor','analista'), async (req, res) => {
+  try {
+    const itens = await service.itensOffsetDisponiveis();
+    res.json(itens);
+  } catch (e) { console.error('[OS-DISP]', e); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Cria OS offset agrupada
+router.post('/', requireRole('admin','gestor','analista'), async (req, res) => {
+  try {
+    const result = await service.criarOSOffset(req.body, req.user.id);
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.status(201).json(result);
+  } catch (e) { console.error('[OS-CRIAR]', e); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 // GET /:id — detail (any authenticated user)
 router.get('/:id', async (req, res) => {
   try {

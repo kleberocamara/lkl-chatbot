@@ -162,8 +162,8 @@
         (os.numero_orcamento ? '<span class="orc-num">ORC #' + escapeHTML(os.numero_orcamento) + '</span>' : '') +
         badgeHTML(os.status) +
       '</div>' +
-      '<div class="item-desc">' + escapeHTML(os.item_descricao) + '</div>' +
-      '<div class="info-row">' + escapeHTML(os.cliente_nome) + ' &nbsp;·&nbsp; Qtde: ' + escapeHTML(os.quantidade) + '</div>' +
+      '<div class="item-desc">' + escapeHTML(os.item_descricao || '—') + '</div>' +
+      '<div class="info-row">' + escapeHTML(os.cliente_nome) + ' &nbsp;·&nbsp; Qtde: ' + escapeHTML(os.quantidade || os.itens_count || '—') + '</div>' +
       detailLines +
       actionHTML +
     '</div>';

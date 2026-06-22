@@ -297,4 +297,60 @@ async function criarOSComunicacaoVisual(orcamentoId) {
   return { os_id: osId, numero_os: osR.rows[0].numero_os, itens: itens.rows.length };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual };
+// Itens OFFSET de orçamentos aprovados que ainda não estão em nenhuma OS
+async function itensOffsetDisponiveis() {
+  const r = await db.query(
+    `SELECT oi.id, oi.descricao, oi.quantidade,
+            orc.id AS orcamento_id, orc.numero AS numero_orcamento,
+            cl.id AS cliente_id, cl.nome AS cliente_nome
+     FROM orcamento_itens oi
+     JOIN orcamentos orc ON orc.id = oi.orcamento_id
+     LEFT JOIN clientes_lkl cl ON cl.id = orc.cliente_id
+     WHERE orc.status = 'aprovado'
+       AND oi.tipo_producao = 'OFFSET'
+       AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)
+     ORDER BY cl.nome, orc.numero, oi.codigo`
+  );
+  return r.rows;
+}
+
+// Cria 1 OS offset agrupando N itens (de qualquer cliente/orçamento) + especificações
+async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produto, previsao_entrega }, userId) {
+  if (!Array.isArray(item_ids) || item_ids.length === 0) return { erro: ['Selecione ao menos 1 item'] };
+
+  const val = await db.query(
+    `SELECT oi.id, oi.quantidade, orc.cliente_id
+     FROM orcamento_itens oi JOIN orcamentos orc ON orc.id = oi.orcamento_id
+     WHERE oi.id = ANY($1) AND orc.status='aprovado' AND oi.tipo_producao='OFFSET'
+       AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)`,
+    [item_ids]
+  );
+  if (val.rows.length !== item_ids.length) {
+    return { erro: ['Um ou mais itens são inválidos, não são offset aprovados ou já estão em outra OS'] };
+  }
+
+  const clientes = [...new Set(val.rows.map(r => r.cliente_id).filter(Boolean))];
+  const clienteId = clientes.length === 1 ? clientes[0] : null; // null = OS multi-cliente
+  const qtdTotal = val.rows.reduce((s, i) => s + (parseInt(i.quantidade) || 0), 0);
+
+  const osR = await db.query(
+    `INSERT INTO ordens_servico
+       (status, tipo_servico, tipo_produto, cliente_id, quantidade, previsao_entrega, observacao_interna, responsavel_id)
+     VALUES ('aguardando','offset',$1,$2,$3,$4,$5,$6) RETURNING id, numero_os`,
+    [tipo_produto || null, clienteId, qtdTotal, previsao_entrega || null, observacao || null, userId || null]
+  );
+  const osId = osR.rows[0].id;
+
+  for (const it of val.rows) {
+    await db.query(`INSERT INTO os_itens (os_id, orcamento_item_id) VALUES ($1,$2)`, [osId, it.id]);
+  }
+  if (Array.isArray(especificacoes)) {
+    for (const eid of especificacoes) {
+      await db.query(`INSERT INTO os_especificacoes (os_id, especificacao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [osId, eid]);
+    }
+  }
+  if (global.io) global.io.emit('nova_os', { os_id: osId });
+  return { os_id: osId, numero_os: osR.rows[0].numero_os, itens: val.rows.length };
+}
+
+module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset };

@@ -286,6 +286,21 @@ async function concluir(id, userId) {
   return { orcamento: atualizado };
 }
 
+// Reenvia as notificações (e-mail/WhatsApp) de um orçamento já enviado,
+// reaproveitando o mesmo token de aprovação. Útil quando o link anterior falhou.
+async function reenviar(id) {
+  const orc = await buscarPorId(id);
+  if (!orc) return { erro: ['Orçamento não encontrado'] };
+  if (!['enviado', 'concluido'].includes(orc.status)) {
+    return { erro: [`Só é possível reenviar orçamento enviado (status atual: ${orc.status})`] };
+  }
+  if (!orc.cliente_email && !orc.cliente_celular) {
+    return { erro: ['Cliente sem e-mail nem celular cadastrado'] };
+  }
+  await _dispararNotificacoesEnvio(orc);
+  return { ok: true, email: orc.cliente_email || null, celular: orc.cliente_celular || null };
+}
+
 async function _dispararNotificacoesEnvio(orc) {
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
   const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=aprovado`;
@@ -830,4 +845,4 @@ async function _rebuildOrderItems(orcamentoId) {
   }
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems };
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems };

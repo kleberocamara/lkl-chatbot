@@ -1203,37 +1203,66 @@ async function loadOsMain() {
 // ── DETALHE DA OS + FICHA DE PRODUÇÃO ──────────────────────────────────────────
 let _osDetalheId = null;
 let _osMateriais = [];
+const _VIA_COLS = '1.5fr 0.8fr 0.95fr 0.55fr 0.95fr 0.4fr 0.4fr auto';
+const _viaInp = 'padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;width:100%';
+
 function renderViasOS() {
   const area = document.getElementById('of-vias-area');
   if (!area) return;
   const linhas = _osMateriais.map((m, idx) => `
-    <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr 0.5fr 0.5fr auto;gap:6px;align-items:center;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:${_VIA_COLS};gap:5px;align-items:center;margin-bottom:6px">
       <input value="${escHtml(m.descricao||m.material_nome||'')}" readonly placeholder="Material..."
         onclick="buscarMaterialVia(${idx})" title="Clique para buscar material"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#fafbff">
-      <input value="${escHtml(m.cor_papel||'')}" placeholder="Cor papel" oninput="_osMateriais[${idx}].cor_papel=this.value"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
-      <input value="${escHtml(m.cores_tintas||'')}" placeholder="Tintas" oninput="_osMateriais[${idx}].cores_tintas=this.value"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
-      <input value="${escHtml(m.tipo_impressao||'')}" placeholder="Impressão" oninput="_osMateriais[${idx}].tipo_impressao=this.value"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
-      <input value="${m.cores_frente!=null?m.cores_frente:''}" type="number" min="0" placeholder="Fre" oninput="_osMateriais[${idx}].cores_frente=this.value"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
-      <input value="${m.cores_verso!=null?m.cores_verso:''}" type="number" min="0" placeholder="Ver" oninput="_osMateriais[${idx}].cores_verso=this.value"
-        style="padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+        style="${_viaInp};cursor:pointer;background:#fafbff">
+      <input value="${escHtml(m.cor_papel||'')}" placeholder="Cor" oninput="_osMateriais[${idx}].cor_papel=this.value" style="${_viaInp}">
+      <input id="via-folhas-${idx}" value="${m.folhas_a_cortar!=null?m.folhas_a_cortar:''}" type="number" min="0" placeholder="Folhas"
+        oninput="_osMateriais[${idx}].folhas_a_cortar=this.value;npRecalcViaTotal(${idx})" style="${_viaInp}">
+      <input value="${m.perda_percentual!=null?m.perda_percentual:''}" type="number" min="0" step="0.5" placeholder="%"
+        oninput="_osMateriais[${idx}].perda_percentual=this.value;npSugerirFolhas(${idx})" style="${_viaInp}">
+      <input id="via-total-${idx}" value="${m.folhas_total!=null?m.folhas_total:''}" type="number" readonly placeholder="Total"
+        style="${_viaInp};background:#f8f9fa;color:#555">
+      <input value="${m.cores_frente!=null?m.cores_frente:''}" type="number" min="0" placeholder="Fre" oninput="_osMateriais[${idx}].cores_frente=this.value" style="${_viaInp}">
+      <input value="${m.cores_verso!=null?m.cores_verso:''}" type="number" min="0" placeholder="Ver" oninput="_osMateriais[${idx}].cores_verso=this.value" style="${_viaInp}">
       <button onclick="removerViaOS(${idx})" title="Remover via" style="background:#e53935;border:none;border-radius:50%;width:24px;height:24px;color:white;cursor:pointer">−</button>
     </div>`).join('');
   area.innerHTML = `
-    <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">VIAS / MATERIAIS</div>
-    <div style="font-size:10px;color:#999;display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr 0.5fr 0.5fr auto;gap:6px;margin-bottom:4px">
-      <span>Material</span><span>Cor papel</span><span>Tintas</span><span>Impressão</span><span>Fre</span><span>Ver</span><span></span></div>
+    <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">ESPECIFICAÇÃO PAPEL</div>
+    <div style="font-size:10px;color:#999;display:grid;grid-template-columns:${_VIA_COLS};gap:5px;margin-bottom:4px">
+      <span>Material</span><span>Cor</span><span>Folhas a cortar</span><span>Perda %</span><span>Folhas total</span><span>Fre</span><span>Ver</span><span></span></div>
     ${linhas || '<p style="font-size:12px;color:#999">Nenhuma via. Adicione abaixo.</p>'}
     <button onclick="adicionarViaOS()" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;margin-top:6px">+ Adicionar via</button>`;
 }
 
+// Folhas base (sem perda) = ⌈quantidade ÷ imagens/folha⌉
+function npViaBase() {
+  const num = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const qtd = num('of-qtd'), imgFolha = num('of-imgfolha');
+  return (qtd > 0 && imgFolha > 0) ? Math.ceil(qtd / imgFolha) : 0;
+}
+// Folhas total após o corte = folhas a cortar × formato
+function npRecalcViaTotal(idx) {
+  const fmt = parseInt(document.getElementById('of-fmt')?.value) || 1;
+  const folhas = parseInt(_osMateriais[idx].folhas_a_cortar) || 0;
+  _osMateriais[idx].folhas_total = folhas * fmt;
+  const el = document.getElementById('via-total-'+idx); if (el) el.value = _osMateriais[idx].folhas_total || '';
+}
+// Aplica a % de perda sobre a base e atualiza folhas a cortar + total
+function npSugerirFolhas(idx) {
+  const base = npViaBase();
+  const perda = parseFloat(_osMateriais[idx].perda_percentual) || 0;
+  if (base > 0) {
+    const folhas = Math.ceil(base * (1 + perda/100));
+    _osMateriais[idx].folhas_a_cortar = folhas;
+    const el = document.getElementById('via-folhas-'+idx); if (el) el.value = folhas;
+  }
+  npRecalcViaTotal(idx);
+}
+
 function adicionarViaOS() {
-  _osMateriais.push({ via: _osMateriais.length+1, material_id:null, descricao:'', cor_papel:'', cores_tintas:'', tipo_impressao:'', cores_frente:'', cores_verso:'' });
+  const base = npViaBase();
+  _osMateriais.push({ via: _osMateriais.length+1, material_id:null, descricao:'', cor_papel:'', cores_tintas:'', tipo_impressao:'', cores_frente:'', cores_verso:'', folhas_a_cortar: base||'', perda_percentual:'', folhas_total:'' });
   renderViasOS();
+  npRecalcViaTotal(_osMateriais.length-1);
 }
 function removerViaOS(idx) { _osMateriais.splice(idx,1); renderViasOS(); }
 

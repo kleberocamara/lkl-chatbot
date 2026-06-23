@@ -157,6 +157,7 @@ async function buscarPorId(id) {
   const mats = await db.query(
     `SELECT m.id, m.via, m.material_id, m.descricao, m.cor_papel, m.cores_tintas,
             m.tipo_impressao, m.cores_frente, m.cores_verso,
+            m.folhas_a_cortar, m.perda_percentual, m.folhas_total,
             mat.codigo AS material_codigo, mat.nome AS material_nome
      FROM os_materiais m
      LEFT JOIN materiais mat ON mat.id = m.material_id
@@ -385,13 +386,15 @@ async function atualizarFichaProducao(osId, dados) {
     await db.query('DELETE FROM os_materiais WHERE os_id=$1', [osId]);
     let via = 1;
     for (const m of dados.materiais) {
+      const _int = v => (v != null && v !== '' ? parseInt(v) : null);
+      const _num = v => (v != null && v !== '' ? parseFloat(v) : null);
       await db.query(
-        `INSERT INTO os_materiais (os_id, via, material_id, descricao, cor_papel, cores_tintas, tipo_impressao, cores_frente, cores_verso)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO os_materiais (os_id, via, material_id, descricao, cor_papel, cores_tintas, tipo_impressao, cores_frente, cores_verso, folhas_a_cortar, perda_percentual, folhas_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [osId, m.via || via, m.material_id || null, m.descricao || null, m.cor_papel || null,
          m.cores_tintas || null, m.tipo_impressao || null,
-         m.cores_frente != null && m.cores_frente !== '' ? parseInt(m.cores_frente) : null,
-         m.cores_verso  != null && m.cores_verso  !== '' ? parseInt(m.cores_verso)  : null]
+         _int(m.cores_frente), _int(m.cores_verso),
+         _int(m.folhas_a_cortar), _num(m.perda_percentual), _int(m.folhas_total)]
       );
       via++;
     }

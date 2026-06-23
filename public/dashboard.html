@@ -1082,9 +1082,16 @@ function renderOrcItens(orcId, itens) {
 
 // ── Modal editar item ──────────────────────────────────────────────────────────
 function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
+  const partes = String(descricao||'').split(' — ');
+  const prodGuess = partes[0] || '';
+  const especGuess = partes.slice(1).join(' — ') || '';
   const html = `
-    <div style="margin-bottom:12px"><label style="font-size:12px;color:#666">Descrição</label>
-      <input id="ei-desc" value="${escHtml(descricao)}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    <div style="margin-bottom:10px">${selectProduto('ei-produto', "document.getElementById('ei-tipo').value = tipoPorProduto(this.value)")}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      ${campoTipoProd('ei-tipo')}
+      <div><label style="font-size:12px;color:#666">Especificação</label>
+        <input id="ei-espec" value="${escHtml(especGuess)}" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;text-transform:uppercase"></div>
+    </div>
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
         <input id="ei-qtd" type="number" min="1" value="${qtd}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
@@ -1093,27 +1100,27 @@ function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
     </div>
     <button onclick="salvarItemOrc('${orcId}','${itemId}')" class="btn btn-primary" style="width:100%">💾 Salvar alterações</button>`;
   showModal('Editar Item', html);
+  const sel = document.getElementById('ei-produto');
+  if (sel && [...sel.options].some(o => o.value === prodGuess)) { sel.value = prodGuess; document.getElementById('ei-tipo').value = tipoPorProduto(prodGuess); }
 }
 
 async function salvarItemOrc(orcId, itemId) {
-  const descricao = document.getElementById('ei-desc').value.trim();
+  const produto = document.getElementById('ei-produto').value || null;
+  const especificacao = document.getElementById('ei-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ei-qtd').value);
   const valor_unitario = parseFloat(document.getElementById('ei-val').value);
-  if (!descricao || isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha todos os campos'); return; }
-  const valor_total = quantidade * valor_unitario;
+  if (!produto) { showToast('Selecione o produto/serviço'); return; }
+  if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ descricao, quantidade, valor_unitario, valor_total })
+    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
   });
   if (res && !res.erro) {
-    closeModal();
-    showToast('✅ Item atualizado');
-    document.getElementById(`orc-items-${orcId}`).dataset.loaded = '';
+    closeModal(); showToast('✅ Item atualizado');
     const panel = document.getElementById(`orc-items-${orcId}`);
-    panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-    const detail = await api(`/api/v2/orcamentos/${orcId}`);
-    if (detail) renderOrcItens(orcId, detail.itens || []);
-  } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0] || 'desconhecido')); }
+    if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+  } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0]||'')); }
 }
 
 async function excluirItemOrc(orcId, itemId, descricao) {
@@ -1127,8 +1134,12 @@ async function excluirItemOrc(orcId, itemId, descricao) {
 
 function abrirAdicionarItemOrc(orcId) {
   const html = `
-    <div style="margin-bottom:12px"><label style="font-size:12px;color:#666">Descrição</label>
-      <input id="ni-desc" placeholder="Ex: Adesivação parede" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+    <div style="margin-bottom:10px">${selectProduto('ni-produto', "document.getElementById('ni-tipo').value = tipoPorProduto(this.value)")}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      ${campoTipoProd('ni-tipo')}
+      <div><label style="font-size:12px;color:#666">Especificação</label>
+        <input id="ni-espec" placeholder="Ex: 20X15 COM ARTE" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;text-transform:uppercase"></div>
+    </div>
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
         <input id="ni-qtd" type="number" min="1" value="1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
@@ -1140,23 +1151,22 @@ function abrirAdicionarItemOrc(orcId) {
 }
 
 async function adicionarItemOrc(orcId) {
-  const descricao = document.getElementById('ni-desc').value.trim();
+  const produto = document.getElementById('ni-produto').value;
+  if (!produto) { showToast('Selecione o produto/serviço'); return; }
+  const especificacao = document.getElementById('ni-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ni-qtd').value);
   const valor_unitario = parseFloat(document.getElementById('ni-val').value);
-  if (!descricao || isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha todos os campos'); return; }
+  if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens`, {
     method: 'POST',
-    body: JSON.stringify({ descricao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
+    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
   });
   if (res && !res.erro) {
-    closeModal();
-    showToast('✅ Item adicionado');
+    closeModal(); showToast('✅ Item adicionado');
     const panel = document.getElementById(`orc-items-${orcId}`);
-    panel.dataset.loaded = '';
-    panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-    const detail = await api(`/api/v2/orcamentos/${orcId}`);
-    if (detail) renderOrcItens(orcId, detail.itens || []);
-  } else { showToast('❌ Erro ao adicionar'); }
+    if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+  } else { showToast('❌ Erro ao adicionar: ' + (res?.erro?.[0]||'')); }
 }
 
 function filtrarOrcamentos() {

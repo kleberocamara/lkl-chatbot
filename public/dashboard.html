@@ -965,9 +965,18 @@ function orcAcoesBtns(o) {
     return [
       btn('👍 Aprovar', `orcAprovar('${o.id}')`, '#2e7d32'),
       btn('👎 Reprovar', `orcReprovar('${o.id}')`, '#ad1457'),
+      btn('↻ Reenviar', `orcReenviar('${o.id}')`, '#0277bd'),
     ].join(' ');
   }
   return '';
+}
+
+async function orcReenviar(id) {
+  if (!confirm('Reenviar o orçamento (e-mail/WhatsApp) ao cliente?')) return;
+  const res = await api(`/api/v2/orcamentos/${id}/reenviar`, { method: 'POST' });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error), 'error'); return; }
+  const destino = [res.email, res.celular].filter(Boolean).join(' · ');
+  showToast('↻ Reenviado' + (destino ? ` → ${destino}` : '') + '!');
 }
 
 async function orcConcluir(id) {

@@ -1215,11 +1215,11 @@ function renderViasOS() {
         onclick="buscarMaterialVia(${idx})" title="Clique para buscar material"
         style="${_viaInp};cursor:pointer;background:#fafbff">
       <input value="${escHtml(m.cor_papel||'')}" placeholder="Cor" oninput="_osMateriais[${idx}].cor_papel=this.value" style="${_viaInp}">
-      <input id="via-folhas-${idx}" value="${m.folhas_a_cortar!=null?m.folhas_a_cortar:''}" type="number" min="0" placeholder="Folhas"
-        oninput="_osMateriais[${idx}].folhas_a_cortar=this.value;npRecalcViaTotal(${idx})" style="${_viaInp}">
+      <input id="via-folhas-${idx}" value="${m.folhas_a_cortar!=null?m.folhas_a_cortar:''}" type="number" readonly placeholder="auto" title="Calculado: ⌈qtd ÷ imagens/folha⌉ × (1+perda%)"
+        style="${_viaInp};background:#f8f9fa;color:#555">
       <input value="${m.perda_percentual!=null?m.perda_percentual:''}" type="number" min="0" step="0.5" placeholder="%"
-        oninput="_osMateriais[${idx}].perda_percentual=this.value;npSugerirFolhas(${idx})" style="${_viaInp}">
-      <input id="via-total-${idx}" value="${m.folhas_total!=null?m.folhas_total:''}" type="number" readonly placeholder="Total"
+        oninput="_osMateriais[${idx}].perda_percentual=this.value;npRecalcVia(${idx})" style="${_viaInp}">
+      <input id="via-total-${idx}" value="${m.folhas_total!=null?m.folhas_total:''}" type="number" readonly placeholder="Total" title="Folhas a cortar × formato"
         style="${_viaInp};background:#f8f9fa;color:#555">
       <input value="${m.cores_frente!=null?m.cores_frente:''}" type="number" min="0" placeholder="Fre" oninput="_osMateriais[${idx}].cores_frente=this.value" style="${_viaInp}">
       <input value="${m.cores_verso!=null?m.cores_verso:''}" type="number" min="0" placeholder="Ver" oninput="_osMateriais[${idx}].cores_verso=this.value" style="${_viaInp}">
@@ -1231,38 +1231,27 @@ function renderViasOS() {
       <span>Material</span><span>Cor</span><span>Folhas a cortar</span><span>Perda %</span><span>Folhas total</span><span>Fre</span><span>Ver</span><span></span></div>
     ${linhas || '<p style="font-size:12px;color:#999">Nenhuma via. Adicione abaixo.</p>'}
     <button onclick="adicionarViaOS()" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;margin-top:6px">+ Adicionar via</button>`;
+  npRecalcTodasVias();
 }
 
-// Folhas base (sem perda) = ⌈quantidade ÷ imagens/folha⌉
-function npViaBase() {
+// Folhas a cortar (auto) = ⌈qtd ÷ imagens/folha⌉ × (1 + perda%) ; Folhas total = folhas a cortar × formato
+function npRecalcVia(idx) {
   const num = id => parseFloat(document.getElementById(id)?.value) || 0;
   const qtd = num('of-qtd'), imgFolha = num('of-imgfolha');
-  return (qtd > 0 && imgFolha > 0) ? Math.ceil(qtd / imgFolha) : 0;
-}
-// Folhas total após o corte = folhas a cortar × formato
-function npRecalcViaTotal(idx) {
   const fmt = parseInt(document.getElementById('of-fmt')?.value) || 1;
-  const folhas = parseInt(_osMateriais[idx].folhas_a_cortar) || 0;
-  _osMateriais[idx].folhas_total = folhas * fmt;
-  const el = document.getElementById('via-total-'+idx); if (el) el.value = _osMateriais[idx].folhas_total || '';
-}
-// Aplica a % de perda sobre a base e atualiza folhas a cortar + total
-function npSugerirFolhas(idx) {
-  const base = npViaBase();
   const perda = parseFloat(_osMateriais[idx].perda_percentual) || 0;
-  if (base > 0) {
-    const folhas = Math.ceil(base * (1 + perda/100));
-    _osMateriais[idx].folhas_a_cortar = folhas;
-    const el = document.getElementById('via-folhas-'+idx); if (el) el.value = folhas;
-  }
-  npRecalcViaTotal(idx);
+  const base = (qtd > 0 && imgFolha > 0) ? Math.ceil(qtd / imgFolha) : 0;
+  const folhas = base > 0 ? Math.ceil(base * (1 + perda/100)) : 0;
+  _osMateriais[idx].folhas_a_cortar = folhas || '';
+  _osMateriais[idx].folhas_total = folhas ? folhas * fmt : '';
+  const f = document.getElementById('via-folhas-'+idx); if (f) f.value = _osMateriais[idx].folhas_a_cortar;
+  const t = document.getElementById('via-total-'+idx);  if (t) t.value = _osMateriais[idx].folhas_total;
 }
+function npRecalcTodasVias() { _osMateriais.forEach((_, i) => npRecalcVia(i)); }
 
 function adicionarViaOS() {
-  const base = npViaBase();
-  _osMateriais.push({ via: _osMateriais.length+1, material_id:null, descricao:'', cor_papel:'', cores_tintas:'', tipo_impressao:'', cores_frente:'', cores_verso:'', folhas_a_cortar: base||'', perda_percentual:'', folhas_total:'' });
+  _osMateriais.push({ via: _osMateriais.length+1, material_id:null, descricao:'', cor_papel:'', cores_tintas:'', tipo_impressao:'', cores_frente:'', cores_verso:'', folhas_a_cortar:'', perda_percentual:'', folhas_total:'' });
   renderViasOS();
-  npRecalcViaTotal(_osMateriais.length-1);
 }
 function removerViaOS(idx) { _osMateriais.splice(idx,1); renderViasOS(); }
 
@@ -1287,7 +1276,7 @@ function buscarMaterialViaQuery(idx, q) {
     if (!result) return;
     if (!q || !q.trim()) { result.innerHTML = ''; return; }
     const res = await api(`/api/v2/materiais?busca=${encodeURIComponent(q.trim())}&limit=12`);
-    const lista = res?.data || res || [];
+    const lista = res?.materiais || res?.data || (Array.isArray(res) ? res : []) || [];
     if (!lista.length) { result.innerHTML = '<div style="padding:8px;color:#999;font-size:12px">Nenhum material</div>'; return; }
     result.innerHTML = lista.map(m => `
       <div onclick="selecionarMaterialVia(${idx},'${m.id}','${escHtml(((m.codigo?m.codigo+' - ':'')+m.nome)).replace(/'/g,"\\'")}')"

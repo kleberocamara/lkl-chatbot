@@ -802,4 +802,32 @@ async function cancelarBoletoDireto(orcamentoId) {
   return { cancelado: true, boleto_id: orc.boleto_id };
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp };
+// Reconstrói order_items (espelho) do pedido vinculado a partir de orcamento_itens (canônico)
+async function _rebuildOrderItems(orcamentoId) {
+  try {
+    const ped = await db.query('SELECT id FROM orders WHERE orcamento_id=$1 LIMIT 1', [orcamentoId]);
+    const pedidoId = ped.rows[0]?.id;
+    if (!pedidoId) return;
+    const itens = await db.query(
+      'SELECT produto, descricao, quantidade, especificacao, valor_unitario, valor_total FROM orcamento_itens WHERE orcamento_id=$1 ORDER BY codigo',
+      [orcamentoId]
+    );
+    await db.query('DELETE FROM order_items WHERE order_id=$1', [pedidoId]);
+    for (const it of itens.rows) {
+      await db.query(
+        `INSERT INTO order_items (order_id, produto, quantidade, especificacao, valor_unitario, valor_total)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [pedidoId, it.produto || it.descricao, it.quantidade, it.especificacao || null, it.valor_unitario || 0, it.valor_total || 0]
+      );
+    }
+    const p = itens.rows[0];
+    if (p) {
+      await db.query('UPDATE orders SET produto=$1, quantidade=$2, updated_at=NOW() WHERE id=$3',
+        [p.produto || p.descricao, p.quantidade, pedidoId]);
+    }
+  } catch (e) {
+    console.warn('[REBUILD-ORDER-ITEMS]', e.message);
+  }
+}
+
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems };

@@ -1053,9 +1053,16 @@ function renderOrcItens(orcId, itens) {
   const panel = document.getElementById(`orc-items-${orcId}`);
   const travado = orcTravado(orcId);
   if (!itens.length) { panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Sem itens cadastrados</p>'; return; }
+  const TRAVA_MSG = {
+    enviado:   '📤 Enviado ao cliente — aguardando resposta (itens bloqueados)',
+    aprovado:  '🔒 Orçamento aprovado — itens bloqueados para edição',
+    reprovado: '❌ Orçamento reprovado — itens bloqueados',
+    cancelado: '🚫 Orçamento cancelado — itens bloqueados',
+  };
+  const orcStatus = (orcamentosMainData.find(o => o.id === orcId) || {}).status;
   const aviso = travado
     ? `<div style="background:#fff3e0;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:12px;color:#e65100">
-         🔒 Orçamento aprovado — itens bloqueados para edição
+         ${TRAVA_MSG[orcStatus] || '🔒 Itens bloqueados para edição'}
        </div>` : '';
   panel.innerHTML = `
     <div style="margin-top:14px">
@@ -2869,7 +2876,7 @@ async function carregarItensPedidoEdit(orcId, orcStatus) {
       <button onclick="excluirItemPedidoEdit('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}')" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer">−</button>`}
     </div>`).join('');
   box.innerHTML = `${linhas || '<span style="color:#999">Sem itens</span>'}
-    ${travado ? '<div style="margin-top:6px;font-size:11px;color:#e65100">🔒 Orçamento aprovado — itens bloqueados</div>'
+    ${travado ? `<div style="margin-top:6px;font-size:11px;color:#e65100">${({enviado:'📤 Enviado ao cliente — aguardando resposta (itens bloqueados)',aprovado:'🔒 Orçamento aprovado — itens bloqueados',reprovado:'❌ Orçamento reprovado — itens bloqueados',cancelado:'🚫 Orçamento cancelado — itens bloqueados'}[orcStatus] || '🔒 Itens bloqueados')}</div>`
               : `<button onclick="abrirAdicionarItemPedidoEdit('${orcId}')" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;margin-top:6px">+ Adicionar item</button>`}`;
 }
 

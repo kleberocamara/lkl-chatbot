@@ -178,10 +178,11 @@ async function consultarBoleto(boletoId) {
  */
 async function cancelarBoleto(boletoId) {
   const token = await getAccessToken();
-  // C6: PUT /{id}/cancel NÃO aceita corpo ("No request body is expected")
+  // C6 (curl documentado): PUT /{id}/cancel SEM corpo, Content-Type x-www-form-urlencoded
+  // (enviar corpo retorna "No request body is expected")
   await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}/cancel`, undefined, {
     httpsAgent: getAgent(),
-    headers: authHeaders(token),
+    headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
   }));
 }
 

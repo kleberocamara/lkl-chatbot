@@ -1403,7 +1403,7 @@ async function abrirDetalheOS(id) {
     <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
     <div style="font-size:13px;margin-bottom:6px"><b>Especificações:</b> ${especsTxt}</div>
     ${fichaHtml}`;
-  showModal(`Detalhe da OS #${os.numero_os||''}`, html);
+  showModal(`Detalhe da OS #${os.numero_os||''}`, html, '920px');
   if (isOffset) renderViasOS();
 }
 
@@ -3350,7 +3350,7 @@ function exportCSV() {
 </div>
 <!-- Modal genérico -->
 <div id="generic-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">
-  <div style="background:white;border-radius:14px;padding:28px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+  <div id="generic-modal-box" style="background:white;border-radius:14px;padding:28px;width:100%;max-width:480px;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
       <h3 id="generic-modal-title" style="margin:0;color:#1a237e;font-size:16px"></h3>
       <button onclick="closeModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;line-height:1">×</button>
@@ -3360,9 +3360,11 @@ function exportCSV() {
 </div>
 
 <script>
-function showModal(title, html) {
+function showModal(title, html, width) {
   document.getElementById('generic-modal-title').textContent = title;
   document.getElementById('generic-modal-body').innerHTML = html;
+  const box = document.getElementById('generic-modal-box');
+  if (box) box.style.maxWidth = width || '480px';
   document.getElementById('generic-modal').style.display = 'flex';
 }
 function closeModal() {

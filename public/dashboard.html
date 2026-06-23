@@ -2844,10 +2844,41 @@ function editarPedido(id) {
         <input id="ep-prazo" type="date" value="${prazoVal}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
       <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Observações</label>
         <textarea id="ep-obs" rows="3" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;text-transform:uppercase">${escHtml(o.observacoes||'')}</textarea></div>
+      <div style="margin-top:6px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">Itens (editados no orçamento)</label>
+        <div id="ep-itens" style="border:1px solid #eee;border-radius:8px;padding:8px;font-size:13px;color:#888">Carregando itens...</div></div>
     </div>
     <button onclick="salvarEdicaoPedido('${o.id}')" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar alterações</button>
     <p style="font-size:11px;color:#999;margin-top:8px">O e-mail/celular atualizam o cadastro do cliente. Se o orçamento já foi enviado, reenvie pela aba Orçamentos para o contato corrigido receber.</p>`;
   showModal('Editar Pedido', html);
+  carregarItensPedidoEdit(o.orcamento_id, o.orcamento_status);
+}
+
+async function carregarItensPedidoEdit(orcId, orcStatus) {
+  const box = document.getElementById('ep-itens');
+  if (!box) return;
+  if (!orcId) { box.innerHTML = '<span style="color:#999">Pedido sem orçamento vinculado.</span>'; return; }
+  const travado = ['enviado','aprovado','reprovado','cancelado'].includes(orcStatus);
+  const det = await api(`/api/v2/orcamentos/${orcId}`);
+  const itens = det?.itens || [];
+  const linhas = itens.map(it => `
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f3f3f3">
+      <span style="flex:1">${escHtml(it.descricao||it.produto||'—')}</span>
+      <span style="color:#666">${it.quantidade}</span>
+      ${travado ? '' : `
+      <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}',${it.quantidade},${it.valor_unitario||0})" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>
+      <button onclick="excluirItemPedidoEdit('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}')" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer">−</button>`}
+    </div>`).join('');
+  box.innerHTML = `${linhas || '<span style="color:#999">Sem itens</span>'}
+    ${travado ? '<div style="margin-top:6px;font-size:11px;color:#e65100">🔒 Orçamento aprovado — itens bloqueados</div>'
+              : `<button onclick="abrirAdicionarItemPedidoEdit('${orcId}')" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;margin-top:6px">+ Adicionar item</button>`}`;
+}
+
+function abrirAdicionarItemPedidoEdit(orcId) { _epOrcId = orcId; abrirAdicionarItemOrc(orcId); }
+async function excluirItemPedidoEdit(orcId, itemId, desc) {
+  if (!confirm(`Excluir item "${desc}"?`)) return;
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'DELETE' });
+  if (res && !res.erro) { showToast('🗑️ Item excluído'); carregarItensPedidoEdit(orcId, 'em_orcamento'); }
+  else showToast('❌ Erro ao excluir');
 }
 
 async function salvarEdicaoPedido(id) {
@@ -2902,6 +2933,7 @@ async function updateOrderStatus(id, newStatus) {
 
 // ── Novo Pedido ───────────────────────────────────────────────────────────────
 let _novoPedidoClienteId = null;
+let _epOrcId = null;
 let _npClienteMap = {};
 let _npSearchTimer;
 

@@ -632,6 +632,23 @@
     <div id="pag-func" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
   </div>
 
+  <!-- MÁQUINAS -->
+  <div class="page" id="page-maquinas">
+    <div class="page-header">
+      <h1>🖨️ Máquinas</h1>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" id="busca-maq-main" placeholder="Buscar por nome/fabricante…"
+          oninput="debouncedLoadMaquinas()"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="abrirNovaMaquina()">+ Nova</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <div id="list-maq-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+    <div id="pag-maq" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
+  </div>
+
   <!-- MODAL EDIÇÃO CADASTROS -->
   <div id="modal-cadastro" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
     <div style="background:white;border-radius:12px;max-width:560px;margin:40px auto;padding:28px;position:relative">
@@ -735,6 +752,7 @@ function buildSidebar(role) {
       { id: 'fornecedores', label: 'Fornecedores', icon: '🏢', roles: ['admin','gestor','analista','atendente'] },
       { id: 'materiais',    label: 'Materiais',    icon: '📦', roles: ['admin','gestor','analista'] },
       { id: 'funcionarios', label: 'Funcionários', icon: '🧑', roles: ['admin','gestor'] },
+      { id: 'maquinas',     label: 'Máquinas',     icon: '🖨️', roles: ['admin','gestor'] },
       { id: 'usuarios',     label: 'Usuários',     icon: '👤', roles: ['admin','gestor','analista','atendente'] },
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
@@ -881,6 +899,7 @@ function showPage(page, el) {
     fornecedores: () => loadFornecedoresMain(1),
     materiais:    () => loadMateriaisMain(1),
     funcionarios: () => loadFuncionariosMain(1),
+    maquinas:     () => loadMaquinasMain(1),
     usuarios:     loadUsuarios2,
   };
   if (loaders[page]) loaders[page]();
@@ -2005,6 +2024,113 @@ function campoSelect(label, id, val, opts) {
 }
 function v(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function fecharModalCadastro() { document.getElementById('modal-cadastro').style.display = 'none'; }
+
+// ── MÁQUINAS ───────────────────────────────────────────────────────────────────
+let _maqPag = 1;
+const debouncedLoadMaquinas = debounce(() => loadMaquinasMain(1), 400);
+
+async function loadMaquinasMain(page = _maqPag) {
+  _maqPag = page;
+  const el = document.getElementById('list-maq-main');
+  const q = document.getElementById('busca-maq-main')?.value || '';
+  const data = await api(`/api/v2/maquinas?busca=${encodeURIComponent(q)}&page=${page}&limit=20`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  const list = data.maquinas || [];
+  if (!list.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhuma máquina cadastrada</p>'; document.getElementById('pag-maq').innerHTML=''; return; }
+  const fmt2 = n => parseFloat(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Nome</th><th>Fabricante</th><th>Modelo</th><th>Cores</th><th>Formato máx</th><th>Veloc.</th><th>Operador</th><th>Lavagem</th><th>Status</th><th>Ação</th></tr></thead>
+    <tbody>${list.map(m => {
+      const fmt = (m.formato_max_larg && m.formato_max_alt) ? `${m.formato_max_larg}×${m.formato_max_alt} cm` : '—';
+      const chip = m.status === 'inativa'
+        ? '<span style="background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">inativa</span>'
+        : '<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">ativa</span>';
+      return `<tr>
+        <td style="font-weight:600">${escHtml(m.nome||'—')}</td>
+        <td style="font-size:12px">${escHtml(m.fabricante||'—')}</td>
+        <td style="font-size:12px">${escHtml(m.modelo||'—')}</td>
+        <td style="text-align:center">${m.num_cores!=null?m.num_cores:'—'}</td>
+        <td style="font-size:12px">${fmt}</td>
+        <td style="font-size:12px">${m.velocidade_iph!=null?m.velocidade_iph+' iph':'—'}</td>
+        <td style="font-size:12px">${escHtml(m.operador_padrao_nome||'—')}</td>
+        <td style="text-align:right;font-size:12px">${m.custo_lavagem!=null?'R$ '+fmt2(m.custo_lavagem):'—'}</td>
+        <td>${chip}</td>
+        <td><button onclick="editarMaquina(${JSON.stringify(m).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  renderPagControls('pag-maq', page, data.total, 20, 'loadMaquinasMain');
+}
+
+function _formMaquina(m = {}) {
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">${campoEdit('Nome *','mq-nome',m.nome||'','text','oninput="this.value=this.value.toUpperCase()"')}</div>
+      ${campoEdit('Fabricante','mq-fab',m.fabricante||'')}
+      ${campoEdit('Modelo','mq-mod',m.modelo||'')}
+      ${campoEdit('Nº cores','mq-cores',m.num_cores!=null?m.num_cores:'','number')}
+      ${campoEdit('Veloc. (imp/h)','mq-vel',m.velocidade_iph!=null?m.velocidade_iph:'','number')}
+      ${campoEdit('Formato máx larg (cm)','mq-larg',m.formato_max_larg!=null?m.formato_max_larg:'','number')}
+      ${campoEdit('Formato máx alt (cm)','mq-alt',m.formato_max_alt!=null?m.formato_max_alt:'','number')}
+      ${campoEdit('Custo lavagem (R$)','mq-lav',m.custo_lavagem!=null?m.custo_lavagem:'','number')}
+      ${campoSelect('Status','mq-status',m.status||'ativa',['ativa','inativa'])}
+    </div>
+    <div id="mq-op-wrap" style="margin-top:10px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">Operador padrão</label>
+      <select id="mq-op" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <option value="">— sem operador padrão —</option>
+      </select>
+    </div>`;
+}
+
+async function _preencherOpsMaquina(operadorId) {
+  const sel = document.getElementById('mq-op');
+  if (!sel) return;
+  const data = await api('/api/v2/funcionarios?limit=200');
+  const funcs = data?.funcionarios || [];
+  sel.innerHTML = '<option value="">— sem operador padrão —</option>' +
+    funcs.map(f => `<option value="${f.id}" ${f.id===operadorId?'selected':''}>${escHtml(f.nome)}</option>`).join('');
+}
+
+function _bodyMaquina() {
+  return {
+    nome:              v('mq-nome').trim(),
+    fabricante:        v('mq-fab').trim() || null,
+    modelo:            v('mq-mod').trim() || null,
+    num_cores:         v('mq-cores') !== '' ? parseInt(v('mq-cores')) : null,
+    velocidade_iph:    v('mq-vel')   !== '' ? parseFloat(v('mq-vel')) : null,
+    formato_max_larg:  v('mq-larg')  !== '' ? parseFloat(v('mq-larg')) : null,
+    formato_max_alt:   v('mq-alt')   !== '' ? parseFloat(v('mq-alt')) : null,
+    custo_lavagem:     v('mq-lav')   !== '' ? parseFloat(v('mq-lav')) : null,
+    operador_padrao_id:v('mq-op')   || null,
+    status:            v('mq-status'),
+  };
+}
+
+function abrirNovaMaquina() {
+  document.getElementById('modal-cadastro-title').textContent = 'Nova Máquina';
+  document.getElementById('modal-cadastro-body').innerHTML = _formMaquina();
+  _preencherOpsMaquina(null);
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('mq-nome').trim()) { showToast('Nome é obrigatório'); return; }
+    const r = await api('/api/v2/maquinas', { method:'POST', body: JSON.stringify(_bodyMaquina()) });
+    if (r?.error || r?.errors) { showToast(r.error||(Array.isArray(r.errors)?r.errors.join(', '):'Erro ao salvar')); return; }
+    showToast('✅ Máquina cadastrada'); fecharModalCadastro(); loadMaquinasMain(1);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+function editarMaquina(m) {
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Máquina — ' + m.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = _formMaquina(m);
+  _preencherOpsMaquina(m.operador_padrao_id);
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('mq-nome').trim()) { showToast('Nome é obrigatório'); return; }
+    const r = await api(`/api/v2/maquinas/${m.id}`, { method:'PATCH', body: JSON.stringify(_bodyMaquina()) });
+    if (r?.error || r?.errors) { showToast(r.error||(Array.isArray(r.errors)?r.errors.join(', '):'Erro ao salvar')); return; }
+    showToast('✅ Máquina atualizada'); fecharModalCadastro(); loadMaquinasMain(_maqPag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
 
 // ── USUÁRIOS (novo) ────────────────────────────────────────────────────────────
 async function loadUsuarios2() {

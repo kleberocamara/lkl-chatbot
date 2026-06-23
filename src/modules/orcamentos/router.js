@@ -365,7 +365,7 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
       [req.params.id, cod.rows[0].c, produto || null, especificacao || null, descricao, tipo_producao || null, quantidade, valor_unitario || 0, valor_total || 0]
     );
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);
-    service._rebuildOrderItems(req.params.id);
+    await service._rebuildOrderItems(req.params.id);
     res.status(201).json(rows[0]);
   } catch (e) { res.status(500).json({ erro: [e.message] }); }
 });
@@ -386,7 +386,7 @@ router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), as
     );
     if (!rows[0]) return res.status(404).json({ erro: ['Item não encontrado'] });
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);
-    service._rebuildOrderItems(req.params.id);
+    await service._rebuildOrderItems(req.params.id);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ erro: [e.message] }); }
 });
@@ -398,7 +398,7 @@ router.delete('/:id/itens/:itemId', requireRole('admin','gestor'), async (req, r
       `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`,
       [req.params.id]
     );
-    service._rebuildOrderItems(req.params.id);
+    await service._rebuildOrderItems(req.params.id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ erro: [e.message] }); }
 });

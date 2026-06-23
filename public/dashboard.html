@@ -1474,8 +1474,10 @@ async function popularCombosFicha(os) {
   if (selM) selM.innerHTML = '<option value="">— selecione —</option>' +
     maquinas.map(m => `<option value="${m.id}" data-op="${m.operador_padrao_id||''}" ${os.maquina_id===m.id?'selected':''}>${escHtml(m.nome)}</option>`).join('');
   const selO = document.getElementById('ficha-operador');
-  if (selO) selO.innerHTML = '<option value="">— selecione —</option>' +
-    funcs.map(f => `<option value="${f.id}" ${os.operador_id===f.id?'selected':''}>${escHtml(f.nome)}</option>`).join('');
+  if (selO) selO.innerHTML = funcs.length
+    ? '<option value="">— selecione —</option>' +
+      funcs.map(f => `<option value="${f.id}" ${os.operador_id===f.id?'selected':''}>${escHtml(f.nome)}</option>`).join('')
+    : '<option value="">— nenhum funcionário cadastrado —</option>';
 }
 
 function onMaquinaChange() {
@@ -2113,6 +2115,10 @@ async function _preencherOpsMaquina(operadorId) {
   if (!sel) return;
   const data = await api('/api/v2/funcionarios?limit=200');
   const funcs = data?.funcionarios || [];
+  if (!funcs.length) {
+    sel.innerHTML = '<option value="">— nenhum funcionário cadastrado (cadastre em Funcionários) —</option>';
+    return;
+  }
   sel.innerHTML = '<option value="">— sem operador padrão —</option>' +
     funcs.map(f => `<option value="${f.id}" ${f.id===operadorId?'selected':''}>${escHtml(f.nome)}</option>`).join('');
 }

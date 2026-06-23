@@ -178,10 +178,24 @@ async function consultarBoleto(boletoId) {
  */
 async function cancelarBoleto(boletoId) {
   const token = await getAccessToken();
-  await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}/cancel`, {}, {
+  // C6: PUT /{id}/cancel NÃO aceita corpo ("No request body is expected")
+  await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}/cancel`, undefined, {
     httpsAgent: getAgent(),
-    headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: authHeaders(token),
   }));
+}
+
+/**
+ * Altera um boleto emitido (vencimento, valor, multa, juros) — PUT /v1/bank_slips/{id}
+ * changes: { due_date, amount, fine, interest, ... } conforme schema C6
+ */
+async function alterarBoleto(boletoId, changes) {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}`, changes, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+  return res.data;
 }
 
 /**
@@ -294,7 +308,7 @@ async function consultarExtrato(startDate, endDate) {
 }
 
 module.exports = {
-  emitirBolepix, consultarBoleto, cancelarBoleto,
+  emitirBolepix, consultarBoleto, cancelarBoleto, alterarBoleto,
   criarPixCobranca, cancelarPixCobranca, registrarWebhookPix,
   consultarDDA, criarLote, consultarLote, removerItemLote, submeterLote, consultarExtrato,
   _getAccessToken: getAccessToken,

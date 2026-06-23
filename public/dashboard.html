@@ -1416,7 +1416,8 @@ async function abrirDetalheOS(id) {
       <div><label style="font-size:11px;color:#666">Numeração final</label>${inp('of-numfim',os.numeracao_final,'number')}</div>
       <div><label style="font-size:11px;color:#666">Quantidade (itens)</label>${inpRO('of-qtd',os.quantidade)}</div>
       <div><label style="font-size:11px;color:#666">Cores das tintas</label>${inp('of-cores',os.cores_tintas)}</div>
-      <div></div>
+      <div><label style="font-size:11px;color:#666">Máquina</label><select id="ficha-maquina" onchange="onMaquinaChange()" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">— carregando —</option></select></div>
+      <div><label style="font-size:11px;color:#666">Operador</label><select id="ficha-operador" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">— carregando —</option></select></div>
       <div><label style="font-size:11px;color:#666">Imagem Alt</label>${inp('of-imgalt',os.imagem_alt,'number','step="0.01"')}</div>
       <div><label style="font-size:11px;color:#666">Imagem Larg</label>${inp('of-imglarg',os.imagem_larg,'number','step="0.01"')}</div>
       <div style="display:flex;align-items:flex-end"><button type="button" onclick="abrirMelhorCorte()" style="background:#5c6bc0;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:7px 10px;cursor:pointer;white-space:nowrap">🔍 Melhor corte</button></div>
@@ -1435,10 +1436,11 @@ async function abrirDetalheOS(id) {
       OS #${os.numero_os||'—'} · <b>${os.tipo_servico==='offset'?'Offset':(os.tipo_servico==='comunicacao_visual'?'Com. Visual':'—')}</b> · ${escHtml(os.cliente_nome||'(multi-cliente)')} · status: ${os.status}
     </div>
     <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
-    <div style="font-size:13px;margin-bottom:6px"><b>Especificações:</b> ${especsTxt}</div>
+    <div style="font-size:13px;margin-bottom:4px"><b>Especificações:</b> ${especsTxt}</div>
+    <div style="font-size:13px;color:#555;margin-bottom:6px">Máquina: ${escHtml(os.maquina_nome||'—')} · Operador: ${escHtml(os.operador_nome||'—')}</div>
     ${fichaHtml}`;
   showModal(`Detalhe da OS #${os.numero_os||''}`, html, '920px');
-  if (isOffset) renderViasOS();
+  if (isOffset) { renderViasOS(); popularCombosFicha(os); }
 }
 
 async function salvarFichaOS() {
@@ -1450,6 +1452,8 @@ async function salvarFichaOS() {
     imagem_alt: val('of-imgalt'), imagem_larg: val('of-imglarg'),
     imagens_folha: val('of-imgfolha'), imagens_impressao: val('of-imgimp'), total_impressoes: val('of-totimp'),
     cores_tintas: val('of-cores'),
+    maquina_id: document.getElementById('ficha-maquina')?.value || null,
+    operador_id: document.getElementById('ficha-operador')?.value || null,
     materiais: _osMateriais,
   };
   const r = await api(`/api/v2/os/${_osDetalheId}/producao`, { method:'PATCH', body: JSON.stringify(body) });
@@ -1457,6 +1461,28 @@ async function salvarFichaOS() {
   closeModal();
   showToast('✅ Ficha de produção salva');
   loadOsMain();
+}
+
+async function popularCombosFicha(os) {
+  const [maqResp, funcResp] = await Promise.all([
+    api('/api/v2/maquinas?status=ativa&limit=200'),
+    api('/api/v2/funcionarios?limit=200'),
+  ]);
+  const maquinas = maqResp?.maquinas || [];
+  const funcs = funcResp?.funcionarios || [];
+  const selM = document.getElementById('ficha-maquina');
+  if (selM) selM.innerHTML = '<option value="">— selecione —</option>' +
+    maquinas.map(m => `<option value="${m.id}" data-op="${m.operador_padrao_id||''}" ${os.maquina_id===m.id?'selected':''}>${escHtml(m.nome)}</option>`).join('');
+  const selO = document.getElementById('ficha-operador');
+  if (selO) selO.innerHTML = '<option value="">— selecione —</option>' +
+    funcs.map(f => `<option value="${f.id}" ${os.operador_id===f.id?'selected':''}>${escHtml(f.nome)}</option>`).join('');
+}
+
+function onMaquinaChange() {
+  const selM = document.getElementById('ficha-maquina');
+  const opId = selM?.options[selM.selectedIndex]?.getAttribute('data-op') || '';
+  const selO = document.getElementById('ficha-operador');
+  if (selO && opId) selO.value = opId;
 }
 
 // ── GERAR OS OFFSET ────────────────────────────────────────────────────────────

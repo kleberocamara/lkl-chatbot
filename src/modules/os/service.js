@@ -365,8 +365,8 @@ async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produt
 // Atualiza a ficha de produção da OS e substitui as vias/materiais
 async function atualizarFichaProducao(osId, dados) {
   const COLS = ['nro_jogos','nro_vias','tipo_unidade','frente_verso','numeracao_inicial',
-    'numeracao_final','formato_corte_alt','formato_corte_larg','imagem_alt','imagem_larg',
-    'imagens_folha','imagens_impressao','cores_tintas'];
+    'numeracao_final','formato_corte','formato_corte_alt','formato_corte_larg','imagem_alt','imagem_larg',
+    'imagens_folha','imagens_impressao','total_impressoes','cores_tintas'];
   const sets = [], vals = [];
   for (const c of COLS) {
     if (dados[c] !== undefined) { vals.push(dados[c] === '' ? null : dados[c]); sets.push(`${c}=$${vals.length}`); }

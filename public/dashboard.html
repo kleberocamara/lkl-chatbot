@@ -1287,28 +1287,45 @@ async function abrirMelhorCorte() {
   const lista = res?.resultados || [];
   if (!lista.length) { area.innerHTML = '<p style="font-size:12px;color:#c00;margin-top:12px">Nenhum formato comporta essa imagem.</p>'; setTimeout(renderViasOS, 1500); return; }
   const linhas = lista.slice(0, 40).map(r => `
-    <div onclick="escolherCorte(${r.altura_corte},${r.largura_corte},${r.imagens_montadas})"
+    <div onclick="escolherCorte(${r.altura_corte},${r.largura_corte},${r.imagens_montadas},${r.formato})"
       style="display:grid;grid-template-columns:0.6fr 1fr 0.8fr;gap:6px;padding:7px 8px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px"
       onmouseenter="this.style.background='#f5f7ff'" onmouseleave="this.style.background='#fff'">
       <span style="color:#888">Fmt ${r.formato}</span>
       <span><b>${r.altura_corte} × ${r.largura_corte}</b></span>
-      <span style="text-align:right;font-weight:700;color:#2e7d32">${r.imagens_montadas} img</span>
+      <span style="text-align:right;font-weight:700;color:#2e7d32">${r.imagens_montadas} /impr.</span>
     </div>`).join('');
   area.innerHTML = `
     <div style="font-size:11px;font-weight:700;color:#7986cb;letter-spacing:.5px;margin:16px 0 8px">MELHOR CORTE — imagem ${ia} × ${il} (clique para aplicar)</div>
     <div style="font-size:10px;color:#999;display:grid;grid-template-columns:0.6fr 1fr 0.8fr;gap:6px;padding:0 8px 4px">
-      <span>Formato</span><span>Corte (Alt × Larg)</span><span style="text-align:right">Imagens/folha</span></div>
+      <span>Formato</span><span>Corte (Alt × Larg)</span><span style="text-align:right">Imagens/impressão</span></div>
     <div style="max-height:240px;overflow:auto;border:1px solid #eee;border-radius:6px">${linhas}</div>
     <button onclick="renderViasOS()" style="background:none;border:1px solid #ddd;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;margin-top:8px">← Voltar para vias</button>`;
 }
 
-function escolherCorte(alt, larg, imagensFolha) {
+function escolherCorte(alt, larg, imagensImpressao, formato) {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+  const fmt = parseInt(formato) || 1;
+  const imagensFolha = imagensImpressao * fmt;
+  set('of-fmt', fmt);
   set('of-fcalt', alt);
   set('of-fclarg', larg);
+  set('of-imgimp', imagensImpressao);
   set('of-imgfolha', imagensFolha);
-  showToast(`✅ Corte ${alt}×${larg} aplicado (${imagensFolha} imagens/folha)`);
+  npRecalcImpressoes();
+  showToast(`✅ Formato ${fmt} · corte ${alt}×${larg} · ${imagensImpressao} img/impressão · ${imagensFolha} img/folha`);
   renderViasOS();
+}
+
+// Total de impressões = folhas × formato ; folhas = ⌈quantidade ÷ imagens/folha⌉
+function npRecalcImpressoes() {
+  const num = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const qtd = num('of-qtd'), imgFolha = num('of-imgfolha'), fmt = num('of-fmt') || 1;
+  const tot = document.getElementById('of-totimp');
+  if (!tot) return;
+  if (qtd > 0 && imgFolha > 0) {
+    const folhas = Math.ceil(qtd / imgFolha);
+    tot.value = folhas * fmt;
+  }
 }
 
 async function abrirDetalheOS(id) {
@@ -1321,6 +1338,7 @@ async function abrirDetalheOS(id) {
   const especsTxt = (os.especificacoes||[]).map(e => escHtml(e.nome)).join(', ') || '—';
   const isOffset = os.tipo_servico === 'offset';
   const inp = (id2, val, type='text', extra='') => `<input id="${id2}" type="${type}" value="${val!=null?escHtml(String(val)):''}" ${extra} style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">`;
+  const inpRO = (id2, val) => `<input id="${id2}" type="number" value="${val!=null?escHtml(String(val)):''}" readonly style="width:100%;padding:7px;border:1px solid #e8e8e8;border-radius:6px;font-size:13px;box-sizing:border-box;background:#f8f9fa;color:#555">`;
   const fvSel = `<select id="of-fv" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">—</option>${FV_OPCOES.map(([v,l])=>`<option value="${v}" ${os.frente_verso===v?'selected':''}>${l}</option>`).join('')}</select>`;
   const unidSel = `<select id="of-unid" style="width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="">—</option>${UNID_OPCOES.map(u=>`<option value="${u}" ${os.tipo_unidade===u?'selected':''}>${u}</option>`).join('')}</select>`;
 
@@ -1333,15 +1351,18 @@ async function abrirDetalheOS(id) {
       <div><label style="font-size:11px;color:#666">Frente e Verso</label>${fvSel}</div>
       <div><label style="font-size:11px;color:#666">Numeração inicial</label>${inp('of-numini',os.numeracao_inicial,'number')}</div>
       <div><label style="font-size:11px;color:#666">Numeração final</label>${inp('of-numfim',os.numeracao_final,'number')}</div>
-      <div><label style="font-size:11px;color:#666">Formato corte Alt</label>${inp('of-fcalt',os.formato_corte_alt,'number','step="0.01"')}</div>
-      <div><label style="font-size:11px;color:#666">Formato corte Larg</label>${inp('of-fclarg',os.formato_corte_larg,'number','step="0.01"')}</div>
+      <div><label style="font-size:11px;color:#666">Quantidade (itens)</label>${inpRO('of-qtd',os.quantidade)}</div>
       <div><label style="font-size:11px;color:#666">Cores das tintas</label>${inp('of-cores',os.cores_tintas)}</div>
+      <div></div>
       <div><label style="font-size:11px;color:#666">Imagem Alt</label>${inp('of-imgalt',os.imagem_alt,'number','step="0.01"')}</div>
       <div><label style="font-size:11px;color:#666">Imagem Larg</label>${inp('of-imglarg',os.imagem_larg,'number','step="0.01"')}</div>
       <div style="display:flex;align-items:flex-end"><button type="button" onclick="abrirMelhorCorte()" style="background:#5c6bc0;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:7px 10px;cursor:pointer;white-space:nowrap">🔍 Melhor corte</button></div>
-      <div><label style="font-size:11px;color:#666">Imagens/folha</label>${inp('of-imgfolha',os.imagens_folha,'number','min="0"')}</div>
-      <div><label style="font-size:11px;color:#666">Imagens/impressão</label>${inp('of-imgimp',os.imagens_impressao,'number','min="0"')}</div>
-      <div></div>
+      <div><label style="font-size:11px;color:#666">Nº formato corte</label>${inpRO('of-fmt',os.formato_corte)}</div>
+      <div><label style="font-size:11px;color:#666">Corte Alt</label>${inpRO('of-fcalt',os.formato_corte_alt)}</div>
+      <div><label style="font-size:11px;color:#666">Corte Larg</label>${inpRO('of-fclarg',os.formato_corte_larg)}</div>
+      <div><label style="font-size:11px;color:#666">Imagens/impressão</label>${inpRO('of-imgimp',os.imagens_impressao)}</div>
+      <div><label style="font-size:11px;color:#666">Imagens/folha</label>${inpRO('of-imgfolha',os.imagens_folha)}</div>
+      <div><label style="font-size:11px;color:#666">Total de impressões</label>${inp('of-totimp',os.total_impressoes,'number','min="0"')}</div>
     </div>
     <div id="of-vias-area"></div>
     <button onclick="salvarFichaOS()" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar ficha de produção</button>`;
@@ -1362,9 +1383,9 @@ async function salvarFichaOS() {
   const body = {
     nro_jogos: val('of-jogos'), nro_vias: val('of-vias'), tipo_unidade: val('of-unid'),
     frente_verso: val('of-fv'), numeracao_inicial: val('of-numini'), numeracao_final: val('of-numfim'),
-    formato_corte_alt: val('of-fcalt'), formato_corte_larg: val('of-fclarg'),
+    formato_corte: val('of-fmt'), formato_corte_alt: val('of-fcalt'), formato_corte_larg: val('of-fclarg'),
     imagem_alt: val('of-imgalt'), imagem_larg: val('of-imglarg'),
-    imagens_folha: val('of-imgfolha'), imagens_impressao: val('of-imgimp'),
+    imagens_folha: val('of-imgfolha'), imagens_impressao: val('of-imgimp'), total_impressoes: val('of-totimp'),
     cores_tintas: val('of-cores'),
     materiais: _osMateriais,
   };

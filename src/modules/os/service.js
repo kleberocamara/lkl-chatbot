@@ -126,12 +126,16 @@ async function buscarPorId(id) {
     `SELECT os.*,
             COALESCE(cli.nome, cdir.nome) AS cliente_nome,
             o.numero AS numero_orcamento,
-            u.name AS responsavel_nome
+            u.name AS responsavel_nome,
+            mq.nome AS maquina_nome,
+            op.nome AS operador_nome
      FROM ordens_servico os
      LEFT JOIN clientes_lkl cdir ON cdir.id = os.cliente_id
      LEFT JOIN orcamentos o ON o.id = os.orcamento_id
      LEFT JOIN clientes_lkl cli ON cli.id = o.cliente_id
      LEFT JOIN users u ON u.id = os.responsavel_id
+     LEFT JOIN maquinas mq ON mq.id = os.maquina_id
+     LEFT JOIN funcionarios op ON op.id = os.operador_id
      WHERE os.id = $1`,
     [id]
   );
@@ -367,7 +371,7 @@ async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produt
 async function atualizarFichaProducao(osId, dados) {
   const COLS = ['nro_jogos','nro_vias','tipo_unidade','frente_verso','numeracao_inicial',
     'numeracao_final','formato_corte','formato_corte_alt','formato_corte_larg','imagem_alt','imagem_larg',
-    'imagens_folha','imagens_impressao','total_impressoes','cores_tintas'];
+    'imagens_folha','imagens_impressao','total_impressoes','cores_tintas','maquina_id','operador_id'];
   const sets = [], vals = [];
   for (const c of COLS) {
     if (dados[c] !== undefined) { vals.push(dados[c] === '' ? null : dados[c]); sets.push(`${c}=$${vals.length}`); }

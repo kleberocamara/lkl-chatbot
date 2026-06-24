@@ -129,6 +129,27 @@ router.patch('/:id/producao', requireRole('admin','gestor','analista','operador'
   } catch (e) { console.error('[OS-PRODUCAO]', e); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+// OS-3C: baixa manual de materiais
+router.post('/:id/requisicao', requireRole('admin','gestor','atendente'), async (req, res) => {
+  try {
+    const result = await service.baixarMateriais(req.params.id, { userId: req.user.id });
+    if (result.erro) {
+      const nf = result.erro.some(e => e.includes('não encontrada'));
+      return res.status(nf ? 404 : 400).json(nf ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.status(201).json(result);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// OS-3C: estorno da requisição ativa
+router.post('/:id/requisicao/estornar', requireRole('admin','gestor'), async (req, res) => {
+  try {
+    const result = await service.estornarRequisicao(req.params.id, { userId: req.user.id });
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.json(result);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 // PATCH /:id/entregar — motorista ou admin
 router.patch('/:id/entregar', requireRole('admin', 'motorista'), upload.single('foto_documento'), async (req, res) => {
   try {

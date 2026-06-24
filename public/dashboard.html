@@ -649,6 +649,16 @@
     <div id="pag-maq" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
   </div>
 
+  <div class="page" id="page-entradas">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0">Entrada de NF-e (compra)</h2>
+      <label class="btn btn-primary" style="cursor:pointer">📥 Importar NF-e
+        <input type="file" accept=".xml,text/xml" style="display:none" onchange="importarNfe(this)">
+      </label>
+    </div>
+    <div id="list-entradas-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+  </div>
+
   <!-- MODAL EDIÇÃO CADASTROS -->
   <div id="modal-cadastro" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
     <div style="background:white;border-radius:12px;max-width:560px;margin:40px auto;padding:28px;position:relative">
@@ -753,6 +763,7 @@ function buildSidebar(role) {
       { id: 'materiais',    label: 'Materiais',    icon: '📦', roles: ['admin','gestor','analista'] },
       { id: 'funcionarios', label: 'Funcionários', icon: '🧑', roles: ['admin','gestor'] },
       { id: 'maquinas',     label: 'Máquinas',     icon: '🖨️', roles: ['admin','gestor'] },
+      { id: 'entradas',     label: 'Entrada NF-e', icon: '📥', roles: ['admin','gestor'] },
       { id: 'usuarios',     label: 'Usuários',     icon: '👤', roles: ['admin','gestor','analista','atendente'] },
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
@@ -900,6 +911,7 @@ function showPage(page, el) {
     materiais:    () => loadMateriaisMain(1),
     funcionarios: () => loadFuncionariosMain(1),
     maquinas:     () => loadMaquinasMain(1),
+    entradas:     () => loadEntradasMain(),
     usuarios:     loadUsuarios2,
   };
   if (loaders[page]) loaders[page]();
@@ -3672,6 +3684,125 @@ function showModal(title, html, width) {
 }
 function closeModal() {
   document.getElementById('generic-modal').style.display = 'none';
+}
+
+// ── ENTRADA NF-e ──────────────────────────────────────────────────────────────
+
+let _previewNfe = null;
+
+async function importarNfe(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('xml', file);
+  // api() usa credentials:'include' (cookie session) — não há header de token Bearer
+  let resp;
+  try {
+    resp = await fetch('/api/v2/entradas/preview', {
+      method: 'POST',
+      credentials: 'include',
+      body: fd
+    });
+  } catch(e) { showToast('Falha ao enviar XML'); return; }
+  let data;
+  try { data = await resp.json(); } catch(e) { showToast('Resposta inválida do servidor'); return; }
+  if (!resp.ok) { showToast('Erro: ' + (data.error || data.errors?.[0] || 'XML inválido')); return; }
+  _previewNfe = data;
+  abrirPreviewNfe(data);
+}
+
+async function _materiaisOptionsEntrada() {
+  const r = await api('/api/v2/materiais?status=ativo&limit=500');
+  return r?.materiais || [];
+}
+
+async function abrirPreviewNfe(data) {
+  const mats = await _materiaisOptionsEntrada();
+  const optsFor = (selId) => '<option value="">— ignorar —</option>' +
+    mats.map(m => `<option value="${m.id}" ${m.id === selId ? 'selected' : ''}>${escHtml(m.nome)}</option>`).join('');
+  const fornecedorTxt = data.fornecedor
+    ? `Fornecedor: <b>${escHtml(data.fornecedor.nome)}</b>`
+    : `Fornecedor não cadastrado: <b>${escHtml(data.fornecedor_nome || '—')}</b> (CNPJ ${escHtml(data.fornecedor_cnpj || '—')})`;
+  const linhas = (data.itens || []).map((it, i) => `
+    <tr>
+      <td style="padding:4px 6px">${escHtml(it.xprod || it.cprod || '—')}</td>
+      <td style="padding:4px 6px;text-align:right">${it.qcom}</td>
+      <td style="padding:4px 6px">${escHtml(it.ucom || '')}</td>
+      <td style="padding:4px 6px"><select id="nfe-mat-${i}" style="width:160px">${optsFor(it.material_id)}</select></td>
+      <td style="padding:4px 6px"><input id="nfe-fator-${i}" type="number" step="0.0001" value="${it.fator != null ? it.fator : 1}" style="width:80px" oninput="_recalcNfe(${i})"></td>
+      <td style="padding:4px 6px;text-align:right" id="nfe-qe-${i}">${(Number(it.qcom || 0) * Number(it.fator || 1)).toLocaleString('pt-BR', {maximumFractionDigits: 3})}</td>
+    </tr>`).join('');
+  const html = `
+    <div style="margin-bottom:10px;font-size:13px">${fornecedorTxt} · NF ${escHtml(data.nnf || '—')} · Total R$ ${Number(data.valor_total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="color:#777;text-align:left">
+        <th style="padding:4px 6px">Produto (NF)</th><th>Qtd</th><th>Un</th><th>Material</th><th>Fator</th><th>Qtd estoque</th>
+      </tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="confirmarNfe()">Confirmar entrada</button>`;
+  showModal('Pré-visualização da NF-e', html, '760px');
+}
+
+function _recalcNfe(i) {
+  const it = _previewNfe.itens[i];
+  const fator = parseFloat(document.getElementById('nfe-fator-' + i).value) || 0;
+  document.getElementById('nfe-qe-' + i).textContent =
+    (Number(it.qcom || 0) * fator).toLocaleString('pt-BR', {maximumFractionDigits: 3});
+}
+
+async function confirmarNfe() {
+  if (!_previewNfe) return;
+  const itens = _previewNfe.itens.map((it, i) => ({
+    ...it,
+    material_id: document.getElementById('nfe-mat-' + i).value || null,
+    fator: parseFloat(document.getElementById('nfe-fator-' + i).value) || 1,
+  }));
+  const payload = {
+    chave:        _previewNfe.chave,
+    nnf:          _previewNfe.nnf,
+    emitida_em:   _previewNfe.emitida_em,
+    valor_total:  _previewNfe.valor_total,
+    fornecedor_id: _previewNfe.fornecedor ? _previewNfe.fornecedor.id : null,
+    itens,
+  };
+  const res = await api('/api/v2/entradas', { method: 'POST', body: JSON.stringify(payload) });
+  if (!res || res.errors || res.error) { showToast('Erro: ' + (res?.errors?.[0] || res?.error || 'Falha ao confirmar')); return; }
+  closeModal();
+  showToast('✅ Entrada lançada');
+  loadEntradasMain();
+}
+
+async function loadEntradasMain() {
+  const box = document.getElementById('list-entradas-main');
+  if (!box) return;
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:#999">Carregando...</div>';
+  const r = await api('/api/v2/entradas');
+  const list = r?.entradas || [];
+  if (!list.length) { box.innerHTML = '<p style="color:#999;padding:20px">Nenhuma entrada lançada</p>'; return; }
+  box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:#777;text-align:left">
+      <th style="padding:6px 8px">NF</th><th>Fornecedor</th><th>Emissão</th><th style="text-align:right">Total</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${list.map(e => `<tr>
+      <td style="padding:6px 8px">${escHtml(e.nnf || '—')}</td>
+      <td style="padding:6px 8px">${escHtml(e.fornecedor_nome || '—')}</td>
+      <td style="padding:6px 8px">${e.emitida_em ? new Date(e.emitida_em).toLocaleDateString('pt-BR') : '—'}</td>
+      <td style="padding:6px 8px;text-align:right">R$ ${Number(e.valor_total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+      <td style="padding:6px 8px">${e.status === 'estornada' ? '<span style="color:#c62828">estornada</span>' : '<span style="color:#2e7d32">lançada</span>'}</td>
+      <td style="padding:6px 8px">${e.status === 'lancada' ? `<button onclick="estornarNfe('${e.id}')" style="background:#ad1457;border:none;border-radius:6px;color:white;font-size:11px;padding:4px 8px;cursor:pointer">Estornar</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function estornarNfe(id) {
+  if (!confirm('Estornar esta entrada (devolver a quantidade ao estoque)?')) return;
+  const res = await api(`/api/v2/entradas/${id}/estornar`, { method: 'POST' });
+  if (!res || res.errors || res.error) { showToast('Erro: ' + (res?.errors?.[0] || res?.error || 'Falha ao estornar')); return; }
+  showToast('↩ Entrada estornada');
+  loadEntradasMain();
 }
 </script>
 </body>

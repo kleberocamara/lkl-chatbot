@@ -1438,9 +1438,11 @@ async function abrirDetalheOS(id) {
     <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
     <div style="font-size:13px;margin-bottom:4px"><b>Especificações:</b> ${especsTxt}</div>
     <div style="font-size:13px;color:#555;margin-bottom:6px">Máquina: ${escHtml(os.maquina_nome||'—')} · Operador: ${escHtml(os.operador_nome||'—')}</div>
-    ${fichaHtml}`;
+    ${fichaHtml}
+    <div id="os-requisicao-bloco" style="margin-top:16px"></div>`;
   showModal(`Detalhe da OS #${os.numero_os||''}`, html, '920px');
   if (isOffset) { renderViasOS(); popularCombosFicha(os); }
+  renderRequisicaoOS(os);
 }
 
 async function salvarFichaOS() {
@@ -1461,6 +1463,55 @@ async function salvarFichaOS() {
   closeModal();
   showToast('✅ Ficha de produção salva');
   loadOsMain();
+}
+
+function renderRequisicaoOS(os) {
+  const box = document.getElementById('os-requisicao-bloco');
+  if (!box) return;
+  const req = os.requisicao;
+  const itens = os.requisicao_itens || [];
+  let corpo;
+  if (!req || req.status === 'estornada') {
+    const estornadaMsg = req && req.status === 'estornada'
+      ? `<div style="font-size:12px;color:#c62828;margin-bottom:8px">Requisição estornada em ${new Date(req.estornada_em).toLocaleDateString('pt-BR')}</div>` : '';
+    corpo = `${estornadaMsg}
+      <div style="color:#777;font-size:13px;margin-bottom:8px">Materiais não baixados.</div>
+      <button onclick="requisitarOS('${os.id}')" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer">Requisitar materiais</button>`;
+  } else {
+    const linhas = itens.length ? itens.map(it => `
+      <tr>
+        <td style="padding:4px 8px">${escHtml(it.material_nome||'—')}</td>
+        <td style="padding:4px 8px;text-align:right">${parseFloat(it.quantidade).toLocaleString('pt-BR',{maximumFractionDigits:3})}</td>
+        <td style="padding:4px 8px">${escHtml(it.unidade)}</td>
+        <td style="padding:4px 8px;text-align:right">${parseFloat(it.estoque_atual).toLocaleString('pt-BR',{maximumFractionDigits:3})}</td>
+      </tr>`).join('')
+      : '<tr><td colspan="4" style="padding:8px;color:#999">Nenhum material do catálogo vinculado.</td></tr>';
+    corpo = `
+      <div style="font-size:12px;color:#2e7d32;margin-bottom:8px">✅ Baixado em ${new Date(req.criada_em).toLocaleDateString('pt-BR')}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
+        <thead><tr style="color:#777;text-align:left"><th style="padding:4px 8px">Material</th><th style="padding:4px 8px;text-align:right">Qtd</th><th style="padding:4px 8px">Un</th><th style="padding:4px 8px;text-align:right">Estoque</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <button onclick="estornarOS('${os.id}')" style="background:#ad1457;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer">↩ Estornar baixa</button>`;
+  }
+  box.innerHTML = `<div style="border:1px solid #e8eaf6;border-radius:8px;padding:12px 14px;background:#fafbff">
+    <div style="font-weight:700;color:#3949ab;font-size:13px;margin-bottom:8px">REQUISIÇÃO DE MATERIAIS</div>${corpo}</div>`;
+}
+
+async function requisitarOS(id) {
+  if (!confirm('Dar baixa dos materiais desta OS no estoque?')) return;
+  const res = await api(`/api/v2/os/${id}/requisicao`, { method: 'POST' });
+  if (res?.errors || res?.error) { showToast('Erro: ' + (res.errors?.[0] || res.error)); return; }
+  showToast('✅ Materiais baixados');
+  abrirDetalheOS(id);
+}
+
+async function estornarOS(id) {
+  if (!confirm('Estornar a baixa (devolver ao estoque)?')) return;
+  const res = await api(`/api/v2/os/${id}/requisicao/estornar`, { method: 'POST' });
+  if (res?.errors || res?.error) { showToast('Erro: ' + (res.errors?.[0] || res.error)); return; }
+  showToast('↩ Baixa estornada');
+  abrirDetalheOS(id);
 }
 
 async function popularCombosFicha(os) {

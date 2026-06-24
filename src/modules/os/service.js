@@ -168,7 +168,19 @@ async function buscarPorId(id) {
      WHERE m.os_id = $1 ORDER BY m.via`,
     [id]
   );
-  return { ...os, itens: itens.rows, especificacoes: especs.rows, materiais: mats.rows };
+  const reqR = await db.query(
+    `SELECT * FROM os_requisicoes WHERE os_id=$1 ORDER BY criada_em DESC LIMIT 1`, [id]);
+  let requisicao = null;
+  let requisicao_itens = [];
+  if (reqR.rows[0]) {
+    const reqItens = await db.query(
+      `SELECT ri.*, m.nome AS material_nome, m.estoque_atual
+       FROM os_requisicao_itens ri JOIN materiais m ON m.id = ri.material_id
+       WHERE ri.requisicao_id=$1`, [reqR.rows[0].id]);
+    requisicao = reqR.rows[0];
+    requisicao_itens = reqItens.rows;
+  }
+  return { ...os, itens: itens.rows, especificacoes: especs.rows, materiais: mats.rows, requisicao, requisicao_itens };
 }
 
 async function atualizarStatus(id, novoStatus, responsavel_id) {
@@ -200,6 +212,16 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
     params
   );
   const updatedOs = r.rows[0];
+
+  // OS-3C: baixa automática de materiais ao ENTRAR em impressão (idempotente, não bloqueia o status)
+  if (novoStatus === 'impressao' && os.status !== 'impressao') {
+    try {
+      const b = await baixarMateriais(id, { userId: responsavel_id });
+      if (b.erro) console.warn('[OS-3C] baixa de materiais falhou:', b.erro[0]);
+    } catch (e) {
+      console.warn('[OS-3C] baixa de materiais erro:', e.message);
+    }
+  }
 
   // If entregue, check if all OSs for this orcamento are done
   if (novoStatus === 'entregue') {
@@ -407,4 +429,78 @@ async function atualizarFichaProducao(osId, dados) {
   return { os };
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset, atualizarFichaProducao };
+// OS-3C: coleta o consumo de materiais da OS (offset; CV é adicionado na fase 2)
+async function _coletarConsumo(client, osId) {
+  const consumo = []; // { material_id, quantidade, unidade }
+  // Fonte OFFSET: vias da ficha com material e folhas_total
+  const off = await client.query(
+    `SELECT material_id, folhas_total FROM os_materiais
+     WHERE os_id=$1 AND material_id IS NOT NULL AND folhas_total > 0`, [osId]);
+  for (const r of off.rows) {
+    consumo.push({ material_id: r.material_id, quantidade: Number(r.folhas_total), unidade: 'folha' });
+  }
+  // (fase 2) Fonte CV entra aqui
+  return consumo;
+}
+
+async function baixarMateriais(osId, { userId } = {}) {
+  const osR = await db.query('SELECT id FROM ordens_servico WHERE id=$1', [osId]);
+  if (!osR.rows[0]) return { erro: ['OS não encontrada'] };
+  const ativa = await db.query(`SELECT id FROM os_requisicoes WHERE os_id=$1 AND status='baixada'`, [osId]);
+  if (ativa.rows[0]) {
+    const itens = await db.query('SELECT * FROM os_requisicao_itens WHERE requisicao_id=$1', [ativa.rows[0].id]);
+    return { requisicao: { id: ativa.rows[0].id, status: 'baixada' }, itens: itens.rows, jaExistia: true };
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const consumo = await _coletarConsumo(client, osId);
+    const req = await client.query(
+      `INSERT INTO os_requisicoes (os_id, status, criada_por) VALUES ($1,'baixada',$2) RETURNING *`,
+      [osId, userId || null]);
+    const requisicao = req.rows[0];
+    const itens = [];
+    for (const c of consumo) {
+      await client.query('UPDATE materiais SET estoque_atual = estoque_atual - $1, updated_at=NOW() WHERE id=$2',
+        [c.quantidade, c.material_id]);
+      const it = await client.query(
+        `INSERT INTO os_requisicao_itens (requisicao_id, material_id, quantidade, unidade)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [requisicao.id, c.material_id, c.quantidade, c.unidade]);
+      itens.push(it.rows[0]);
+    }
+    await client.query('COMMIT');
+    return { requisicao, itens, ignorados: consumo.length === 0 };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return { erro: [e.message] };
+  } finally {
+    client.release();
+  }
+}
+
+async function estornarRequisicao(osId, { userId } = {}) {
+  const reqR = await db.query(`SELECT id FROM os_requisicoes WHERE os_id=$1 AND status='baixada'`, [osId]);
+  if (!reqR.rows[0]) return { erro: ['Nenhuma requisição ativa para estornar'] };
+  const requisicaoId = reqR.rows[0].id;
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const itens = await client.query('SELECT material_id, quantidade FROM os_requisicao_itens WHERE requisicao_id=$1', [requisicaoId]);
+    for (const it of itens.rows) {
+      await client.query('UPDATE materiais SET estoque_atual = estoque_atual + $1, updated_at=NOW() WHERE id=$2',
+        [it.quantidade, it.material_id]);
+    }
+    await client.query(`UPDATE os_requisicoes SET status='estornada', estornada_em=NOW(), estornada_por=$1 WHERE id=$2`,
+      [userId || null, requisicaoId]);
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return { erro: [e.message] };
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset, atualizarFichaProducao, baixarMateriais, estornarRequisicao };

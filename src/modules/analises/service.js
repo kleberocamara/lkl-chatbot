@@ -75,4 +75,40 @@ async function fluxoCaixa({ dias } = {}) {
   };
 }
 
-module.exports = { dre, fluxoCaixa };
+function _intervaloMes(ano, mes) {
+  const ini = new Date(ano, mes - 1, 1);
+  const fim = new Date(ano, mes, 0);
+  const fmt = d => d.toISOString().slice(0, 10);
+  return { inicio: fmt(ini), fim: fmt(fim) };
+}
+
+async function salvarMeta({ ano, mes, valor }) {
+  ano = parseInt(ano); mes = parseInt(mes); valor = parseFloat(valor);
+  if (!Number.isInteger(ano) || ano < 2000 || ano > 2100) return { erro: ['Ano inválido'] };
+  if (!Number.isInteger(mes) || mes < 1 || mes > 12) return { erro: ['Mês inválido (1-12)'] };
+  if (!(valor >= 0)) return { erro: ['Valor da meta inválido'] };
+  const r = await db.query(
+    `INSERT INTO metas (ano, mes, valor_meta) VALUES ($1,$2,$3)
+     ON CONFLICT (ano, mes) DO UPDATE SET valor_meta = EXCLUDED.valor_meta, updated_at = now()
+     RETURNING *`, [ano, mes, valor]);
+  return { meta: r.rows[0] };
+}
+
+async function metaMes({ ano, mes } = {}) {
+  const n = new Date();
+  ano = ano ? parseInt(ano) : n.getFullYear();
+  mes = mes ? parseInt(mes) : (n.getMonth() + 1);
+  if (!Number.isInteger(mes) || mes < 1 || mes > 12) return { erro: ['Mês inválido (1-12)'] };
+  const { inicio, fim } = _intervaloMes(ano, mes);
+  const mR = await db.query('SELECT valor_meta FROM metas WHERE ano=$1 AND mes=$2', [ano, mes]);
+  const meta = mR.rows[0] ? Number(mR.rows[0].valor_meta) : null;
+  const rR = await db.query(
+    `SELECT COALESCE(SUM(total),0) AS realizado FROM orcamentos
+     WHERE aprovado_em::date BETWEEN $1 AND $2 AND status NOT IN ('cancelado','reprovado')`,
+    [inicio, fim]);
+  const realizado = Number(rR.rows[0].realizado);
+  const percentual = meta && meta > 0 ? realizado / meta : 0;
+  return { ano, mes, meta, realizado, percentual };
+}
+
+module.exports = { dre, fluxoCaixa, salvarMeta, metaMes };

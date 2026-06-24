@@ -1548,8 +1548,14 @@ async function abrirDetalheOS(id) {
       <div><label style="font-size:11px;color:#666">Imagens/folha</label>${inpRO('of-imgfolha',os.imagens_folha)}</div>
       <div><label style="font-size:11px;color:#666">Total de impressões</label>${inp('of-totimp',os.total_impressoes,'number','min="0"')}</div>
     </div>
-    <div id="of-vias-area"></div>
     <button onclick="salvarFichaOS()" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar ficha de produção</button>`;
+
+  const pills = isOffset ? `
+    <div style="display:flex;gap:8px;margin:12px 0">
+      <button id="osdtab-producao" class="btn btn-primary" onclick="osDetalheTab('producao')">🏭 Produção</button>
+      <button id="osdtab-materiais" class="btn btn-outline" onclick="osDetalheTab('materiais')">📦 Materiais</button>
+      <button id="osdtab-requisicao" class="btn btn-outline" onclick="osDetalheTab('requisicao')">📥 Requisição</button>
+    </div>` : '';
 
   const html = `
     <div style="font-size:12px;color:#888;margin-bottom:8px">
@@ -1558,11 +1564,23 @@ async function abrirDetalheOS(id) {
     <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
     <div style="font-size:13px;margin-bottom:4px"><b>Especificações:</b> ${especsTxt}</div>
     <div style="font-size:13px;color:#555;margin-bottom:6px">Máquina: ${escHtml(os.maquina_nome||'—')} · Operador: ${escHtml(os.operador_nome||'—')}</div>
-    ${fichaHtml}
-    <div id="os-requisicao-bloco" style="margin-top:16px"></div>`;
-  showModal(`Detalhe da OS #${os.numero_os||''}`, html, '920px');
+    ${pills}
+    <div id="osd-producao">${fichaHtml}</div>
+    <div id="osd-materiais" style="display:none"><div id="of-vias-area"></div></div>
+    <div id="osd-requisicao" style="display:none"><div id="os-requisicao-bloco" style="margin-top:8px"></div></div>`;
+  showModal(`Detalhe da OS #${os.numero_os||''}`, html, '860px');
   if (isOffset) { renderViasOS(); popularCombosFicha(os); }
   renderRequisicaoOS(os);
+  osDetalheTab(isOffset ? 'producao' : 'requisicao');
+}
+
+function osDetalheTab(secao) {
+  ['producao','materiais','requisicao'].forEach(s => {
+    const sec = document.getElementById('osd-' + s);
+    const tab = document.getElementById('osdtab-' + s);
+    if (sec) sec.style.display = (s === secao) ? '' : 'none';
+    if (tab) tab.className = 'btn ' + (s === secao ? 'btn-primary' : 'btn-outline');
+  });
 }
 
 async function salvarFichaOS() {

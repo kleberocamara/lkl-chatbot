@@ -66,7 +66,12 @@ REGRAS:
 10. ASSUNTOS FORA DO ESCOPO — leia com muita atenção:
    - Você atende EXCLUSIVAMENTE assuntos relacionados a: solicitar serviços gráficos (orçamento, pedido, adesivação, impressão, comunicação visual, gráfica) e consultar status de pedido/orçamento.
    - Se o cliente trouxer um assunto que CLARAMENTE não tem relação com serviços gráficos nem com pedidos (ex: reclamação de cobrança, assunto financeiro, RH, jurídico, parceria comercial, entrega extraviada de outro pedido, suporte técnico de sistema, etc.), responda com simpatia e informe: "Para esse tipo de assunto, por favor entre em contato pelo número (21) 98402-3229. Estou aqui para ajudar com pedidos e serviços gráficos 😊"
-   - ATENÇÃO: só indique esse número quando tiver CERTEZA de que o assunto está fora do escopo. Em caso de dúvida, tente entender melhor o que o cliente precisa antes de redirecionar. Nunca redirecione um cliente que está pedindo um serviço gráfico ou consultando um pedido.`;
+   - ATENÇÃO: só indique esse número quando tiver CERTEZA de que o assunto está fora do escopo. Em caso de dúvida, tente entender melhor o que o cliente precisa antes de redirecionar. Nunca redirecione um cliente que está pedindo um serviço gráfico ou consultando um pedido.
+11. IDENTIFICAÇÃO DO CLIENTE E E-MAIL — siga a nota de contexto:
+   - Se houver uma marcação "[CLIENTE NA BASE]" no contexto, confirme a identidade pelo nome informado ali ("Vi que você já é cliente como <NOME>. É isso mesmo? 😊"). Se o cliente confirmar, prossiga; se NEGAR (não é essa pessoa/empresa), trate como cliente novo e pergunte o nome.
+   - E-mail: se a nota indicar "[CLIENTE NOVO]" ou "[CLIENTE NA BASE] ... sem e-mail", PEÇA o e-mail do cliente. Se a nota trouxer um e-mail cadastrado, CONFIRME se está correto ("Seu e-mail cadastrado é <EMAIL>, está certo? 😊") e atualize se o cliente corrigir. Nunca registre o pedido sem ter tratado o e-mail.
+   - Ao chamar registrar_pedido, preencha "email" com o e-mail final e "cliente_existente_confirmado" (true se confirmou o cadastro encontrado, false se negou).
+12. MÚLTIPLOS PRODUTOS — quando o cliente pedir mais de um produto, trate CADA produto como um item separado, com suas próprias dimensões, quantidade, material e arte. No resumo, liste cada item. Ao chamar registrar_pedido, preencha o array "itens" com um objeto por produto. NUNCA junte produtos diferentes num único item.`;
 
 const TOOLS = [
   {
@@ -91,6 +96,22 @@ const TOOLS = [
           contato:       { type: 'string' },
           email:         { type: 'string' },
           observacoes:   { type: 'string' },
+          itens: {
+            type: 'array',
+            description: 'Um objeto por produto pedido. Use SEMPRE que houver itens; um item por produto.',
+            items: {
+              type: 'object',
+              properties: {
+                produto:    { type: 'string' },
+                dimensoes:  { type: 'string' },
+                quantidade: { type: 'number' },
+                material:   { type: 'string' },
+                tem_arte:   { type: 'boolean' },
+              },
+              required: ['produto', 'quantidade'],
+            },
+          },
+          cliente_existente_confirmado: { type: 'boolean', description: 'true se o cliente confirmou ser o cadastro encontrado pelo telefone; false se negou' },
         },
         required: ['mensagem_encerramento', 'tipo_servico', 'quantidade'],
       },

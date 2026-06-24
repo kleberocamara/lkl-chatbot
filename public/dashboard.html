@@ -559,12 +559,15 @@
 
   <!-- NF-e -->
   <div class="page" id="page-nfe">
-    <div class="page-header"><h1>📄 NF-e</h1><p>Emissão e gestão de Notas Fiscais Eletrônicas</p></div>
-    <div class="placeholder-page" style="min-height:200px">
-      <div class="icon">🚧</div>
-      <p>Em integração ao painel unificado — disponível via Admin</p>
-      <a href="/pwa/admin.html" target="_blank" class="btn btn-outline" style="margin-top:8px">Abrir Admin</a>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📄</span><h2 style="margin:0">NF-e</h2></div>
+      <div style="display:flex;gap:8px">
+        <input id="nfe-busca" placeholder="Buscar cliente / nº" oninput="renderNfeLista()" style="width:180px">
+        <button class="btn btn-outline" onclick="abrirInutilizarNfe()">Inutilizar numeração</button>
+      </div>
     </div>
+    <div id="nfe-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
+    <div id="nfe-lista"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
   </div>
 
   <!-- CLIENTES -->
@@ -913,6 +916,7 @@ function showPage(page, el) {
     maquinas:     () => loadMaquinasMain(1),
     entradas:     () => loadEntradasMain(),
     usuarios:     loadUsuarios2,
+    nfe:          () => loadNfeMain(),
   };
   if (loaders[page]) loaders[page]();
 }
@@ -2272,6 +2276,57 @@ function editarMaquina(m) {
     showToast('✅ Máquina atualizada'); fecharModalCadastro(); loadMaquinasMain(_maqPag);
   };
   document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+// ── NF-e ───────────────────────────────────────────────────────────────────────
+let _nfeOrcs = [];
+function _kpiCard(label, valor, cor) {
+  return `<div style="background:var(--bg-secondary,#f5f5f7);border-radius:8px;padding:14px 16px">
+    <div style="font-size:13px;color:#777">${label}</div>
+    <div style="font-size:24px;font-weight:600;${cor?`color:${cor}`:''}">${valor}</div></div>`;
+}
+function _mesCorrente(d) { if (!d) return false; const x=new Date(d); const n=new Date(); return x.getMonth()===n.getMonth() && x.getFullYear()===n.getFullYear(); }
+async function loadNfeMain() {
+  const r = await api('/api/v2/orcamentos?limit=500');
+  if (!r || r.error) { document.getElementById('nfe-lista').innerHTML = '<p style="color:#c00;padding:20px">Erro ao carregar</p>'; return; }
+  const all = r.data || r;
+  _nfeOrcs = (Array.isArray(all) ? all : []).filter(o => ['concluido','entregue','aprovado'].includes(o.status) || o.tem_os_entregue || o.nfe_status);
+  renderNfeKpis(); renderNfeLista();
+}
+function renderNfeKpis() {
+  const emitidas = _nfeOrcs.filter(o => o.nfe_status === 'autorizada');
+  const faturadoMes = emitidas.filter(o => _mesCorrente(o.updated_at || o.created_at)).reduce((s,o)=>s+Number(o.total||0),0);
+  const aFaturar = _nfeOrcs.filter(o => !o.nfe_status).length;
+  document.getElementById('nfe-kpis').innerHTML =
+    _kpiCard('Faturado no mês', 'R$ ' + faturadoMes.toLocaleString('pt-BR',{minimumFractionDigits:2})) +
+    _kpiCard('NF-e emitidas', emitidas.length) +
+    _kpiCard('A faturar', aFaturar, '#e65100');
+}
+function _pillNfe(o) {
+  if (o.nfe_status === 'autorizada') return '<span style="font-size:11px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:20px">Emitida</span>';
+  return '<span style="font-size:11px;background:#f1f1f1;color:#777;padding:2px 8px;border-radius:20px">Sem NF</span>';
+}
+function renderNfeLista() {
+  const q = (document.getElementById('nfe-busca')?.value || '').toLowerCase();
+  const list = _nfeOrcs.filter(o => !q || (`${o.numero} ${o.cliente_nome||''}`.toLowerCase().includes(q)));
+  const box = document.getElementById('nfe-lista');
+  if (!list.length) { box.innerHTML = '<p style="color:#999;padding:20px">Nenhum orçamento a faturar</p>'; return; }
+  box.innerHTML = list.map(o => {
+    const acoes = o.nfe_status === 'autorizada'
+      ? `<a class="btn btn-outline" href="/api/v2/nfe/danfe/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">DANFE</a>
+         <button class="btn btn-outline" onclick="abrirCceNfe('${o.nfe_id}')" style="padding:6px 10px">CC-e</button>
+         <button class="btn btn-outline" onclick="abrirCancelarNfe('${o.nfe_id}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`
+      : `<button class="btn btn-primary" onclick="abrirEmitirNfe('${o.id}')" style="padding:6px 10px">Emitir NF-e</button>`;
+    return `<div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-bottom:8px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#eef;display:flex;align-items:center;justify-content:center">📄</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">#${o.numero||'—'} · ${escHtml(o.cliente_nome||'—')}</div>
+        <div style="font-size:12px;color:#777">${o.status} ${_pillNfe(o)}</div>
+      </div>
+      <div style="font-weight:600;white-space:nowrap">R$ ${Number(o.total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      <div style="display:flex;gap:6px">${acoes}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── USUÁRIOS (novo) ────────────────────────────────────────────────────────────

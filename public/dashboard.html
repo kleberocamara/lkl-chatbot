@@ -556,19 +556,35 @@
 
   <!-- ANÁLISES GERENCIAIS -->
   <div class="page" id="page-analises">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📈</span><h2 style="margin:0">Análises Gerenciais — DRE</h2></div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-outline" onclick="drePeriodo('mes')">Mês atual</button>
-        <button class="btn btn-outline" onclick="drePeriodo('mes_ant')">Mês anterior</button>
-        <button class="btn btn-outline" onclick="drePeriodo('ano')">Ano</button>
-        <input id="dre-ini" type="date" style="width:140px">
-        <input id="dre-fim" type="date" style="width:140px">
-        <button class="btn btn-primary" onclick="dreAplicar()">Aplicar</button>
-      </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="agtab-dre" class="btn btn-primary" onclick="analisesSub('dre')">DRE</button>
+      <button id="agtab-fluxo" class="btn btn-outline" onclick="analisesSub('fluxo')">Fluxo de Caixa</button>
     </div>
-    <div id="dre-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
-    <div id="dre-despesas"></div>
+    <div id="ag-dre">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📈</span><h2 style="margin:0">Análises Gerenciais — DRE</h2></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="drePeriodo('mes')">Mês atual</button>
+          <button class="btn btn-outline" onclick="drePeriodo('mes_ant')">Mês anterior</button>
+          <button class="btn btn-outline" onclick="drePeriodo('ano')">Ano</button>
+          <input id="dre-ini" type="date" style="width:140px">
+          <input id="dre-fim" type="date" style="width:140px">
+          <button class="btn btn-primary" onclick="dreAplicar()">Aplicar</button>
+        </div>
+      </div>
+      <div id="dre-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
+      <div id="dre-despesas"></div>
+    </div>
+    <div id="ag-fluxo" style="display:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:13px;color:#777">Horizonte</span>
+        <select id="fx-dias" onchange="loadFluxo()" style="width:110px"><option value="30">30 dias</option><option value="60">60 dias</option><option value="90" selected>90 dias</option></select>
+        <span style="font-size:13px;color:#777">Saldo inicial</span>
+        <input id="fx-saldo" type="number" step="0.01" value="0" oninput="renderFluxoTabela()" style="width:130px">
+      </div>
+      <div id="fx-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
+      <div id="fx-tabela"></div>
+    </div>
   </div>
 
   <!-- NF-e -->
@@ -4008,6 +4024,62 @@ function renderDre(r) {
         <span>Receita ${fmt(r.receita)} − Despesas ${fmt(r.total_despesas)}</span>
         <span style="color:${corRes}">= ${fmt(r.resultado)}</span>
       </div>
+    </div>`;
+}
+
+// ── ANÁLISES GERENCIAIS — Fluxo de Caixa ───────────────────────────────────
+let _fluxoData = null;
+function analisesSub(secao) {
+  document.getElementById('ag-dre').style.display = secao === 'dre' ? '' : 'none';
+  document.getElementById('ag-fluxo').style.display = secao === 'fluxo' ? '' : 'none';
+  document.getElementById('agtab-dre').className = 'btn ' + (secao === 'dre' ? 'btn-primary' : 'btn-outline');
+  document.getElementById('agtab-fluxo').className = 'btn ' + (secao === 'fluxo' ? 'btn-primary' : 'btn-outline');
+  if (secao === 'fluxo' && !_fluxoData) loadFluxo();
+}
+async function loadFluxo() {
+  const dias = document.getElementById('fx-dias').value;
+  const r = await api(`/api/v2/analises/fluxo-caixa?dias=${dias}`);
+  if (!r || r.errors || r.error) { document.getElementById('fx-tabela').innerHTML = '<p style="color:#c00">Erro ao carregar fluxo</p>'; return; }
+  _fluxoData = r;
+  renderFluxoKpis(); renderFluxoTabela();
+}
+function renderFluxoKpis() {
+  const r = _fluxoData; const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  document.getElementById('fx-kpis').innerHTML =
+    _kpiCard('Total a receber', fmt(r.total_entradas), '#2e7d32') +
+    _kpiCard('Total a pagar', fmt(r.total_saidas), '#e65100') +
+    _kpiCard('Atrasado a receber', fmt(r.atrasado_receber), '#c62828') +
+    _kpiCard('Atrasado a pagar', fmt(r.atrasado_pagar), '#c62828');
+}
+function renderFluxoTabela() {
+  if (!_fluxoData) return;
+  const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const fmtD = s => { const d = new Date(s+'T00:00:00'); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); };
+  let saldo = parseFloat(document.getElementById('fx-saldo').value) || 0;
+  const linhas = _fluxoData.semanas.length ? _fluxoData.semanas.map(s => {
+    saldo += s.liquido;
+    const corL = s.liquido >= 0 ? '#2e7d32' : '#c62828';
+    const corS = saldo >= 0 ? '#2e7d32' : '#c62828';
+    return `<tr style="border-bottom:0.5px solid #eee">
+      <td style="padding:6px 8px">${fmtD(s.inicio)}–${fmtD(s.fim)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#2e7d32">${fmt(s.entradas)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#e65100">${fmt(s.saidas)}</td>
+      <td style="padding:6px 8px;text-align:right;color:${corL}">${fmt(s.liquido)}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:600;color:${corS}">${fmt(saldo)}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="5" style="padding:14px;color:#999;text-align:center">Sem lançamentos no período</td></tr>';
+  document.getElementById('fx-tabela').innerHTML = `
+    <div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:8px 4px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:#777;text-align:left">
+          <th style="padding:6px 8px">Semana</th>
+          <th style="padding:6px 8px;text-align:right">Entradas</th>
+          <th style="padding:6px 8px;text-align:right">Saídas</th>
+          <th style="padding:6px 8px;text-align:right">Líquido</th>
+          <th style="padding:6px 8px;text-align:right">Saldo acumulado</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
     </div>`;
 }
 </script>

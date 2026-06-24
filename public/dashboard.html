@@ -3912,6 +3912,41 @@ async function cancelarCob(orcId, path) {
   if (res?.errors || res?.error) { showToast('Erro: ' + (res.errors?.[0]||res.error)); return; }
   showToast('Cobrança cancelada'); loadCobrancasMain();
 }
+function abrirGerarCob(orcId, tipo) {
+  const label = tipo === 'boleto' ? 'Boleto' : tipo === 'pix' ? 'PIX' : 'Link MP';
+  const hoje = new Date(); hoje.setDate(hoje.getDate()+7); const venc = hoje.toISOString().split('T')[0];
+  let campos;
+  if (tipo === 'boleto') {
+    campos = `
+      <label>Nº de parcelas (1–24)<input id="gc-parc" type="number" min="1" max="24" value="1" style="width:100%"></label>
+      <label style="display:block;margin-top:8px">Vencimento da 1ª parcela<input id="gc-venc" type="date" value="${venc}" style="width:100%"></label>
+      <label style="display:block;margin-top:8px">Intervalo entre parcelas (dias)<input id="gc-int" type="number" min="1" value="30" style="width:100%"></label>`;
+  } else if (tipo === 'link_mp') {
+    campos = `<label>Máx. de parcelas no cartão<select id="gc-parc" style="width:100%">
+      <option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="6">6x</option><option value="12" selected>12x</option></select></label>`;
+  } else {
+    campos = `<p>Gerar PIX para este orçamento e enviar ao cliente via WhatsApp?</p>`;
+  }
+  showModal(`Gerar ${label}`, `${campos}<button class="btn btn-primary" style="margin-top:12px" onclick="submitGerarCob('${orcId}','${tipo}')">Gerar ${label}</button>`, '460px');
+}
+async function submitGerarCob(orcId, tipo) {
+  let payload = { tipo };
+  if (tipo === 'boleto') {
+    const parcelas = parseInt(document.getElementById('gc-parc').value);
+    const dataVencimento = document.getElementById('gc-venc').value;
+    const intervaloDias = parseInt(document.getElementById('gc-int').value) || 30;
+    if (!parcelas || parcelas < 1 || parcelas > 24) { showToast('Parcelas inválidas (1–24)'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataVencimento)) { showToast('Vencimento inválido'); return; }
+    payload = { tipo, parcelas, dataVencimento, intervaloDias };
+  } else if (tipo === 'link_mp') {
+    payload = { tipo, parcelas: parseInt(document.getElementById('gc-parc').value) || 12 };
+  }
+  const res = await api('/api/v2/orcamentos/'+orcId+'/cobrar', { method:'POST', body: JSON.stringify(payload) });
+  if (res?.errors || res?.error) { showToast('Erro: ' + (res.errors?.[0]||res.error)); return; }
+  closeModal();
+  showToast(`✅ ${tipo === 'link_mp' ? 'Link MP gerado — copie e envie' : tipo.toUpperCase()+' gerado e enviado ao cliente'}`);
+  loadCobrancasMain();
+}
 </script>
 
 <!-- Modal Editar Usuário -->

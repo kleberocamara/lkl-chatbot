@@ -111,4 +111,68 @@ async function metaMes({ ano, mes } = {}) {
   return { ano, mes, meta, realizado, percentual };
 }
 
-module.exports = { dre, fluxoCaixa, salvarMeta, metaMes };
+const ANTHROPIC_MODEL = 'claude-haiku-4-5';
+
+async function _chamarClaude(system, user) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY não configurada');
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 900, system, messages: [{ role: 'user', content: user }] }),
+  });
+  const json = await resp.json();
+  if (json.error) throw new Error('Claude API: ' + (json.error.message || JSON.stringify(json.error)));
+  const txt = json.content && json.content[0] && json.content[0].text;
+  if (!txt) throw new Error('Resposta vazia da IA');
+  return txt;
+}
+
+function _brl(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
+
+async function gerarInsight() {
+  const d = await dre({});
+  const f = await fluxoCaixa({ dias: 90 });
+  const m = await metaMes({});
+  const periodo = `${d.periodo.inicio.slice(0, 7)}`;
+
+  const desp = d.despesas.map(x => `  - ${x.categoria}: ${_brl(x.valor)}`).join('\n') || '  (sem despesas)';
+  const user =
+`Dados financeiros da Gráfica LKL (mês ${periodo}):
+
+DRE (regime de caixa):
+- Receita recebida: ${_brl(d.receita)}
+- Despesas pagas: ${_brl(d.total_despesas)}
+${desp}
+- Resultado: ${_brl(d.resultado)} (margem ${(d.margem * 100).toFixed(1)}%)
+
+Metas:
+- Meta do mês: ${m.meta != null ? _brl(m.meta) : 'não definida'}
+- Vendido (orçamentos aprovados): ${_brl(m.realizado)}${m.meta ? ` (${(m.percentual * 100).toFixed(1)}% da meta)` : ''}
+
+Fluxo de caixa (próx. 90 dias):
+- Total a receber: ${_brl(f.total_entradas)}
+- Total a pagar: ${_brl(f.total_saidas)}
+- Atrasado a receber: ${_brl(f.atrasado_receber)}
+- Atrasado a pagar: ${_brl(f.atrasado_pagar)}
+
+Analise estes números e responda em português, de forma concisa e prática, em 3 blocos curtos:
+1) Situação atual
+2) Pontos de atenção
+3) Recomendações práticas`;
+
+  const system = 'Você é um analista financeiro de uma gráfica de pequeno porte. Seja direto, objetivo e prático. Responda em português do Brasil, sem jargão excessivo.';
+  const conteudo = await _chamarClaude(system, user);
+
+  const r = await db.query(
+    `INSERT INTO insights_financeiros (periodo, conteudo, contexto) VALUES ($1,$2,$3) RETURNING gerado_em`,
+    [periodo, conteudo, JSON.stringify({ dre: d, fluxo: f, meta: m })]);
+  return { conteudo, gerado_em: r.rows[0].gerado_em, periodo };
+}
+
+async function ultimoInsight() {
+  const r = await db.query('SELECT conteudo, gerado_em, periodo FROM insights_financeiros ORDER BY gerado_em DESC LIMIT 1');
+  return r.rows[0] || null;
+}
+
+module.exports = { dre, fluxoCaixa, salvarMeta, metaMes, gerarInsight, ultimoInsight };

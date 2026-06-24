@@ -36,4 +36,20 @@ router.post('/metas', requireRole('admin', 'gestor', 'financeiro'), async (req, 
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+router.get('/insights', requireRole('admin', 'gestor', 'financeiro'), async (req, res) => {
+  try {
+    res.json(await service.ultimoInsight());
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+router.post('/insights', requireRole('admin', 'gestor'), async (req, res) => {
+  try {
+    const result = await service.gerarInsight();
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('[INSIGHTS]', err.message);
+    res.status(500).json({ error: err.message || 'Erro ao gerar análise' });
+  }
+});
+
 module.exports = router;

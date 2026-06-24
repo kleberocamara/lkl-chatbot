@@ -12,6 +12,7 @@ router.use('/fornecedores', requireAuthApi, require('./fornecedores/router'));
 router.use('/materiais', requireAuthApi, require('./materiais/router'));
 router.use('/funcionarios', requireAuthApi, require('./funcionarios/router'));
 router.use('/maquinas', requireAuthApi, require('./maquinas/router'));
+router.use('/entradas', requireAuthApi, require('./entradas/router'));
 router.use('/price-table', requireAuthApi, require('./price-table/router'));
 router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));

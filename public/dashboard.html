@@ -556,11 +556,19 @@
 
   <!-- ANÁLISES GERENCIAIS -->
   <div class="page" id="page-analises">
-    <div class="page-header"><h1>📈 Análises Gerenciais</h1><p>DRE · Fluxo de Caixa · Metas · Insights IA</p></div>
-    <div class="placeholder-page" style="min-height:200px">
-      <div class="icon">🚧</div>
-      <p>Em desenvolvimento — Sprint M10-B</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📈</span><h2 style="margin:0">Análises Gerenciais — DRE</h2></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="drePeriodo('mes')">Mês atual</button>
+        <button class="btn btn-outline" onclick="drePeriodo('mes_ant')">Mês anterior</button>
+        <button class="btn btn-outline" onclick="drePeriodo('ano')">Ano</button>
+        <input id="dre-ini" type="date" style="width:140px">
+        <input id="dre-fim" type="date" style="width:140px">
+        <button class="btn btn-primary" onclick="dreAplicar()">Aplicar</button>
+      </div>
     </div>
+    <div id="dre-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
+    <div id="dre-despesas"></div>
   </div>
 
   <!-- NF-e -->
@@ -924,6 +932,7 @@ function showPage(page, el) {
     usuarios:     loadUsuarios2,
     nfe:          () => loadNfeMain(),
     cobrancas:    () => loadCobrancasMain(),
+    analises:     () => loadAnalisesMain(),
   };
   if (loaders[page]) loaders[page]();
 }
@@ -3946,6 +3955,60 @@ async function submitGerarCob(orcId, tipo) {
   closeModal();
   showToast(`✅ ${tipo === 'link_mp' ? 'Link MP gerado — copie e envie' : tipo.toUpperCase()+' gerado e enviado ao cliente'}`);
   loadCobrancasMain();
+}
+
+// ── ANÁLISES GERENCIAIS — DRE ──────────────────────────────────────────────
+function _fmtData(d) { return d.toISOString().slice(0,10); }
+function drePeriodo(tipo) {
+  const n = new Date(); let ini, fim;
+  if (tipo === 'mes') { ini = new Date(n.getFullYear(), n.getMonth(), 1); fim = new Date(n.getFullYear(), n.getMonth()+1, 0); }
+  else if (tipo === 'mes_ant') { ini = new Date(n.getFullYear(), n.getMonth()-1, 1); fim = new Date(n.getFullYear(), n.getMonth(), 0); }
+  else { ini = new Date(n.getFullYear(), 0, 1); fim = new Date(n.getFullYear(), 11, 31); }
+  document.getElementById('dre-ini').value = _fmtData(ini);
+  document.getElementById('dre-fim').value = _fmtData(fim);
+  dreAplicar();
+}
+async function loadAnalisesMain() {
+  if (!document.getElementById('dre-ini').value) { drePeriodo('mes'); return; }
+  dreAplicar();
+}
+async function dreAplicar() {
+  const inicio = document.getElementById('dre-ini').value;
+  const fim = document.getElementById('dre-fim').value;
+  const r = await api(`/api/v2/analises/dre?inicio=${inicio}&fim=${fim}`);
+  if (!r || r.errors || r.error) { document.getElementById('dre-kpis').innerHTML = '<p style="color:#c00">Erro ao carregar DRE</p>'; return; }
+  renderDre(r);
+}
+function renderDre(r) {
+  const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const corRes = r.resultado >= 0 ? '#2e7d32' : '#c62828';
+  document.getElementById('dre-kpis').innerHTML =
+    _kpiCard('Receita', fmt(r.receita)) +
+    _kpiCard('Despesas', fmt(r.total_despesas), '#e65100') +
+    _kpiCard('Resultado', fmt(r.resultado), corRes) +
+    _kpiCard('Margem', (r.margem*100).toFixed(1) + '%', corRes);
+  const max = Math.max(1, ...r.despesas.map(d => d.valor));
+  const linhas = r.despesas.length ? r.despesas.map(d => {
+    const pct = r.total_despesas > 0 ? (d.valor / r.total_despesas * 100) : 0;
+    const w = (d.valor / max * 100);
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+        <span>${escHtml(d.categoria)}</span>
+        <span style="color:#555">${fmt(d.valor)} · ${pct.toFixed(1)}%</span>
+      </div>
+      <div style="background:#f0f0f0;border-radius:6px;height:8px;overflow:hidden">
+        <div style="background:#e65100;height:8px;width:${w}%"></div>
+      </div></div>`;
+  }).join('') : '<p style="color:#999;padding:12px">Sem despesas no período</p>';
+  document.getElementById('dre-despesas').innerHTML = `
+    <div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:14px 16px">
+      <div style="font-weight:700;color:#3949ab;font-size:13px;margin-bottom:10px">DESPESAS POR CATEGORIA</div>
+      ${linhas}
+      <div style="border-top:0.5px solid #eee;margin-top:10px;padding-top:10px;display:flex;justify-content:space-between;font-weight:600">
+        <span>Receita ${fmt(r.receita)} − Despesas ${fmt(r.total_despesas)}</span>
+        <span style="color:${corRes}">= ${fmt(r.resultado)}</span>
+      </div>
+    </div>`;
 }
 </script>
 

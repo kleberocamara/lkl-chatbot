@@ -142,11 +142,34 @@ async function processMessage(conversationId, userMessage) {
   const customPrompt = await getSetting('agent_prompt');
   const systemPrompt = customPrompt || SYSTEM_PROMPT;
 
+  // Pré-busca: o telefone do contato está cadastrado? (injeta nota de contexto)
+  let clienteNota = '';
+  try {
+    const cinfo = await db.query(
+      `SELECT ct.phone FROM conversations c LEFT JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
+      [conversationId]);
+    const phone = cinfo.rows[0]?.phone;
+    if (phone) {
+      const cel = phone.replace(/\D/g, '');
+      const cli = await db.query(
+        `SELECT nome, email FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${cel.slice(-9)}`]);
+      if (cli.rows[0]) {
+        const nm = cli.rows[0].nome, em = cli.rows[0].email;
+        clienteNota = em
+          ? `\n\n[CLIENTE NA BASE] Telefone cadastrado como "${nm}", e-mail "${em}". Confirme a identidade pelo nome e confirme se esse e-mail está correto (atualize se o cliente corrigir).`
+          : `\n\n[CLIENTE NA BASE] Telefone cadastrado como "${nm}", sem e-mail. Confirme a identidade pelo nome e peça o e-mail.`;
+      } else {
+        clienteNota = `\n\n[CLIENTE NOVO] Telefone não cadastrado. Faça o cadastro mínimo: peça o nome e o e-mail do cliente.`;
+      }
+    }
+  } catch (e) { console.warn('[CHATBOT-CLIENTE] lookup falhou:', e.message); }
+  const promptFinal = systemPrompt + clienteNota;
+
   history.push({ role: 'user', content: userMessage });
 
   const response = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL || 'gpt-4o',
-    messages: [{ role: 'system', content: systemPrompt }, ...history],
+    messages: [{ role: 'system', content: promptFinal }, ...history],
     tools: TOOLS,
     tool_choice: 'auto',
     temperature: 0.7,
@@ -179,30 +202,41 @@ async function processMessage(conversationId, userMessage) {
         if (row?.phone) {
           const celular = row.phone.replace(/\D/g, '');
           const existing = await db.query(
-            `SELECT id FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${celular.slice(-9)}`]);
-          if (existing.rows.length > 0) {
-            clienteId = existing.rows[0].id;
+            `SELECT id, email FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${celular.slice(-9)}`]);
+          const matched = existing.rows[0];
+          const confirmado = args.cliente_existente_confirmado !== false; // ausente/true => usa o existente
+          if (matched && confirmado) {
+            clienteId = matched.id;
+            if (!matched.email && args.email) {
+              await db.query('UPDATE clientes_lkl SET email = $1 WHERE id = $2', [args.email, clienteId]);
+            }
           } else {
             const nomeCliente = args.nome_cliente || row.contact_name || row.phone;
             const ins = await db.query(
-              `INSERT INTO clientes_lkl (nome, celular, canal_origem, tipo_pessoa)
-               VALUES ($1, $2, 'chatbot', 'PF') RETURNING id`,
-              [nomeCliente, celular]);
+              `INSERT INTO clientes_lkl (nome, celular, email, canal_origem, tipo_pessoa)
+               VALUES ($1, $2, $3, 'chatbot', 'PF') RETURNING id`,
+              [nomeCliente, celular, args.email || null]);
             clienteId = ins.rows[0].id;
           }
         }
 
         // Cria o PEDIDO pela mesma porta do painel (canal chatbot) → auto-orçamento em_orcamento
-        const especificacao = [args.dimensoes, args.material].filter(Boolean).join(' · ') || null;
+        // Múltiplos itens (um por produto); fallback para os campos achatados
+        let itensBrutos = Array.isArray(args.itens) ? args.itens.filter(it => it && it.produto) : [];
+        if (!itensBrutos.length) {
+          itensBrutos = [{ produto: args.produto || args.tipo_servico, dimensoes: args.dimensoes, quantidade: args.quantidade, material: args.material, tem_arte: args.tem_arte }];
+        }
+        const itensDados = itensBrutos.map(it => ({
+          produto: (it.produto || args.tipo_servico || 'Pedido via chatbot'),
+          quantidade: parseInt(it.quantidade) || 1,
+          especificacao: [it.dimensoes, it.material].filter(Boolean).join(' · ') || null,
+          tem_arte: !!it.tem_arte,
+        }));
         const dados = {
           origin_channel: 'chatbot',
           cliente_id: clienteId,
-          itens: [{
-            produto: args.produto || args.tipo_servico || 'Pedido via chatbot',
-            quantidade: parseInt(args.quantidade) || 1,
-            especificacao,
-            tem_arte: !!args.tem_arte,
-          }],
+          email: args.email || null,
+          itens: itensDados,
           observacoes: [
             args.entrega === 'entrega' ? `Entrega: ${args.endereco_entrega || ''}` : 'Retirada na loja',
             args.observacoes || '',

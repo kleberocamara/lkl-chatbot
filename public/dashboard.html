@@ -1116,7 +1116,7 @@ function renderOrcItens(orcId, itens) {
 }
 
 // ── Modal editar item ──────────────────────────────────────────────────────────
-function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
+async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
   const partes = String(descricao||'').split(' — ');
   const prodGuess = partes[0] || '';
   const especGuess = partes.slice(1).join(' — ') || '';
@@ -1133,10 +1133,29 @@ function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
       <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
         <input id="ei-val" type="number" step="0.01" min="0" value="${valorUnit}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
     </div>
+    <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">COMUNICAÇÃO VISUAL (opcional)</label>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <div style="flex:1"><label style="font-size:12px;color:#666">Largura (cm)</label>
+          <input id="ei-larg" type="number" step="0.01" min="0" placeholder="Ex: 200" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></div>
+        <div style="flex:1"><label style="font-size:12px;color:#666">Altura (cm)</label>
+          <input id="ei-alt" type="number" step="0.01" min="0" placeholder="Ex: 100" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></div>
+      </div>
+      <select id="ei-mat" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">— material (Comunicação Visual) —</option></select>
+    </div>
     <button onclick="salvarItemOrc('${orcId}','${itemId}')" class="btn btn-primary" style="width:100%">💾 Salvar alterações</button>`;
   showModal('Editar Item', html);
   const sel = document.getElementById('ei-produto');
   if (sel && [...sel.options].some(o => o.value === prodGuess)) { sel.value = prodGuess; document.getElementById('ei-tipo').value = tipoPorProduto(prodGuess); }
+  // Pre-fill largura/altura/material from the full orçamento detail
+  try {
+    const detail = await api(`/api/v2/orcamentos/${orcId}`);
+    const item = (detail?.itens || []).find(i => String(i.id) === String(itemId));
+    if (item) {
+      if (item.largura_cm != null) { const el = document.getElementById('ei-larg'); if (el) el.value = item.largura_cm; }
+      if (item.altura_cm != null)  { const el = document.getElementById('ei-alt');  if (el) el.value = item.altura_cm; }
+      await _popularMateriaisSelect('ei-mat', item.material_id);
+    } else { await _popularMateriaisSelect('ei-mat', null); }
+  } catch(e) { _popularMateriaisSelect('ei-mat', null); }
 }
 
 async function salvarItemOrc(orcId, itemId) {
@@ -1148,7 +1167,10 @@ async function salvarItemOrc(orcId, itemId) {
   if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
+    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario,
+      largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
+      altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
+      material_id: document.getElementById('ei-mat')?.value || null })
   });
   if (res && !res.erro) {
     closeModal(); showToast('✅ Item atualizado');
@@ -1156,6 +1178,18 @@ async function salvarItemOrc(orcId, itemId) {
     if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
       const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
   } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0]||'')); }
+}
+
+async function _popularMateriaisSelect(selId, selectedId) {
+  const el = document.getElementById(selId);
+  if (!el) return;
+  try {
+    const r = await api('/api/v2/materiais?status=ativo&limit=500');
+    const mats = r?.materiais || [];
+    el.innerHTML = '<option value="">— material (Comunicação Visual) —</option>' +
+      mats.map(m => `<option value="${m.id}" ${m.id===selectedId?'selected':''}>${escHtml(m.nome)}</option>`).join('');
+    if (!mats.length) el.innerHTML += '<option disabled>Nenhum material cadastrado</option>';
+  } catch(e) { /* silencia */ }
 }
 
 async function excluirItemOrc(orcId, itemId, descricao) {
@@ -1181,8 +1215,18 @@ function abrirAdicionarItemOrc(orcId) {
       <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
         <input id="ni-val" type="number" step="0.01" min="0" value="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
     </div>
+    <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">COMUNICAÇÃO VISUAL (opcional)</label>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <div style="flex:1"><label style="font-size:12px;color:#666">Largura (cm)</label>
+          <input id="ni-larg" type="number" step="0.01" min="0" placeholder="Ex: 200" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></div>
+        <div style="flex:1"><label style="font-size:12px;color:#666">Altura (cm)</label>
+          <input id="ni-alt" type="number" step="0.01" min="0" placeholder="Ex: 100" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></div>
+      </div>
+      <select id="ni-mat" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">— material (Comunicação Visual) —</option></select>
+    </div>
     <button onclick="adicionarItemOrc('${orcId}')" class="btn btn-primary" style="width:100%">➕ Adicionar item</button>`;
   showModal('Novo Item', html);
+  _popularMateriaisSelect('ni-mat', null);
 }
 
 async function adicionarItemOrc(orcId) {
@@ -1194,7 +1238,10 @@ async function adicionarItemOrc(orcId) {
   if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens`, {
     method: 'POST',
-    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario })
+    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario,
+      largura_cm: document.getElementById('ni-larg')?.value ? parseFloat(document.getElementById('ni-larg').value) : null,
+      altura_cm: document.getElementById('ni-alt')?.value ? parseFloat(document.getElementById('ni-alt').value) : null,
+      material_id: document.getElementById('ni-mat')?.value || null })
   });
   if (res && !res.erro) {
     closeModal(); showToast('✅ Item adicionado');

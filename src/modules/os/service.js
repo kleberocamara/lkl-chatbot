@@ -439,7 +439,18 @@ async function _coletarConsumo(client, osId) {
   for (const r of off.rows) {
     consumo.push({ material_id: r.material_id, quantidade: Number(r.folhas_total), unidade: 'folha' });
   }
-  // (fase 2) Fonte CV entra aqui
+  // Fonte CV: itens da OS com material e dimensões → m²
+  const cv = await client.query(
+    `SELECT oi.material_id,
+            (oi.largura_cm/100.0) * (oi.altura_cm/100.0) * oi.quantidade AS m2
+     FROM os_itens si
+     JOIN orcamento_itens oi ON oi.id = si.orcamento_item_id
+     WHERE si.os_id = $1
+       AND oi.material_id IS NOT NULL
+       AND oi.largura_cm > 0 AND oi.altura_cm > 0 AND oi.quantidade > 0`, [osId]);
+  for (const r of cv.rows) {
+    consumo.push({ material_id: r.material_id, quantidade: Math.round(Number(r.m2) * 1000) / 1000, unidade: 'm2' });
+  }
   return consumo;
 }
 

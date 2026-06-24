@@ -35,4 +35,44 @@ async function dre({ inicio, fim } = {}) {
   return { periodo: { inicio, fim }, receita, despesas, total_despesas, resultado, margem };
 }
 
-module.exports = { dre };
+async function fluxoCaixa({ dias } = {}) {
+  const d = [30, 60, 90].includes(Number(dias)) ? Number(dias) : 90;
+  const entR = await db.query(
+    `SELECT date_trunc('week', vencimento)::date AS semana, COALESCE(SUM(valor),0) AS total
+     FROM orcamento_boletos
+     WHERE status = 'aguardando' AND vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
+     GROUP BY 1`, [String(d)]);
+  const saiR = await db.query(
+    `SELECT date_trunc('week', vencimento)::date AS semana, COALESCE(SUM(valor),0) AS total
+     FROM contas_pagar
+     WHERE status IN ('pendente','agendado','vencido') AND vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
+     GROUP BY 1`, [String(d)]);
+
+  const map = {};
+  for (const r of entR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas = Number(r.total); }
+  for (const r of saiR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).saidas = Number(r.total); }
+  const semanas = Object.keys(map).sort().map(k => {
+    const inicio = k;
+    const fimD = new Date(k + 'T00:00:00'); fimD.setDate(fimD.getDate() + 6);
+    const fim = fimD.toISOString().slice(0,10);
+    const entradas = map[k].entradas, saidas = map[k].saidas;
+    return { inicio, fim, entradas, saidas, liquido: entradas - saidas };
+  });
+
+  const totalEnt = semanas.reduce((s,x)=>s+x.entradas,0);
+  const totalSai = semanas.reduce((s,x)=>s+x.saidas,0);
+
+  const atrR = await db.query(
+    `SELECT COALESCE(SUM(valor),0) AS total FROM orcamento_boletos WHERE status='aguardando' AND vencimento < CURRENT_DATE`);
+  const atrP = await db.query(
+    `SELECT COALESCE(SUM(valor),0) AS total FROM contas_pagar WHERE status IN ('pendente','agendado','vencido') AND vencimento < CURRENT_DATE`);
+
+  return {
+    dias: d, semanas,
+    total_entradas: totalEnt, total_saidas: totalSai,
+    atrasado_receber: Number(atrR.rows[0].total),
+    atrasado_pagar: Number(atrP.rows[0].total),
+  };
+}
+
+module.exports = { dre, fluxoCaixa };

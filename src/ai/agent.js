@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const db = require('../db');
+const ordersService = require('../modules/orders/service');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const { calcularOrcamento } = require('../services/quotation');
@@ -147,92 +148,78 @@ async function processMessage(conversationId, userMessage) {
         orderDetails = args;
         isComplete = true;
 
-        // Gera número do pedido
-        const seqResult = await db.query("SELECT nextval('pedido_seq') AS num");
-        const pedidoNumero = seqResult.rows[0].num;
-
-        // Monta mensagem substituindo placeholder
-        const msgTemplate = args.mensagem_encerramento ||
-          'Pedido registrado com sucesso! Seu número de acompanhamento é {NUMERO_PEDIDO}. Nossa equipe da Gráfica LKL entrará em contato em breve com o orçamento. Obrigado! 😊';
-        cleanResponse = msgTemplate.replace('{NUMERO_PEDIDO}', `*#${pedidoNumero}*`);
-
-        // Se a IA não incluiu o número, adiciona ao final
-        if (!cleanResponse.includes(`#${pedidoNumero}`)) {
-          cleanResponse += `\n\n📋 *Número do seu pedido: #${pedidoNumero}*\nGuarde este número para consultar o status do seu pedido com nossa equipe!`;
-        }
-
-        orderDetails.pedido_numero = pedidoNumero;
-
-        await db.query(
-          `UPDATE conversations 
-           SET needs_details = $1, service_type = $2, status = 'aguardando_humano',
-               pedido_numero = $3, pedido_status = 'em_orcamento', updated_at = NOW()
-           WHERE id = $4`,
-          [JSON.stringify(orderDetails), orderDetails.tipo_servico, pedidoNumero, conversationId]
-        );
-
-        // Cria rascunho de orçamento no sistema unificado (Sprint 2)
-        try {
-          const conv = await db.query(
-            `SELECT c.contact_id, ct.phone, ct.name AS contact_name
-             FROM conversations c
-             LEFT JOIN contacts ct ON ct.id = c.contact_id
-             WHERE c.id = $1`,
-            [conversationId]
-          );
-          const row = conv.rows[0];
-          // Busca ou cria cliente em clientes_lkl pelo celular
-          let clienteId = null;
-          if (row?.phone) {
-            const celular = row.phone.replace(/\D/g, '');
-            const existing = await db.query(
-              `SELECT id FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`,
-              [`%${celular.slice(-9)}`]
-            );
-            if (existing.rows.length > 0) {
-              clienteId = existing.rows[0].id;
-            } else {
-              const nomeCliente = args.nome_cliente || row.contact_name || row.phone;
-              const ins = await db.query(
-                `INSERT INTO clientes_lkl (nome, celular, canal_origem)
-                 VALUES ($1, $2, 'chatbot') RETURNING id`,
-                [nomeCliente, celular]
-              );
-              clienteId = ins.rows[0].id;
-            }
+        // Resolve o cliente (find/create por celular) — entrada única no Pedido
+        const conv = await db.query(
+          `SELECT c.contact_id, ct.phone, ct.name AS contact_name
+           FROM conversations c LEFT JOIN contacts ct ON ct.id = c.contact_id
+           WHERE c.id = $1`, [conversationId]);
+        const row = conv.rows[0];
+        let clienteId = null;
+        if (row?.phone) {
+          const celular = row.phone.replace(/\D/g, '');
+          const existing = await db.query(
+            `SELECT id FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${celular.slice(-9)}`]);
+          if (existing.rows.length > 0) {
+            clienteId = existing.rows[0].id;
+          } else {
+            const nomeCliente = args.nome_cliente || row.contact_name || row.phone;
+            const ins = await db.query(
+              `INSERT INTO clientes_lkl (nome, celular, canal_origem, tipo_pessoa)
+               VALUES ($1, $2, 'chatbot', 'PF') RETURNING id`,
+              [nomeCliente, celular]);
+            clienteId = ins.rows[0].id;
           }
-          const descItem = [
-            args.tipo_servico, args.produto, args.dimensoes,
-            args.material, args.tem_arte ? 'Arte pronta' : 'Sem arte',
+        }
+
+        // Cria o PEDIDO pela mesma porta do painel (canal chatbot) → auto-orçamento em_orcamento
+        const especificacao = [args.dimensoes, args.material].filter(Boolean).join(' · ') || null;
+        const dados = {
+          origin_channel: 'chatbot',
+          cliente_id: clienteId,
+          itens: [{
+            produto: args.produto || args.tipo_servico || 'Pedido via chatbot',
+            quantidade: parseInt(args.quantidade) || 1,
+            especificacao,
+            tem_arte: !!args.tem_arte,
+          }],
+          observacoes: [
             args.entrega === 'entrega' ? `Entrega: ${args.endereco_entrega || ''}` : 'Retirada na loja',
-          ].filter(Boolean).join(' | ');
-          const orcIns = await db.query(
-            `INSERT INTO orcamentos (cliente_id, canal, pedido_chatbot_numero, status, observacao)
-             VALUES ($1, 'chatbot', $2, 'rascunho', $3) RETURNING id, numero`,
-            [clienteId, pedidoNumero, args.observacoes || null]
-          );
-          const { id: orcId, numero: orcNumero } = orcIns.rows[0];
-          await db.query(
-            `INSERT INTO orcamento_itens (orcamento_id, descricao, quantidade, tem_arte)
-             VALUES ($1, $2, $3, $4)`,
-            [orcId, descItem, args.quantidade || 1, !!args.tem_arte]
-          );
-          console.log(`[ORC-V2] Rascunho ORC#${orcNumero} criado para pedido chatbot #${pedidoNumero}`);
-          if (global.io) global.io.emit('new_orcamento_v2', { orcamento_numero: orcNumero, pedido_chatbot_numero: pedidoNumero });
-        } catch (e) {
-          console.error('[ORC-V2] Erro ao criar rascunho:', e.message);
-        }
+            args.observacoes || '',
+          ].filter(Boolean).join(' | ') || null,
+        };
 
-        // Salva nome real do cliente no banco
-        if (orderDetails.nome_cliente) {
-          await db.query(
-            "UPDATE contacts SET name = $1 WHERE id = (SELECT contact_id FROM conversations WHERE id = $2)",
-            [orderDetails.nome_cliente, conversationId]
-          );
-        }
+        const result = await ordersService.criarOrder(dados, null);
+        if (result?.erro) {
+          console.error('[CHATBOT-PEDIDO] Falha ao criar pedido:', result.erro.join('; '));
+          cleanResponse = 'Recebi seus dados, mas tive um problema ao registrar o pedido agora. Nossa equipe da Gráfica LKL foi avisada e vai concluir o registro. 😊';
+          history.push({ role: 'tool', tool_call_id: toolCall.id, content: 'Falha ao registrar pedido (equipe avisada).' });
+        } else {
+          const pedidoNumero = result.order.numero_os;
+          orderDetails.pedido_numero = pedidoNumero;
 
-        history.push({ role: 'tool', tool_call_id: toolCall.id, content: `Pedido #${pedidoNumero} registrado.` });
-        console.log(`=== PEDIDO #${pedidoNumero} REGISTRADO ===`, JSON.stringify(orderDetails));
+          const msgTemplate = args.mensagem_encerramento ||
+            'Pedido registrado com sucesso! Seu número de acompanhamento é {NUMERO_PEDIDO}. Nossa equipe da Gráfica LKL entrará em contato em breve com o orçamento. Obrigado! 😊';
+          cleanResponse = msgTemplate.replace('{NUMERO_PEDIDO}', `*#${pedidoNumero}*`);
+          if (!cleanResponse.includes(`#${pedidoNumero}`)) {
+            cleanResponse += `\n\n📋 *Número do seu pedido: #${pedidoNumero}*\nGuarde este número para consultar o status com nossa equipe!`;
+          }
+
+          await db.query(
+            `UPDATE conversations
+             SET needs_details = $1, service_type = $2, status = 'aguardando_humano',
+                 pedido_numero = $3, pedido_status = 'em_orcamento', updated_at = NOW()
+             WHERE id = $4`,
+            [JSON.stringify(orderDetails), orderDetails.tipo_servico, pedidoNumero, conversationId]);
+
+          if (orderDetails.nome_cliente) {
+            await db.query(
+              "UPDATE contacts SET name = $1 WHERE id = (SELECT contact_id FROM conversations WHERE id = $2)",
+              [orderDetails.nome_cliente, conversationId]);
+          }
+
+          history.push({ role: 'tool', tool_call_id: toolCall.id, content: `Pedido #${pedidoNumero} registrado.` });
+          console.log(`=== PEDIDO #${pedidoNumero} (chatbot) REGISTRADO ===`, JSON.stringify(orderDetails));
+        }
       } catch (e) {
         console.error('Erro ao processar pedido:', e.message);
         cleanResponse = 'Ocorreu um erro ao registrar o pedido. Por favor, tente novamente.';

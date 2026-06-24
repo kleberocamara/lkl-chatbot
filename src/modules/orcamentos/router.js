@@ -369,15 +369,18 @@ const db = require('../../db/index');
 
 router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req, res) => {
   try {
-    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total } = req.body;
+    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total,
+            largura_cm, altura_cm, material_id } = req.body;
     let { descricao } = req.body;
     if (produto) descricao = especificacao ? `${produto} — ${especificacao}` : produto;
     if (!descricao || !quantidade) return res.status(400).json({ erro: ['produto/descrição e quantidade são obrigatórios'] });
     const cod = await db.query('SELECT COALESCE(MAX(codigo),0)+1 AS c FROM orcamento_itens WHERE orcamento_id=$1', [req.params.id]);
     const { rows } = await db.query(
-      `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, tipo_producao, quantidade, valor_unitario, valor_total)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.params.id, cod.rows[0].c, produto || null, especificacao || null, descricao, tipo_producao || null, quantidade, valor_unitario || 0, valor_total || 0]
+      `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, tipo_producao, quantidade, valor_unitario, valor_total, largura_cm, altura_cm, material_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [req.params.id, cod.rows[0].c, produto || null, especificacao || null, descricao, tipo_producao || null,
+       quantidade, valor_unitario || 0, valor_total || 0,
+       largura_cm || null, altura_cm || null, material_id || null]
     );
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);
     await service._rebuildOrderItems(req.params.id);
@@ -387,17 +390,21 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
 
 router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), async (req, res) => {
   try {
-    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total } = req.body;
+    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total,
+            largura_cm, altura_cm, material_id } = req.body;
     let { descricao } = req.body;
     if (produto !== undefined) descricao = especificacao ? `${produto} — ${especificacao}` : produto;
     const { rows } = await db.query(
       `UPDATE orcamento_itens SET
          produto=COALESCE($1,produto), especificacao=COALESCE($2,especificacao),
          descricao=COALESCE($3,descricao), tipo_producao=COALESCE($4,tipo_producao),
-         quantidade=COALESCE($5,quantidade), valor_unitario=COALESCE($6,valor_unitario), valor_total=COALESCE($7,valor_total)
-       WHERE id=$8 AND orcamento_id=$9 RETURNING *`,
+         quantidade=COALESCE($5,quantidade), valor_unitario=COALESCE($6,valor_unitario), valor_total=COALESCE($7,valor_total),
+         largura_cm=COALESCE($8,largura_cm), altura_cm=COALESCE($9,altura_cm), material_id=COALESCE($10,material_id)
+       WHERE id=$11 AND orcamento_id=$12 RETURNING *`,
       [produto ?? null, especificacao ?? null, descricao ?? null, tipo_producao ?? null,
-       quantidade ?? null, valor_unitario ?? null, valor_total ?? null, req.params.itemId, req.params.id]
+       quantidade ?? null, valor_unitario ?? null, valor_total ?? null,
+       largura_cm ?? null, altura_cm ?? null, material_id ?? null,
+       req.params.itemId, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ erro: ['Item não encontrado'] });
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);

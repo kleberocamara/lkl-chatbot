@@ -559,6 +559,7 @@
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <button id="agtab-dre" class="btn btn-primary" onclick="analisesSub('dre')">DRE</button>
       <button id="agtab-fluxo" class="btn btn-outline" onclick="analisesSub('fluxo')">Fluxo de Caixa</button>
+      <button id="agtab-metas" class="btn btn-outline" onclick="analisesSub('metas')">Metas</button>
     </div>
     <div id="ag-dre">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -584,6 +585,22 @@
       </div>
       <div id="fx-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px"></div>
       <div id="fx-tabela"></div>
+    </div>
+    <div id="ag-metas" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <select id="meta-mes" onchange="loadMeta()" style="width:130px">
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+        <input id="meta-ano" type="number" style="width:90px">
+        <span style="font-size:13px;color:#777;margin-left:8px">Meta (R$)</span>
+        <input id="meta-valor" type="number" step="0.01" style="width:140px">
+        <button class="btn btn-primary" onclick="salvarMetaUI()">Salvar</button>
+      </div>
+      <div id="meta-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px"></div>
+      <div id="meta-barra"></div>
     </div>
   </div>
 
@@ -4030,11 +4047,54 @@ function renderDre(r) {
 // ── ANÁLISES GERENCIAIS — Fluxo de Caixa ───────────────────────────────────
 let _fluxoData = null;
 function analisesSub(secao) {
-  document.getElementById('ag-dre').style.display = secao === 'dre' ? '' : 'none';
-  document.getElementById('ag-fluxo').style.display = secao === 'fluxo' ? '' : 'none';
-  document.getElementById('agtab-dre').className = 'btn ' + (secao === 'dre' ? 'btn-primary' : 'btn-outline');
-  document.getElementById('agtab-fluxo').className = 'btn ' + (secao === 'fluxo' ? 'btn-primary' : 'btn-outline');
+  ['dre','fluxo','metas'].forEach(s => {
+    const sec = document.getElementById('ag-' + s);
+    const tab = document.getElementById('agtab-' + s);
+    if (sec) sec.style.display = (s === secao) ? '' : 'none';
+    if (tab) tab.className = 'btn ' + (s === secao ? 'btn-primary' : 'btn-outline');
+  });
   if (secao === 'fluxo' && !_fluxoData) loadFluxo();
+  if (secao === 'metas') { _initMetaPeriodo(); loadMeta(); }
+}
+function _initMetaPeriodo() {
+  const n = new Date();
+  const ma = document.getElementById('meta-ano'); if (ma && !ma.value) ma.value = n.getFullYear();
+  const mm = document.getElementById('meta-mes'); if (mm && !mm.value) mm.value = String(n.getMonth()+1);
+}
+async function loadMeta() {
+  _initMetaPeriodo();
+  const ano = document.getElementById('meta-ano').value;
+  const mes = document.getElementById('meta-mes').value;
+  const r = await api(`/api/v2/analises/metas?ano=${ano}&mes=${mes}`);
+  if (!r || r.errors || r.error) { document.getElementById('meta-kpis').innerHTML = '<p style="color:#c00">Erro ao carregar meta</p>'; return; }
+  document.getElementById('meta-valor').value = r.meta != null ? r.meta : '';
+  renderMeta(r);
+}
+function renderMeta(r) {
+  const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const pct = (r.percentual*100);
+  const atingiu = pct >= 100;
+  const cor = atingiu ? '#2e7d32' : '#e65100';
+  document.getElementById('meta-kpis').innerHTML =
+    _kpiCard('Meta', r.meta != null ? fmt(r.meta) : '—') +
+    _kpiCard('Realizado (vendido)', fmt(r.realizado)) +
+    _kpiCard('% atingido', r.meta != null ? pct.toFixed(1) + '%' : '—', cor);
+  const aviso = r.meta == null ? '<div style="font-size:12px;color:#e65100;margin-bottom:8px">Defina a meta do mês.</div>' : '';
+  const w = Math.min(100, Math.max(0, pct));
+  document.getElementById('meta-barra').innerHTML = aviso + `
+    <div style="background:#f0f0f0;border-radius:8px;height:14px;overflow:hidden">
+      <div style="background:${cor};height:14px;width:${w}%"></div>
+    </div>`;
+}
+async function salvarMetaUI() {
+  const ano = parseInt(document.getElementById('meta-ano').value);
+  const mes = parseInt(document.getElementById('meta-mes').value);
+  const valor = parseFloat(document.getElementById('meta-valor').value);
+  if (!(valor >= 0)) { showToast('Informe um valor de meta válido'); return; }
+  const res = await api('/api/v2/analises/metas', { method:'POST', body: JSON.stringify({ ano, mes, valor }) });
+  if (res?.errors || res?.error) { showToast('Erro: ' + (res.errors?.[0]||res.error)); return; }
+  showToast('✅ Meta salva');
+  loadMeta();
 }
 async function loadFluxo() {
   const dias = document.getElementById('fx-dias').value;

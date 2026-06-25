@@ -1488,6 +1488,7 @@ async function abrirMelhorCorte() {
   if (!(ia > 0) || !(il > 0)) { showToast('Preencha o tamanho da imagem (Alt e Larg) primeiro'); return; }
   const area = document.getElementById('of-vias-area');
   if (!area) return;
+  if (typeof osDetalheTab === 'function') osDetalheTab('materiais');
   area.innerHTML = '<p style="font-size:12px;color:#999;margin-top:12px">Calculando melhor corte...</p>';
   const res = await api(`/api/v2/formatos/melhor-corte?imagem_alt=${ia}&imagem_larg=${il}`);
   const lista = res?.resultados || [];
@@ -1520,6 +1521,7 @@ function escolherCorte(alt, larg, imagensImpressao, formato) {
   npRecalcImpressoes();
   showToast(`✅ Formato ${fmt} · corte ${alt}×${larg} · ${imagensImpressao} img/impressão · ${imagensFolha} img/folha`);
   renderViasOS();
+  if (typeof osDetalheTab === 'function') osDetalheTab('producao');
 }
 
 // Total de impressões = folhas × formato ; folhas = ⌈quantidade ÷ imagens/folha⌉

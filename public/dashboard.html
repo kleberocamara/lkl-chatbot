@@ -1403,12 +1403,12 @@ function renderViasOS() {
         onclick="buscarMaterialVia(${idx})" title="Clique para buscar material"
         style="${_viaInp};cursor:pointer;background:#fafbff">
       <input value="${escHtml(m.cor_papel||'')}" placeholder="Cor" oninput="_osMateriais[${idx}].cor_papel=this.value" style="${_viaInp}">
-      <input id="via-folhas-${idx}" value="${m.folhas_a_cortar!=null?m.folhas_a_cortar:''}" type="number" readonly placeholder="auto" title="Calculado: ⌈qtd ÷ imagens/folha⌉ × (1+perda%)"
-        style="${_viaInp};background:#f8f9fa;color:#555">
+      <input id="via-folhas-${idx}" value="${m.folhas_a_cortar!=null?m.folhas_a_cortar:''}" type="number" min="0" placeholder="auto" title="Cálculo automático — edite se necessário"
+        oninput="_osMateriais[${idx}].folhas_a_cortar=this.value" style="${_viaInp}">
       <input value="${m.perda_percentual!=null?m.perda_percentual:''}" type="number" min="0" step="0.5" placeholder="%"
         oninput="_osMateriais[${idx}].perda_percentual=this.value;npRecalcVia(${idx})" style="${_viaInp}">
-      <input id="via-total-${idx}" value="${m.folhas_total!=null?m.folhas_total:''}" type="number" readonly placeholder="Total" title="Folhas a cortar × formato"
-        style="${_viaInp};background:#f8f9fa;color:#555">
+      <input id="via-total-${idx}" value="${m.folhas_total!=null?m.folhas_total:''}" type="number" min="0" placeholder="Total" title="Cálculo automático — edite se necessário"
+        oninput="_osMateriais[${idx}].folhas_total=this.value" style="${_viaInp}">
       <input value="${m.cores_frente!=null?m.cores_frente:''}" type="number" min="0" placeholder="Fre" oninput="_osMateriais[${idx}].cores_frente=this.value" style="${_viaInp}">
       <input value="${m.cores_verso!=null?m.cores_verso:''}" type="number" min="0" placeholder="Ver" oninput="_osMateriais[${idx}].cores_verso=this.value" style="${_viaInp}">
       <button onclick="removerViaOS(${idx})" title="Remover via" style="background:#e53935;border:none;border-radius:50%;width:24px;height:24px;color:white;cursor:pointer">−</button>

@@ -1182,11 +1182,12 @@ function renderOrcItens(orcId, itens) {
 }
 
 // ── Modal editar item ──────────────────────────────────────────────────────────
-async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
+async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, voltarOrderId) {
   const partes = String(descricao||'').split(' — ');
   const prodGuess = partes[0] || '';
   const especGuess = partes.slice(1).join(' — ') || '';
   const html = `
+    ${voltarOrderId ? `<button type="button" onclick="editarPedido('${voltarOrderId}')" class="btn btn-outline" style="margin-bottom:10px;padding:5px 12px;font-size:12px">← Voltar ao pedido</button>` : ''}
     <div style="margin-bottom:10px">${selectProduto('ei-produto', "document.getElementById('ei-tipo').value = tipoPorProduto(this.value)")}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       ${campoTipoProd('ei-tipo')}
@@ -1226,10 +1227,13 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
     const detail = await api(`/api/v2/orcamentos/${orcId}`);
     const item = (detail?.itens || []).find(i => String(i.id) === String(itemId));
     if (item) {
-      // Produto: casar item.produto contra as opções sem diferença de maiúsculas
+      // Produto: casar item.produto contra as opções (exato; senão singular/plural sem acento)
       if (sel && item.produto) {
-        const alvo = String(item.produto).toUpperCase();
-        const opt = [...sel.options].find(o => String(o.value).toUpperCase() === alvo);
+        const norm = (s) => String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9 /]/g,'').trim();
+        const sing = (s) => norm(s).replace(/S$/,'');
+        const alvo = norm(item.produto), alvoSg = sing(item.produto);
+        let opt = [...sel.options].find(o => norm(o.value) === alvo);
+        if (!opt) opt = [...sel.options].find(o => sing(o.value) === alvoSg);
         if (opt) sel.value = opt.value;
       }
       // Tipo de produção: do item, ou derivado do produto selecionado
@@ -1239,8 +1243,7 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
       const altEl  = document.getElementById('ei-alt');
       if (item.largura_cm != null && largEl) largEl.value = item.largura_cm;
       if (item.altura_cm != null && altEl)  altEl.value = item.altura_cm;
-      const ehCV = (tipoEl && tipoEl.value === 'COMUNICAÇÃO VISUAL');
-      if (ehCV && item.largura_cm == null && item.altura_cm == null) {
+      if (item.largura_cm == null && item.altura_cm == null) {
         const dim = parseDimensoes(item.especificacao || especGuess);
         if (dim) { if (largEl) largEl.value = dim.largura_cm; if (altEl) altEl.value = dim.altura_cm; }
       }
@@ -3208,7 +3211,7 @@ function editarPedido(id) {
     <button onclick="salvarEdicaoPedido('${o.id}')" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar alterações</button>
     <p style="font-size:11px;color:#999;margin-top:8px">O e-mail/celular atualizam o cadastro do cliente. Se o orçamento já foi enviado, reenvie pela aba Orçamentos para o contato corrigido receber.</p>`;
   showModal('Editar Pedido', html);
-  carregarItensPedidoEdit(o.orcamento_id, o.orcamento_status);
+  carregarItensPedidoEdit(o.orcamento_id, o.orcamento_status, o.id);
 }
 
 function _arteChip(orcId, itemId, val, travado) {
@@ -3225,7 +3228,7 @@ async function toggleArteItem(orcId, itemId, novoValor, el) {
     showToast(novoValor ? '🎨 Cliente tem a arte' : '🎨 Sem arte');
   } else { showToast('❌ Erro ao salvar arte'); }
 }
-async function carregarItensPedidoEdit(orcId, orcStatus) {
+async function carregarItensPedidoEdit(orcId, orcStatus, orderId) {
   const box = document.getElementById('ep-itens');
   if (!box) return;
   if (!orcId) { box.innerHTML = '<span style="color:#999">Pedido sem orçamento vinculado.</span>'; return; }
@@ -3238,7 +3241,7 @@ async function carregarItensPedidoEdit(orcId, orcStatus) {
       ${_arteChip(orcId, it.id, !!it.tem_arte, travado)}
       <span style="color:#666">${it.quantidade}</span>
       ${travado ? '' : `
-      <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}',${it.quantidade},${it.valor_unitario||0})" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>
+      <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}',${it.quantidade},${it.valor_unitario||0},'${orderId||''}')" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>
       <button onclick="excluirItemPedidoEdit('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}')" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer">−</button>`}
     </div>`).join('');
   box.innerHTML = `${linhas || '<span style="color:#999">Sem itens</span>'}

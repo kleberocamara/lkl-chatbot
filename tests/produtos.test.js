@@ -20,6 +20,7 @@ describe('parseDimensoes', () => {
   test('cm', () => { expect(parseDimensoes('200x100 cm')).toEqual({ largura_cm: 200, altura_cm: 100 }); });
   test('sem unidade', () => { expect(parseDimensoes('40X30')).toEqual({ largura_cm: 40, altura_cm: 30 }); });
   test('dentro de texto', () => { expect(parseDimensoes('40x30 cm · Couchê 90g')).toEqual({ largura_cm: 40, altura_cm: 30 }); });
+  test('milímetros', () => { expect(parseDimensoes('300x200mm')).toEqual({ largura_cm: 30, altura_cm: 20 }); });
   test('sem medida', () => { expect(parseDimensoes('Couchê 90g')).toBeNull(); });
   test('nulo', () => { expect(parseDimensoes(null)).toBeNull(); });
 });

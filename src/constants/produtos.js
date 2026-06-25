@@ -48,7 +48,7 @@ function tipoPorProduto(nome) { const h = matchProduto(nome); return h ? h.tipo 
 
 function parseDimensoes(texto) {
   if (!texto) return null;
-  const m = String(texto).match(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(m|cm|mm)?/i);
+  const m = String(texto).match(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i);
   if (!m) return null;
   const num = (s) => parseFloat(String(s).replace(',', '.'));
   let l = num(m[1]), a = num(m[2]);

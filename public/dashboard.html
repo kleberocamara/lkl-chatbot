@@ -614,6 +614,7 @@
 
   <!-- NF-e -->
   <div class="page" id="page-nfe">
+    <div id="subnav-host-nfe"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📄</span><h2 style="margin:0">NF-e</h2></div>
       <div style="display:flex;gap:8px">
@@ -627,6 +628,7 @@
 
   <!-- CLIENTES -->
   <div class="page" id="page-clientes">
+    <div id="subnav-host-clientes"></div>
     <div class="page-header">
       <h1>👥 Clientes</h1>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -644,6 +646,7 @@
 
   <!-- FORNECEDORES -->
   <div class="page" id="page-fornecedores">
+    <div id="subnav-host-fornecedores"></div>
     <div class="page-header">
       <h1>🏢 Fornecedores</h1>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -661,6 +664,7 @@
 
   <!-- MATERIAIS -->
   <div class="page" id="page-materiais">
+    <div id="subnav-host-materiais"></div>
     <div class="page-header">
       <h1>📦 Materiais</h1>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -678,6 +682,7 @@
 
   <!-- FUNCIONÁRIOS -->
   <div class="page" id="page-funcionarios">
+    <div id="subnav-host-funcionarios"></div>
     <div class="page-header">
       <h1>🧑 Funcionários</h1>
       <div style="display:flex;justify-content:flex-end;margin-top:8px">
@@ -692,6 +697,7 @@
 
   <!-- MÁQUINAS -->
   <div class="page" id="page-maquinas">
+    <div id="subnav-host-maquinas"></div>
     <div class="page-header">
       <h1>🖨️ Máquinas</h1>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -708,6 +714,7 @@
   </div>
 
   <div class="page" id="page-entradas">
+    <div id="subnav-host-entradas"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <h2 style="margin:0">Entrada de NF-e (compra)</h2>
       <label class="btn btn-primary" style="cursor:pointer">📥 Importar NF-e
@@ -945,6 +952,31 @@ function showSubPage(id) {
   if (id === 'cp-historico') loadHistoricoLotes();
 }
 
+const SUBNAV = {
+  cadastros: [
+    { id: 'clientes',     label: 'Clientes',     roles: ['admin','gestor','analista','atendente'] },
+    { id: 'fornecedores', label: 'Fornecedores', roles: ['admin','gestor','analista','atendente'] },
+    { id: 'materiais',    label: 'Materiais',    roles: ['admin','gestor','analista'] },
+    { id: 'funcionarios', label: 'Funcionários', roles: ['admin','gestor'] },
+    { id: 'maquinas',     label: 'Máquinas',     roles: ['admin','gestor'] },
+  ],
+  nfe: [
+    { id: 'nfe',      label: 'Emissão',      roles: ['admin','gestor','financeiro'] },
+    { id: 'entradas', label: 'Entrada NF-e', roles: ['admin','gestor'] },
+  ],
+};
+const PAGE_GROUP = { clientes:'cadastros', fornecedores:'cadastros', materiais:'cadastros', funcionarios:'cadastros', maquinas:'cadastros', nfe:'nfe', entradas:'nfe' };
+function renderSubnav(pageId) {
+  const group = PAGE_GROUP[pageId];
+  const host = document.getElementById('subnav-host-' + pageId);
+  if (!group || !host) return;
+  const role = (currentUser && currentUser.role) || '';
+  const itens = SUBNAV[group].filter(it => role === 'admin' || !it.roles || it.roles.includes(role));
+  host.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+    itens.map(it => `<button class="btn ${it.id===pageId?'btn-primary':'btn-outline'}" style="padding:6px 14px" onclick="showPage('${it.id}')">${it.label}</button>`).join('') +
+    '</div>';
+}
+
 function showPage(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item, .nav-child').forEach(n => n.classList.remove('active'));
@@ -976,6 +1008,7 @@ function showPage(page, el) {
     analises:     () => loadAnalisesMain(),
   };
   if (loaders[page]) loaders[page]();
+  renderSubnav(page);
 }
 
 // ── ORÇAMENTOS (na nova página) ────────────────────────────────────────────────

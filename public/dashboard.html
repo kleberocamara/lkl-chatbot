@@ -3053,6 +3053,19 @@ function tipoPorProduto(nome) {
   return PRODUTOS_LKL.find(p => p.produto === nome)?.tipo || '';
 }
 
+function parseDimensoes(texto) {
+  if (!texto) return null;
+  const m = String(texto).match(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(m|cm|mm)?/i);
+  if (!m) return null;
+  const num = (s) => parseFloat(String(s).replace(',', '.'));
+  let l = num(m[1]), a = num(m[2]);
+  const unidade = (m[3] || '').toLowerCase();
+  if (unidade === 'm') { l *= 100; a *= 100; }
+  else if (unidade === 'mm') { l /= 10; a /= 10; }
+  if (!(l > 0) || !(a > 0)) return null;
+  return { largura_cm: Math.round(l * 100) / 100, altura_cm: Math.round(a * 100) / 100 };
+}
+
 function selectProduto(id, onchange) {
   const opts = PRODUTOS_LKL.map(p =>
     `<option value="${p.produto}">${p.produto}</option>`

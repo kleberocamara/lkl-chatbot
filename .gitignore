@@ -34,3 +34,4 @@ logs/
 # Build / temp
 dist/
 tmp/
+backups/

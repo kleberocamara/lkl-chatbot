@@ -1,5 +1,17 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
+const { tipoPorProduto, parseDimensoes } = require('../../constants/produtos');
+
+async function _resolverMaterialId(nome) {
+  const termo = String(nome || '').trim();
+  if (!termo) return null;
+  try {
+    const exato = await db.query('SELECT id FROM materiais WHERE status=$1 AND nome ILIKE $2 ORDER BY nome LIMIT 1', ['ativo', termo]);
+    if (exato.rows[0]) return exato.rows[0].id;
+    const parcial = await db.query('SELECT id FROM materiais WHERE status=$1 AND nome ILIKE $2 ORDER BY nome LIMIT 1', ['ativo', `%${termo}%`]);
+    return parcial.rows[0] ? parcial.rows[0].id : null;
+  } catch (e) { return null; }
+}
 
 // Aceita data ISO ou texto livre — retorna null se não for data válida
 function _parseDate(val) {
@@ -41,6 +53,11 @@ function _normalizarItens(dados) {
       quantidade: parseInt(it.quantidade) || 1,
       especificacao: (it.especificacao || '').trim() || null,
       tem_arte: !!it.tem_arte,
+      dimensoes: it.dimensoes || null,
+      material: it.material || null,
+      largura_cm: it.largura_cm != null ? it.largura_cm : null,
+      altura_cm: it.altura_cm != null ? it.altura_cm : null,
+      material_id: it.material_id || null,
     }))
     .filter(it => it.produto);
   if (!itens.length && dados.produto) {
@@ -50,6 +67,11 @@ function _normalizarItens(dados) {
       quantidade: parseInt(dados.quantidade) || 1,
       especificacao: null,
       tem_arte: dados.tem_arte || false,
+      dimensoes: dados.dimensoes || null,
+      material: dados.material || null,
+      largura_cm: null,
+      altura_cm: null,
+      material_id: null,
     }];
   }
   return itens;
@@ -115,10 +137,18 @@ async function criarOrder(dados, userId) {
     let codigo = 1;
     for (const it of itens) {
       const descricao = it.especificacao ? `${it.produto} — ${it.especificacao}` : it.produto;
+      const tipo = it.tipo_producao || tipoPorProduto(it.produto);
+      let larg = it.largura_cm, alt = it.altura_cm;
+      if (larg == null && alt == null) {
+        const dim = parseDimensoes(it.dimensoes || it.especificacao);
+        if (dim) { larg = dim.largura_cm; alt = dim.altura_cm; }
+      }
+      let materialId = it.material_id;
+      if (!materialId && it.material) materialId = await _resolverMaterialId(it.material);
       await db.query(
-        `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7, $8)`,
-        [orcamentoId, codigo++, it.produto, it.especificacao || null, descricao, it.quantidade, it.tem_arte || false, it.tipo_producao || null]
+        `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao, largura_cm, altura_cm, material_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7, $8, $9, $10, $11)`,
+        [orcamentoId, codigo++, it.produto, it.especificacao || null, descricao, it.quantidade, it.tem_arte || false, tipo || null, larg != null ? larg : null, alt != null ? alt : null, materialId || null]
       );
     }
 

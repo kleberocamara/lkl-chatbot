@@ -231,6 +231,8 @@ async function processMessage(conversationId, userMessage) {
           quantidade: parseInt(it.quantidade) || 1,
           especificacao: [it.dimensoes, it.material].filter(Boolean).join(' · ') || null,
           tem_arte: !!it.tem_arte,
+          dimensoes: it.dimensoes || null,
+          material: it.material || null,
         }));
         const dados = {
           origin_channel: 'chatbot',

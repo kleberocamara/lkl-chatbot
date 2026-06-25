@@ -356,40 +356,6 @@
     </div>
   </div>
 
-  <!-- USUÁRIOS -->
-  <div class="page" id="page-users">
-    <div class="page-header">
-      <h1>Usuários</h1>
-      <p>Gerencie os usuários do painel</p>
-    </div>
-    <div class="card">
-      <h3>➕ Novo Usuário</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div class="setting-field"><label>Nome</label><input type="text" id="nu-name"></div>
-        <div class="setting-field"><label>E-mail</label><input type="email" id="nu-email"></div>
-        <div class="setting-field"><label>Senha</label><input type="password" id="nu-password"></div>
-        <div class="setting-field"><label>Perfil</label>
-          <select id="nu-role"><option value="analista">Analista</option><option value="admin">Admin</option></select>
-        </div>
-      </div>
-      <button class="btn btn-primary" onclick="createUser()">Criar Usuário</button>
-    </div>
-    <div class="card">
-      <h3>👥 Usuários Cadastrados</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13px" id="usersTable">
-        <thead><tr style="border-bottom:2px solid var(--border)">
-          <th style="padding:8px;text-align:left">Nome</th>
-          <th style="padding:8px;text-align:left">E-mail</th>
-          <th style="padding:8px;text-align:left">Perfil</th>
-          <th style="padding:8px;text-align:left">Status</th>
-          <th style="padding:8px;text-align:left">Último Login</th>
-          <th style="padding:8px;text-align:left">Ações</th>
-        </tr></thead>
-        <tbody id="usersBody"></tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- PEDIDOS -->
   <div class="page" id="page-orders">
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -986,7 +952,6 @@ function showPage(page, el) {
     dashboard:    loadDashboard,
     conversations:loadConversations,
     settings:     loadSettings,
-    users:        loadUsers,
     orders:       loadOrders,
     orcamentos:   loadOrcamentosMain,
     prices:       loadPrices,
@@ -1056,8 +1021,6 @@ function aplicarFiltrosOrc() {
 }
 
 const ORC_STATUS = {
-  // legado congelado
-  rascunho:           { label:'Rascunho (legado)',    bg:'#f5f5f5', col:'#999' },
   aprovado_interno:   { label:'Aprovado interno',     bg:'#f5f5f5', col:'#999' },
   pendente_aprovacao: { label:'Pendente aprovação',   bg:'#f5f5f5', col:'#999' },
   // fluxo novo
@@ -2982,33 +2945,6 @@ async function saveSettings(keys) {
   showToast('✅ Configurações salvas!');
 }
 
-// ── USUÁRIOS ─────────────────────────────────────────────────────────────────
-async function loadUsers() {
-  const users = await api('/api/users') || [];
-  document.getElementById('usersBody').innerHTML = users.map(u => `
-    <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:10px 8px">${escHtml(u.name)}</td>
-      <td style="padding:10px 8px">${escHtml(u.email)}</td>
-      <td style="padding:10px 8px">${u.role === 'admin' ? '🔑 Admin' : '👤 Analista'}</td>
-      <td style="padding:10px 8px"><span style="color:${u.active?'var(--green)':'var(--red)'}">${u.active?'● Ativo':'● Inativo'}</span></td>
-      <td style="padding:10px 8px">${u.last_login ? new Date(u.last_login).toLocaleDateString('pt-BR') : '—'}</td>
-      <td style="padding:10px 8px;display:flex;gap:6px">
-        <button class="btn btn-outline" style="font-size:12px" onclick="toggleUser('${u.id}')">${u.active?'Desativar':'Ativar'}</button>
-        <button class="btn btn-outline" style="font-size:12px" onclick="openEditUser('${u.id}','${escHtml(u.name)}','${escHtml(u.email)}','${u.role}')">✏️ Editar</button>
-        <button class="btn btn-outline" style="font-size:12px;color:#c62828;border-color:#c62828" onclick="deleteUser('${u.id}','${escHtml(u.name)}')">🗑️ Excluir</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-async function createUser() {
-  const body = { name: document.getElementById('nu-name').value, email: document.getElementById('nu-email').value, password: document.getElementById('nu-password').value, role: document.getElementById('nu-role').value };
-  if (!body.name || !body.email || !body.password) return showToast('Preencha todos os campos');
-  const res = await api('/api/users', { method: 'POST', body: JSON.stringify(body) });
-  if (res?.id) { showToast('✅ Usuário criado!'); loadUsers(); }
-}
-
-
 // ── EDITAR / EXCLUIR USUÁRIO ─────────────────────────────────────────────────
 function openEditUser(id, name, email, role) {
   document.getElementById('eu-id').value = id;
@@ -3037,22 +2973,11 @@ async function saveEditUser() {
   if (res?.ok) {
     document.getElementById('editUserModal').style.display = 'none';
     showToast('✅ Usuário atualizado!');
-    loadUsers();
+    loadUsuarios2();
   } else {
     document.getElementById('eu-error').textContent = res?.error || 'Erro ao salvar.';
     document.getElementById('eu-error').style.display = 'block';
   }
-}
-
-async function deleteUser(id, name) {
-  if (!confirm(`Excluir o usuário "${name}"? Esta ação não pode ser desfeita.`)) return;
-  const res = await api(`/api/users/${id}`, { method: 'DELETE' });
-  if (res?.ok) { showToast('✅ Usuário excluído!'); loadUsers(); }
-  else showToast('❌ ' + (res?.error || 'Erro ao excluir'));
-}
-async function toggleUser(id) {
-  await api(`/api/users/${id}/toggle`, { method: "POST" });
-  loadUsers();
 }
 
 init();

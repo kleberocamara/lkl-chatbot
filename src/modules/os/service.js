@@ -99,6 +99,7 @@ async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
   const [rows, count] = await Promise.all([
     db.query(
       `SELECT os.id, os.numero_os, os.status, os.tipo_servico, os.tipo_produto,
+              (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido,
               os.previsao_entrega, os.quantidade, os.data_inicio, os.data_conclusao,
               os.created_at, os.updated_at,
               COALESCE(cli.nome, cdir.nome) AS cliente_nome,
@@ -126,6 +127,7 @@ async function buscarPorId(id) {
     `SELECT os.*,
             COALESCE(cli.nome, cdir.nome) AS cliente_nome,
             o.numero AS numero_orcamento,
+            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido,
             u.name AS responsavel_nome,
             mq.nome AS maquina_nome,
             op.nome AS operador_nome

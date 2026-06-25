@@ -91,7 +91,8 @@ async function buscarPorId(id) {
             c.celular AS cliente_celular,
             c.email   AS cliente_email,
             c.cpf_cnpj AS cpf_cnpj,
-            u.name    AS vendedor_nome
+            u.name    AS vendedor_nome,
+            (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero
      FROM orcamentos o
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
      LEFT JOIN users u ON u.id = o.vendedor_id
@@ -471,6 +472,7 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
   const [rows, count] = await Promise.all([
     db.query(
       `SELECT o.*, c.nome AS cliente_nome, u.name AS vendedor_nome,
+              (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero,
               EXISTS(SELECT 1 FROM ordens_servico os WHERE os.orcamento_id = o.id AND os.status = 'entregue') AS tem_os_entregue,
               (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status,
               (SELECT n.id FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_id

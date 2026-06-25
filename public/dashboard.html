@@ -3211,6 +3211,20 @@ function editarPedido(id) {
   carregarItensPedidoEdit(o.orcamento_id, o.orcamento_status);
 }
 
+function _arteChip(orcId, itemId, val, travado) {
+  const cor = val ? '#16a34a' : '#9ca3af';
+  const txt = 'Arte: ' + (val ? 'Sim' : 'Não');
+  const handler = travado ? '' : `onclick="toggleArteItem('${orcId}','${itemId}',${!val},this)"`;
+  const cursor = travado ? 'default' : 'pointer';
+  return `<span id="arte-chip-${itemId}" ${handler} style="background:${cor};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:${cursor}">${txt}</span>`;
+}
+async function toggleArteItem(orcId, itemId, novoValor, el) {
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'PATCH', body: JSON.stringify({ tem_arte: novoValor }) });
+  if (res && !res.erro) {
+    el.outerHTML = _arteChip(orcId, itemId, novoValor, false);
+    showToast(novoValor ? '🎨 Cliente tem a arte' : '🎨 Sem arte');
+  } else { showToast('❌ Erro ao salvar arte'); }
+}
 async function carregarItensPedidoEdit(orcId, orcStatus) {
   const box = document.getElementById('ep-itens');
   if (!box) return;
@@ -3221,6 +3235,7 @@ async function carregarItensPedidoEdit(orcId, orcStatus) {
   const linhas = itens.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f3f3f3">
       <span style="flex:1">${escHtml(it.descricao||it.produto||'—')}</span>
+      ${_arteChip(orcId, it.id, !!it.tem_arte, travado)}
       <span style="color:#666">${it.quantidade}</span>
       ${travado ? '' : `
       <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}',${it.quantidade},${it.valor_unitario||0})" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>

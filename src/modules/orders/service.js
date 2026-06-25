@@ -10,7 +10,7 @@ async function _resolverMaterialId(nome) {
     if (exato.rows[0]) return exato.rows[0].id;
     const parcial = await db.query('SELECT id FROM materiais WHERE status=$1 AND nome ILIKE $2 ORDER BY nome LIMIT 1', ['ativo', `%${termo}%`]);
     return parcial.rows[0] ? parcial.rows[0].id : null;
-  } catch (e) { return null; }
+  } catch (e) { console.error('[MATERIAL-RESOLVE] Falha ao resolver material_id:', e.message); return null; }
 }
 
 // Aceita data ISO ou texto livre — retorna null se não for data válida

@@ -1208,17 +1208,43 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit) {
       </div>
       <select id="ei-mat" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">— material (Comunicação Visual) —</option></select>
     </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">CLIENTE TEM A ARTE?</label>
+      <input type="hidden" id="ei-arte" value="false">
+      <div style="display:flex;gap:6px">
+        <button type="button" id="ei-arte-sim" onclick="setArteEi(true)" class="btn btn-outline" style="flex:1;padding:6px">Sim</button>
+        <button type="button" id="ei-arte-nao" onclick="setArteEi(false)" class="btn btn-primary" style="flex:1;padding:6px">Não</button>
+      </div>
+    </div>
     <button onclick="salvarItemOrc('${orcId}','${itemId}')" class="btn btn-primary" style="width:100%">💾 Salvar alterações</button>`;
   showModal('Editar Item', html);
   const sel = document.getElementById('ei-produto');
-  if (sel && [...sel.options].some(o => o.value === prodGuess)) { sel.value = prodGuess; document.getElementById('ei-tipo').value = tipoPorProduto(prodGuess); }
-  // Pre-fill largura/altura/material from the full orçamento detail
+  const tipoEl = document.getElementById('ei-tipo');
+  // Fallback inicial pelo palpite da string (caso o detalhe não carregue)
+  if (sel && [...sel.options].some(o => o.value === prodGuess)) { sel.value = prodGuess; if (tipoEl) tipoEl.value = tipoPorProduto(prodGuess); }
   try {
     const detail = await api(`/api/v2/orcamentos/${orcId}`);
     const item = (detail?.itens || []).find(i => String(i.id) === String(itemId));
     if (item) {
-      if (item.largura_cm != null) { const el = document.getElementById('ei-larg'); if (el) el.value = item.largura_cm; }
-      if (item.altura_cm != null)  { const el = document.getElementById('ei-alt');  if (el) el.value = item.altura_cm; }
+      // Produto: casar item.produto contra as opções sem diferença de maiúsculas
+      if (sel && item.produto) {
+        const alvo = String(item.produto).toUpperCase();
+        const opt = [...sel.options].find(o => String(o.value).toUpperCase() === alvo);
+        if (opt) sel.value = opt.value;
+      }
+      // Tipo de produção: do item, ou derivado do produto selecionado
+      if (tipoEl) tipoEl.value = item.tipo_producao || tipoPorProduto(sel ? sel.value : '') || '';
+      // Comunicação Visual: usa o salvo; se vazio e for CV, tenta extrair da especificação
+      const largEl = document.getElementById('ei-larg');
+      const altEl  = document.getElementById('ei-alt');
+      if (item.largura_cm != null && largEl) largEl.value = item.largura_cm;
+      if (item.altura_cm != null && altEl)  altEl.value = item.altura_cm;
+      const ehCV = (tipoEl && tipoEl.value === 'COMUNICAÇÃO VISUAL');
+      if (ehCV && item.largura_cm == null && item.altura_cm == null) {
+        const dim = parseDimensoes(item.especificacao || especGuess);
+        if (dim) { if (largEl) largEl.value = dim.largura_cm; if (altEl) altEl.value = dim.altura_cm; }
+      }
+      setArteEi(!!item.tem_arte);
       await _popularMateriaisSelect('ei-mat', item.material_id);
     } else { await _popularMateriaisSelect('ei-mat', null); }
   } catch(e) { _popularMateriaisSelect('ei-mat', null); }
@@ -1236,7 +1262,8 @@ async function salvarItemOrc(orcId, itemId) {
     body: JSON.stringify({ produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario,
       largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
       altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
-      material_id: document.getElementById('ei-mat')?.value || null })
+      material_id: document.getElementById('ei-mat')?.value || null,
+      tem_arte: document.getElementById('ei-arte')?.value === 'true' })
   });
   if (res && !res.erro) {
     closeModal(); showToast('✅ Item atualizado');
@@ -3064,6 +3091,13 @@ function parseDimensoes(texto) {
   else if (unidade === 'mm') { l /= 10; a /= 10; }
   if (!(l > 0) || !(a > 0)) return null;
   return { largura_cm: Math.round(l * 100) / 100, altura_cm: Math.round(a * 100) / 100 };
+}
+
+function setArteEi(val) {
+  const h = document.getElementById('ei-arte'); if (h) h.value = val ? 'true' : 'false';
+  const sim = document.getElementById('ei-arte-sim'), nao = document.getElementById('ei-arte-nao');
+  if (sim) sim.className = 'btn ' + (val ? 'btn-primary' : 'btn-outline');
+  if (nao) nao.className = 'btn ' + (val ? 'btn-outline' : 'btn-primary');
 }
 
 function selectProduto(id, onchange) {

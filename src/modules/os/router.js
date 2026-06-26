@@ -100,6 +100,32 @@ router.patch('/:id/status', requireRole('admin', 'operador', 'atendente', 'anali
   }
 });
 
+// PATCH /:id/avancar — avança a OS para a próxima fase (board de produção)
+router.patch('/:id/avancar', requireRole('admin', 'operador', 'gestor', 'atendente', 'analista'), async (req, res) => {
+  try {
+    const result = await service.avancarFase(req.params.id, req.user.id);
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrada'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[OS-AVANCAR]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// GET /:id/historico — histórico de fases da OS
+router.get('/:id/historico', async (req, res) => {
+  try {
+    const rows = await service.historico(req.params.id);
+    res.json(rows);
+  } catch (err) {
+    console.error('[OS-HIST]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /:id/enviar-arte — atendente/admin envia imagem da arte ao cliente via WhatsApp
 router.patch('/:id/enviar-arte', requireRole('admin', 'atendente', 'analista'), uploadArtes.single('arte'), async (req, res) => {
   try {

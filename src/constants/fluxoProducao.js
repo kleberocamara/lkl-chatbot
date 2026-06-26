@@ -6,7 +6,7 @@ const FLUXO = {
 const FASE_LABEL = {
   corte:     'Corte',
   impressao: 'Impressão',
-  acabamento:'Acabamento',
+  acabamento: 'Acabamento',
   entrega:   'Entrega',
   entregue:  'Entregue',
 };

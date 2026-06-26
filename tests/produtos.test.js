@@ -24,3 +24,33 @@ describe('parseDimensoes', () => {
   test('sem medida', () => { expect(parseDimensoes('Couchê 90g')).toBeNull(); });
   test('nulo', () => { expect(parseDimensoes(null)).toBeNull(); });
 });
+
+const { tokensMaterial, selecionarMaterialId } = require('../src/constants/produtos');
+
+describe('tokensMaterial', () => {
+  test('separa número da unidade de gramatura', () => {
+    expect(tokensMaterial('couchê 90g')).toEqual(['COUCHE', '90']);
+  });
+  test('descarta unidades e mantém palavras', () => {
+    expect(tokensMaterial('vinil fosco')).toEqual(['VINIL', 'FOSCO']);
+  });
+  test('vazio', () => { expect(tokensMaterial('')).toEqual([]); });
+});
+
+describe('selecionarMaterialId', () => {
+  const fix = [
+    { id: 'a', nome: 'COUCHE LISO 90 GR 96X66' },
+    { id: 'b', nome: 'COUCHE LISO 150 GR 96X66' },
+    { id: 'c', nome: 'LONA 440 BRILHO' },
+    { id: 'd', nome: 'VINIL FOSCO 1,50X50' },
+  ];
+  test('couchê 90g -> COUCHE 90', () => { expect(selecionarMaterialId(fix, 'couchê 90g')).toBe('a'); });
+  test('lona -> LONA 440', () => { expect(selecionarMaterialId(fix, 'lona')).toBe('c'); });
+  test('vinil fosco -> VINIL FOSCO', () => { expect(selecionarMaterialId(fix, 'vinil fosco')).toBe('d'); });
+  test('sem correspondência -> null', () => { expect(selecionarMaterialId(fix, 'xyz')).toBeNull(); });
+  test('termo vazio -> null', () => { expect(selecionarMaterialId(fix, '')).toBeNull(); });
+  test('prefere o nome mais curto', () => {
+    const f2 = [{ id: 'x', nome: 'COUCHE 90' }, { id: 'y', nome: 'COUCHE LISO 90 GR 96X66' }];
+    expect(selecionarMaterialId(f2, 'couchê 90g')).toBe('x');
+  });
+});

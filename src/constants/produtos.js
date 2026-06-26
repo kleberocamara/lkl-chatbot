@@ -59,4 +59,24 @@ function parseDimensoes(texto) {
   return { largura_cm: Math.round(l * 100) / 100, altura_cm: Math.round(a * 100) / 100 };
 }
 
-module.exports = { PRODUTOS, matchProduto, tipoPorProduto, parseDimensoes };
+function _normTexto(s) {
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+const _STOP_MAT = new Set(['GR', 'G', 'GRS', 'KG', 'CM', 'MM', 'M', 'UN', 'UND', 'UNID', 'DE', 'DA', 'DO', 'COM', 'SEM']);
+function tokensMaterial(termo) {
+  const raw = _normTexto(termo).match(/[A-Z]+|[0-9]+/g) || [];
+  return raw.filter(t => /[0-9]/.test(t) ? true : (t.length >= 2 && !_STOP_MAT.has(t)));
+}
+function selecionarMaterialId(materiais, termo) {
+  const toks = tokensMaterial(termo);
+  if (!toks.length) return null;
+  const cand = (materiais || []).filter(m => {
+    const n = _normTexto(m.nome);
+    return toks.every(t => n.includes(t));
+  });
+  if (!cand.length) return null;
+  cand.sort((a, b) => String(a.nome || '').length - String(b.nome || '').length);
+  return cand[0].id;
+}
+
+module.exports = { PRODUTOS, matchProduto, tipoPorProduto, parseDimensoes, tokensMaterial, selecionarMaterialId };

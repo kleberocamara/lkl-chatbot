@@ -321,14 +321,10 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
   );
   const updatedOs = r.rows[0];
 
-  // OS-3C: baixa automática de materiais ao ENTRAR em impressão (idempotente, não bloqueia o status)
   if (novoStatus === 'impressao' && os.status !== 'impressao') {
-    try {
-      const b = await baixarMateriais(id, { userId: responsavel_id });
-      if (b.erro) console.warn('[OS-3C] baixa de materiais falhou:', b.erro[0]);
-    } catch (e) {
-      console.warn('[OS-3C] baixa de materiais erro:', e.message);
-    }
+    baixarMateriais(id, { userId: responsavel_id }).catch(e =>
+      console.warn('[OS-3C atualizarStatus]', e.message)
+    );
   }
 
   // If entregue, check if all OSs for this orcamento are done
@@ -371,7 +367,7 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
   return { os: updatedOs };
 }
 
-async function entregar(id, { nome_recebedor, foto_url }) {
+async function entregar(id, { nome_recebedor, foto_url, userId }) {
   if (!nome_recebedor || !nome_recebedor.trim())
     return { erro: ['nome_recebedor é obrigatório'] };
   if (!foto_url)
@@ -392,7 +388,7 @@ async function entregar(id, { nome_recebedor, foto_url }) {
 
   db.query(
     `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
-    [id, 'entrega', 'entregue', null]
+    [id, 'entrega', 'entregue', userId || null]
   ).catch(e => console.warn('[OS-HIST entregar]', e.message));
 
   // Check if all OSs of this orcamento are done

@@ -156,7 +156,7 @@ router.patch('/:id/entregar', requireRole('admin', 'motorista'), upload.single('
     if (!req.file) return res.status(400).json({ errors: ['foto_documento é obrigatória'] });
     const foto_url = `/uploads/entregas/${req.file.filename}`;
     const { nome_recebedor } = req.body;
-    const result = await service.entregar(req.params.id, { nome_recebedor, foto_url });
+    const result = await service.entregar(req.params.id, { nome_recebedor, foto_url, userId: req.user.id });
     if (result.erro) {
       const isNotFound = result.erro.some(e => e.includes('não encontrada'));
       return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });

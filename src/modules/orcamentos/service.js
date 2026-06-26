@@ -848,7 +848,8 @@ async function _rebuildOrderItems(orcamentoId) {
 
 // ── Arte por item ─────────────────────────────────────────────────────────────
 
-const APROVACAO_ARTE = ['aprovado', 'aprovada', 'aprovo', 'ok', 'pode', 'sim', 'confirmo', 'autorizo'];
+const APROVACAO_ARTE_EXATO = ['ok', 'sim', 'pode', 'aprovo'];          // mensagem precisa ser exatamente essa palavra
+const APROVACAO_ARTE_INC = ['aprovado', 'aprovada', 'confirmo', 'autorizo']; // pode aparecer no meio do texto
 
 async function enviarArteItem(itemId, arquivo_url) {
   const r = await db.query(
@@ -867,7 +868,7 @@ async function enviarArteItem(itemId, arquivo_url) {
     [arquivo_url, itemId]
   );
   if (item.cliente_celular) {
-    const publicUrl = `${process.env.BASE_URL}${arquivo_url}`;
+    const publicUrl = `${process.env.BASE_URL || 'https://app.graficalkl.com.br'}${arquivo_url}`;
     const msg = `Olá! Segue a arte do *Pedido #${item.pedido_numero || ''}* (${item.produto || item.descricao || 'item'}) para sua aprovação.\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
     whatsapp.sendImage(item.cliente_celular, publicUrl, msg).catch(e => console.warn('[ARTE-WA]', e.message));
   }
@@ -890,7 +891,8 @@ async function responderArteItem(phone, mensagem) {
   const item = pend.rows[0];
   if (!item) return null;
   const texto = String(mensagem || '').trim().toLowerCase();
-  const aprovado = APROVACAO_ARTE.some(kw => texto.includes(kw));
+  const negado = /\bn[aã]o\b/.test(texto);
+  const aprovado = !negado && (APROVACAO_ARTE_INC.some(kw => texto.includes(kw)) || APROVACAO_ARTE_EXATO.includes(texto));
   const refPed = item.pedido_numero || '';
   if (aprovado) {
     await db.query(`UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1`, [item.id]);

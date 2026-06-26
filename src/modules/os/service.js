@@ -12,7 +12,10 @@ async function enviarArte(id, { arquivo_url }) {
   const existing = await db.query(
     `SELECT os.*, c.celular AS cliente_celular, c.nome AS cliente_nome,
             o.numero AS numero_orcamento,
-            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido
+            COALESCE(
+              (SELECT o2.numero_os FROM orders o2 WHERE o2.orcamento_id = os.orcamento_id ORDER BY o2.created_at LIMIT 1),
+              (SELECT o3.numero_os FROM os_itens oit JOIN orcamento_itens oi2 ON oi2.id = oit.orcamento_item_id JOIN orders o3 ON o3.orcamento_id = oi2.orcamento_id WHERE oit.os_id = os.id ORDER BY o3.created_at LIMIT 1)
+            ) AS numero_pedido
      FROM ordens_servico os
      LEFT JOIN orcamentos o ON o.id = os.orcamento_id
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
@@ -46,7 +49,10 @@ async function processarRespostaArte(phone, mensagem) {
   const celular = phone.replace(/\D/g, '');
   const osPendente = await db.query(
     `SELECT os.id, os.numero_os, os.orcamento_id, o.numero AS numero_orcamento,
-            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido
+            COALESCE(
+              (SELECT o2.numero_os FROM orders o2 WHERE o2.orcamento_id = os.orcamento_id ORDER BY o2.created_at LIMIT 1),
+              (SELECT o3.numero_os FROM os_itens oit JOIN orcamento_itens oi2 ON oi2.id = oit.orcamento_item_id JOIN orders o3 ON o3.orcamento_id = oi2.orcamento_id WHERE oit.os_id = os.id ORDER BY o3.created_at LIMIT 1)
+            ) AS numero_pedido
      FROM ordens_servico os
      LEFT JOIN orcamentos o ON o.id = os.orcamento_id
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
@@ -101,7 +107,10 @@ async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
   const [rows, count] = await Promise.all([
     db.query(
       `SELECT os.id, os.numero_os, os.status, os.tipo_servico, os.tipo_produto,
-              (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido,
+              COALESCE(
+              (SELECT o2.numero_os FROM orders o2 WHERE o2.orcamento_id = os.orcamento_id ORDER BY o2.created_at LIMIT 1),
+              (SELECT o3.numero_os FROM os_itens oit JOIN orcamento_itens oi2 ON oi2.id = oit.orcamento_item_id JOIN orders o3 ON o3.orcamento_id = oi2.orcamento_id WHERE oit.os_id = os.id ORDER BY o3.created_at LIMIT 1)
+            ) AS numero_pedido,
               os.previsao_entrega, os.quantidade, os.data_inicio, os.data_conclusao,
               os.created_at, os.updated_at,
               COALESCE(cli.nome, cdir.nome) AS cliente_nome,
@@ -129,7 +138,10 @@ async function buscarPorId(id) {
     `SELECT os.*,
             COALESCE(cli.nome, cdir.nome) AS cliente_nome,
             o.numero AS numero_orcamento,
-            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido,
+            COALESCE(
+              (SELECT o2.numero_os FROM orders o2 WHERE o2.orcamento_id = os.orcamento_id ORDER BY o2.created_at LIMIT 1),
+              (SELECT o3.numero_os FROM os_itens oit JOIN orcamento_itens oi2 ON oi2.id = oit.orcamento_item_id JOIN orders o3 ON o3.orcamento_id = oi2.orcamento_id WHERE oit.os_id = os.id ORDER BY o3.created_at LIMIT 1)
+            ) AS numero_pedido,
             u.name AS responsavel_nome,
             mq.nome AS maquina_nome,
             op.nome AS operador_nome

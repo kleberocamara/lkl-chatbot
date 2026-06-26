@@ -235,9 +235,6 @@ async function mudarStatus(id, novoStatus, extra = {}) {
 
   _syncPedidoStatus(id, novoStatus);
   _notifyVendedorResposta(id, novoStatus);
-  if (novoStatus === 'aprovado') {
-    osService.criarOSComunicacaoVisual(id).catch(e => console.warn('[OS-CV]', e.message));
-  }
 
   return { orcamento: r.rows[0] };
 }
@@ -453,10 +450,9 @@ async function aprovar(id, aprovado_via) {
   );
   const orcamento = r.rows[0];
 
-  // Sync pedido → aprovado (OS será criada manualmente pelo gestor)
+  // Sync pedido → aprovado (OS de CV será criada via aprovação de arte por item)
   _syncPedidoStatus(id, 'aprovado');
   _notifyVendedorResposta(id, 'aprovado');
-  osService.criarOSComunicacaoVisual(id).catch(e => console.warn('[OS-CV]', e.message));
 
   if (global.io) global.io.emit('orcamento_aprovado', { orcamento_id: id });
 
@@ -850,4 +846,79 @@ async function _rebuildOrderItems(orcamentoId) {
   }
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems };
+// ── Arte por item ─────────────────────────────────────────────────────────────
+
+const APROVACAO_ARTE = ['aprovado', 'aprovada', 'aprovo', 'ok', 'pode', 'sim', 'confirmo', 'autorizo'];
+
+async function enviarArteItem(itemId, arquivo_url) {
+  const r = await db.query(
+    `SELECT oi.id, oi.produto, oi.descricao, oi.orcamento_id,
+            c.celular AS cliente_celular, c.nome AS cliente_nome,
+            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     LEFT JOIN orcamentos o ON o.id = oi.orcamento_id
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE oi.id = $1`, [itemId]
+  );
+  const item = r.rows[0];
+  if (!item) return { erro: ['Item não encontrado'] };
+  await db.query(
+    `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
+    [arquivo_url, itemId]
+  );
+  if (item.cliente_celular) {
+    const publicUrl = `${process.env.BASE_URL}${arquivo_url}`;
+    const msg = `Olá! Segue a arte do *Pedido #${item.pedido_numero || ''}* (${item.produto || item.descricao || 'item'}) para sua aprovação.\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
+    whatsapp.sendImage(item.cliente_celular, publicUrl, msg).catch(e => console.warn('[ARTE-WA]', e.message));
+  }
+  return { ok: true, item_id: itemId, status: 'enviada' };
+}
+
+async function responderArteItem(phone, mensagem) {
+  const celular = String(phone || '').replace(/\D/g, '');
+  if (!celular) return null;
+  const pend = await db.query(
+    `SELECT oi.id, oi.orcamento_id, oi.produto, oi.tipo_producao, o.vendedor_id,
+            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     JOIN orcamentos o ON o.id = oi.orcamento_id
+     JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE oi.arte_status='enviada' AND (c.celular LIKE $1 OR c.celular LIKE $2)
+     ORDER BY oi.arte_enviada_em DESC LIMIT 1`,
+    [`%${celular.slice(-9)}`, `%${celular}`]
+  );
+  const item = pend.rows[0];
+  if (!item) return null;
+  const texto = String(mensagem || '').trim().toLowerCase();
+  const aprovado = APROVACAO_ARTE.some(kw => texto.includes(kw));
+  const refPed = item.pedido_numero || '';
+  if (aprovado) {
+    await db.query(`UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1`, [item.id]);
+    if (item.tipo_producao === 'COMUNICAÇÃO VISUAL') {
+      osService.criarOSComunicacaoVisual(item.orcamento_id).catch(e => console.warn('[OS-CV-ARTE]', e.message));
+    }
+    return { aprovado: true, item_id: item.id, resposta: `Arte aprovada! ✅ Seu *Pedido #${refPed}* seguirá para produção. Obrigado! 🖨️` };
+  }
+  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [String(mensagem || '').trim(), item.id]);
+  if (item.vendedor_id) {
+    fcm.sendToUser(item.vendedor_id, { title: `Arte com ajustes — Pedido #${refPed}`, body: `${item.produto || 'Item'}: cliente pediu alterações`, data: { orcamento_id: item.orcamento_id } }).catch(() => {});
+  }
+  return { aprovado: false, item_id: item.id, resposta: `Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.` };
+}
+
+async function listarArtesPendentes() {
+  const r = await db.query(
+    `SELECT oi.id, oi.produto, oi.descricao, oi.tipo_producao, oi.arte_status, oi.arte_arquivo_url, oi.arte_comentario,
+            o.id AS orcamento_id, o.numero AS numero_orcamento,
+            c.nome AS cliente_nome,
+            (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     JOIN orcamentos o ON o.id = oi.orcamento_id
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE o.status='aprovado' AND oi.arte_status <> 'aprovada'
+     ORDER BY o.numero DESC, oi.codigo`
+  );
+  return r.rows;
+}
+
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, listarArtesPendentes };

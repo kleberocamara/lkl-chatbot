@@ -480,13 +480,17 @@
     <div id="artes-list" style="margin-top:12px">Carregando...</div>
   </div>
 
-  <!-- PRODUÇÃO (mobile) -->
+  <!-- PRODUÇÃO — board de produção -->
   <div class="page" id="page-producao">
-    <div class="placeholder-page">
-      <div class="icon">🏭</div>
-      <p>Módulo de Produção disponível via tablet</p>
-      <a href="/pwa/producao.html" target="_blank" class="btn btn-primary" style="margin-top:8px">Abrir versão mobile</a>
+    <div class="page-header">
+      <h1>🏭 Produção</h1>
+      <span style="font-size:13px;color:#888">Board de fases: Corte → Impressão → Acabamento → Entrega</span>
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-primary" id="prod-tab-andamento" onclick="prodSwitchTab('andamento')">Em Andamento</button>
+      <button class="btn btn-outline" id="prod-tab-concluidas" onclick="prodSwitchTab('concluidas')">Concluídas</button>
+    </div>
+    <div id="prod-board-content" style="min-height:200px">Carregando...</div>
   </div>
 
   <!-- ENTREGAS (mobile) -->
@@ -975,11 +979,139 @@ function showPage(page, el) {
     nfe:          () => loadNfeMain(),
     cobrancas:    () => loadCobrancasMain(),
     analises:     () => loadAnalisesMain(),
+    producao:     loadProdBoard,
     artes:        loadArtes,
   };
   if (loaders[page]) loaders[page]();
   renderSubnav(page);
 }
+
+// ===================== PROD BOARD =====================
+const PROD_FLUXO = {
+  offset: ['corte','impressao','acabamento','entrega'],
+  comunicacao_visual: ['impressao','acabamento','entrega'],
+};
+const PROD_FASE_LABEL = { corte:'Corte', impressao:'Impressão', acabamento:'Acabamento', entrega:'Entrega', entregue:'Entregue' };
+const PROD_ALL_PHASES = ['corte','impressao','acabamento','entrega'];
+const PROD_TIPO_LABEL = { offset:'Offset', comunicacao_visual:'CV' };
+let prodAllOS = [];
+let prodActiveTab = 'andamento';
+
+function prodEsc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function prodProximaFase(tipo, status) {
+  const fases = PROD_FLUXO[tipo];
+  if (!fases) return null;
+  if (status === 'entrega') return 'entregue';
+  const idx = fases.indexOf(status);
+  if (idx === -1 || idx === fases.length - 1) return null;
+  return fases[idx + 1];
+}
+
+async function loadProdBoard() {
+  try {
+    const res = await api('/api/v2/os?limit=200');
+    prodAllOS = res.data || [];
+    prodRender();
+  } catch (e) {
+    document.getElementById('prod-board-content').innerHTML = '<p style="color:red">Erro ao carregar OSs.</p>';
+  }
+}
+
+function prodSwitchTab(tab) {
+  prodActiveTab = tab;
+  document.getElementById('prod-tab-andamento').className = 'btn ' + (tab === 'andamento' ? 'btn-primary' : 'btn-outline');
+  document.getElementById('prod-tab-concluidas').className = 'btn ' + (tab === 'concluidas' ? 'btn-primary' : 'btn-outline');
+  prodRender();
+}
+
+function prodRender() {
+  if (prodActiveTab === 'andamento') prodRenderBoard();
+  else prodRenderConcluidas();
+}
+
+function prodRenderBoard() {
+  const inProg = prodAllOS.filter(os => ['corte','impressao','acabamento','entrega'].includes(os.status));
+  const container = document.getElementById('prod-board-content');
+  if (!container) return;
+  if (inProg.length === 0) { container.innerHTML = '<p style="color:#999;padding:24px">Nenhuma OS em andamento.</p>'; return; }
+
+  const cols = PROD_ALL_PHASES.map(fase => {
+    const cards = inProg.filter(os => os.status === fase);
+    const cardsHtml = cards.length === 0
+      ? '<p style="font-size:12px;color:#aaa;text-align:center;padding:8px">Vazio</p>'
+      : cards.map(os => {
+          const tipo = os.tipo_servico || '';
+          const proximo = prodProximaFase(tipo, os.status);
+          const isEntrega = os.status === 'entrega';
+          const btnLabel = isEntrega ? '✅ Confirmar Entrega' : `✓ Concluir ${PROD_FASE_LABEL[os.status] || os.status}`;
+          const btnColor = isEntrega ? '#2e7d32' : '#1a237e';
+          const btn = proximo
+            ? `<button onclick="prodAvancar('${os.id}',this)" style="width:100%;padding:8px;background:${btnColor};color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-top:6px">${btnLabel}</button>`
+            : '';
+          return `<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+            <div style="display:flex;justify-content:space-between"><strong style="font-size:13px;color:#1a237e">OS #${os.numero_os}</strong><span style="font-size:11px;color:#888">ORC #${os.numero_orcamento||'—'}</span></div>
+            <span style="font-size:10px;background:#e3f2fd;color:#0277bd;border-radius:4px;padding:1px 5px;display:inline-block;margin:3px 0">${prodEsc(PROD_TIPO_LABEL[tipo]||tipo)}</span>
+            <div style="font-size:12px;font-weight:600;margin:2px 0">${prodEsc(os.item_descricao||'—')}</div>
+            ${os.cliente_nome?`<div style="font-size:11px;color:#666">${prodEsc(os.cliente_nome)}</div>`:''}
+            ${btn}
+          </div>`;
+        }).join('');
+    return `<div style="flex:0 0 220px;background:#e9ebf0;border-radius:10px;padding:8px">
+      <div style="font-size:12px;font-weight:700;color:#444;padding:4px 4px 8px;display:flex;justify-content:space-between">
+        ${PROD_FASE_LABEL[fase]}<span style="background:#1a237e;color:#fff;border-radius:12px;padding:1px 7px;font-size:11px">${cards.length}</span>
+      </div>
+      ${cardsHtml}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `<div style="display:flex;gap:10px;overflow-x:auto;align-items:flex-start;padding-bottom:8px">${cols}</div>`;
+}
+
+async function prodRenderConcluidas() {
+  const done = prodAllOS.filter(os => os.status === 'entregue');
+  const container = document.getElementById('prod-board-content');
+  if (!container) return;
+  if (done.length === 0) { container.innerHTML = '<p style="color:#999;padding:24px">Nenhuma OS concluída.</p>'; return; }
+  container.innerHTML = '<p style="color:#999;padding:8px">Carregando histórico...</p>';
+
+  const cards = await Promise.all(done.map(async os => {
+    let tl = '';
+    try {
+      const hist = await api(`/api/v2/os/${os.id}/historico`);
+      tl = hist.map(h => {
+        const de = h.de_status ? `${PROD_FASE_LABEL[h.de_status]||h.de_status} → ` : '';
+        const para = PROD_FASE_LABEL[h.para_status]||h.para_status;
+        const em = new Date(h.em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+        return `<div style="display:flex;gap:6px;margin-bottom:4px;font-size:11px;color:#555"><div style="width:6px;height:6px;border-radius:50%;background:#1a237e;margin-top:3px;flex-shrink:0"></div><span>${de}${para} — ${em}</span></div>`;
+      }).join('');
+    } catch(e) {}
+    return `<div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <strong style="color:#1a237e">OS #${os.numero_os}</strong>
+        <span style="background:#1a237e;color:#fff;border-radius:20px;padding:1px 8px;font-size:11px">Entregue</span>
+      </div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${prodEsc(os.item_descricao||'—')}</div>
+      ${os.cliente_nome?`<div style="font-size:11px;color:#666">${prodEsc(os.cliente_nome)}</div>`:''}
+      ${tl?`<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">${tl}</div>`:''}
+    </div>`;
+  }));
+  container.innerHTML = cards.join('');
+}
+
+async function prodAvancar(osId, btn) {
+  btn.disabled = true;
+  try {
+    await api(`/api/v2/os/${osId}/avancar`, { method: 'PATCH' });
+    await loadProdBoard();
+  } catch(e) {
+    alert('Erro ao avançar fase: ' + (e.message||e));
+    btn.disabled = false;
+  }
+}
+// ===================== END PROD BOARD =====================
 
 // ── ORÇAMENTOS (na nova página) ────────────────────────────────────────────────
 let orcamentosMainData = [];

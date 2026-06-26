@@ -3,6 +3,13 @@ const { requireRole } = require('../../middleware/auth');
 const service = require('./service');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
 const whatsapp = require('../../services/whatsapp');
+const multer = require('multer');
+const path = require('path');
+const _arteStorage = multer.diskStorage({
+  destination: path.join(__dirname, '../../../public/uploads/artes'),
+  filename: (req, file, cb) => cb(null, `arte_orc_${Date.now()}_${Math.round(Math.random()*1e6)}${path.extname(file.originalname)}`),
+});
+const _uploadArte = multer({ storage: _arteStorage, limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -85,6 +92,12 @@ router.get('/', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Erro interno' });
   }
+});
+
+// GET /artes/pendentes — lista itens com arte pendente
+router.get('/artes/pendentes', requireRole('admin','gestor','atendente','analista'), async (req, res) => {
+  try { res.json({ data: await service.listarArtesPendentes() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /:id — detail
@@ -413,6 +426,16 @@ router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), as
     await service._rebuildOrderItems(req.params.id);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ erro: [e.message] }); }
+});
+
+router.post('/:id/itens/:itemId/arte', requireRole('admin','gestor','atendente','analista'), _uploadArte.single('arte'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Arquivo de arte é obrigatório (campo "arte")' });
+    const arquivo_url = `/uploads/artes/${req.file.filename}`;
+    const result = await service.enviarArteItem(req.params.itemId, arquivo_url);
+    if (result?.erro) return res.status(404).json({ errors: result.erro });
+    res.status(201).json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id/itens/:itemId', requireRole('admin','gestor'), async (req, res) => {

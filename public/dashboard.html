@@ -1102,6 +1102,7 @@ function renderOrcamentoCards(data) {
         <span style="font-size:18px;color:#888;transition:transform .2s;display:inline-block" id="orc-chevron-${o.id}">▶</span>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="background:#1a237e;color:#fff;padding:1px 7px;border-radius:8px;font-size:12px;font-weight:700">Pedido #${o.pedido_numero||'—'}</span>
             <strong style="color:#1a237e;font-size:15px">#${o.numero||'—'}</strong>
             <span style="font-size:14px;font-weight:500">${escHtml(o.cliente_nome||'—')}</span>
             ${orcBadge(o.status)}
@@ -1584,7 +1585,7 @@ async function abrirDetalheOS(id) {
 
   const html = `
     <div style="font-size:12px;color:#888;margin-bottom:8px">
-      OS #${os.numero_os||'—'} · <b>${os.tipo_servico==='offset'?'Offset':(os.tipo_servico==='comunicacao_visual'?'Com. Visual':'—')}</b> · ${escHtml(os.cliente_nome||'(multi-cliente)')} · status: ${os.status}
+      <b style="color:#1a237e">Pedido #${os.numero_pedido||'—'}</b> · OS #${os.numero_os||'—'} · <b>${os.tipo_servico==='offset'?'Offset':(os.tipo_servico==='comunicacao_visual'?'Com. Visual':'—')}</b> · ${escHtml(os.cliente_nome||'(multi-cliente)')} · status: ${os.status}
     </div>
     <div style="font-size:13px;margin-bottom:4px"><b>Itens:</b> ${itensTxt}</div>
     <div style="font-size:13px;margin-bottom:4px"><b>Especificações:</b> ${especsTxt}</div>
@@ -1593,7 +1594,7 @@ async function abrirDetalheOS(id) {
     <div id="osd-producao">${fichaHtml}</div>
     <div id="osd-materiais" style="display:none"><div id="of-vias-area"></div></div>
     <div id="osd-requisicao" style="display:none"><div id="os-requisicao-bloco" style="margin-top:8px"></div></div>`;
-  showModal(`Detalhe da OS #${os.numero_os||''}`, html, '860px');
+  showModal(`Pedido #${os.numero_pedido||'—'} · OS #${os.numero_os||''}`, html, '860px');
   if (isOffset) { renderViasOS(); popularCombosFicha(os); }
   renderRequisicaoOS(os);
   osDetalheTab(isOffset ? 'producao' : 'requisicao');

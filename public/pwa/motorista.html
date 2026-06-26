@@ -123,7 +123,7 @@
     async function loadOSs() {
       const token = getToken();
       try {
-        const resp = await fetch('/api/v2/os?status=pronto&limit=100', {
+        const resp = await fetch('/api/v2/os?status=entrega&limit=100', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (!resp.ok) { showToast('Erro ao carregar OSs', 'error'); return; }

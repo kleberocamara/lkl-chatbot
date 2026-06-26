@@ -1,7 +1,7 @@
 const db = require('../db');
 const { processMessage } = require('../ai/agent');
 const { sendMessage, markAsRead, downloadMedia } = require('../services/whatsapp');
-const { processarRespostaArte } = require('../modules/os/service');
+const { responderArteItem } = require('../modules/orcamentos/service');
 const { notifyAnalyst } = require('../services/email');
 const { log } = require('../services/logger');
 
@@ -83,12 +83,12 @@ async function handleInboundMessage(phone, profileName, messageText, waMessageId
     metadata: { message: messageText.substring(0, 100) },
   });
 
-  // Intercepta resposta de aprovação de arte (antes de qualquer outro fluxo)
-  const respostaArte = await processarRespostaArte(phone, messageText);
+  // Intercepta resposta de aprovação de arte do item do orçamento (antes de qualquer outro fluxo)
+  const respostaArte = await responderArteItem(phone, messageText);
   if (respostaArte) {
     await sendMessage(phone, respostaArte.resposta);
     await saveMessage(conversation.id, contact.id, respostaArte.resposta, 'outbound', null, 'system');
-    if (global.io) global.io.emit('arte_' + (respostaArte.aprovado ? 'aprovada' : 'reprovada'), { os_id: respostaArte.os_id });
+    if (global.io) global.io.emit('arte_' + (respostaArte.aprovado ? 'aprovada' : 'reprovada'), { item_id: respostaArte.item_id });
     return;
   }
 

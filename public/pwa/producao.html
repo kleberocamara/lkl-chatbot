@@ -14,28 +14,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tabs { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; }
 .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
 .tab.active { color: #1a237e; border-bottom-color: #1a237e; }
-.content { padding: 16px; }
-.card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-.card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.card-os { font-weight: 700; font-size: 15px; color: #1a237e; }
-.card-orc { font-size: 13px; color: #888; }
-.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: auto; }
-.badge-aguardando { background: #f5f5f5; color: #555; }
-.badge-arte_final { background: #e8eaf6; color: #3949ab; }
-.badge-impressao { background: #e3f2fd; color: #0277bd; }
-.badge-acabamento { background: #fff3e0; color: #e65100; }
-.badge-embalagem { background: #f3e5f5; color: #6a1b9a; }
-.badge-pronto { background: #e8f5e9; color: #2e7d32; }
-.badge-entregue { background: #1a237e; color: #fff; }
-.card-desc { font-size: 16px; font-weight: 600; color: #212121; margin-bottom: 8px; }
-.card-info { font-size: 13px; color: #666; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
-.card-info span { background: #f5f5f5; padding: 3px 8px; border-radius: 6px; }
-.btn-advance { width: 100%; padding: 14px; background: #1a237e; color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+.board { display: flex; gap: 12px; padding: 16px; overflow-x: auto; min-height: calc(100vh - 120px); align-items: flex-start; }
+.column { flex: 0 0 260px; background: #e9ebf0; border-radius: 12px; padding: 10px; }
+.column-header { font-size: 13px; font-weight: 700; color: #444; padding: 6px 4px 10px; display: flex; align-items: center; justify-content: space-between; }
+.column-count { background: #1a237e; color: #fff; border-radius: 12px; padding: 1px 8px; font-size: 11px; }
+.card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.card-tipo { font-size: 11px; background: #e3f2fd; color: #0277bd; border-radius: 4px; padding: 2px 6px; display: inline-block; margin: 4px 0; }
+.card-desc { font-size: 13px; font-weight: 600; color: #212121; margin: 4px 0 8px; }
+.btn-advance { width: 100%; padding: 10px; background: #1a237e; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-advance:hover { background: #283593; }
 .btn-advance:disabled { background: #9e9e9e; cursor: not-allowed; }
-.label-entregue { text-align: center; padding: 12px; color: #2e7d32; font-weight: 600; font-size: 15px; }
-.loading { text-align: center; padding: 40px; color: #999; font-size: 14px; }
+.btn-entrega { background: #2e7d32; }
+.btn-entrega:hover { background: #1b5e20; }
+.content { padding: 16px; }
+.done-card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.timeline { margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
+.tl-item { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; color: #555; }
+.tl-dot { width: 8px; height: 8px; border-radius: 50%; background: #1a237e; margin-top: 3px; flex-shrink: 0; }
 .empty { text-align: center; padding: 40px; color: #999; font-size: 14px; }
+.loading { text-align: center; padding: 40px; color: #999; font-size: 14px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; max-width: 90vw; }
 .toast.show { opacity: 1; }
 </style>
@@ -52,7 +49,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tab" id="tab-concluidas" onclick="switchTab('concluidas')">Concluídas</div>
 </div>
 
-<div class="content" id="content">
+<div id="main-content">
   <div class="loading">Carregando...</div>
 </div>
 
@@ -62,36 +59,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 import { requireAuth, api, logout, getUser } from '/pwa/app.js';
 window.logout = logout;
 
-const NEXT_STATUS = {
-  aguardando: 'arte_final',
-  arte_final: 'impressao',
-  impressao: 'acabamento',
-  acabamento: 'embalagem',
-  embalagem: 'pronto',
-  pronto: 'entregue',
+const FLUXO = {
+  offset:             ['corte','impressao','acabamento','entrega'],
+  comunicacao_visual: ['impressao','acabamento','entrega'],
 };
-
-const NEXT_LABEL = {
-  aguardando: '▶ Iniciar Arte Final',
-  arte_final: '▶ Enviar para Impressão',
-  impressao: '▶ Iniciar Acabamento',
-  acabamento: '▶ Enviar para Embalagem',
-  embalagem: '▶ Marcar como Pronto',
-  pronto: '▶ Confirmar Entrega',
-};
-
-const STATUS_LABEL = {
-  aguardando: 'Aguardando',
-  arte_final: 'Arte Final',
-  impressao: 'Impressão',
-  acabamento: 'Acabamento',
-  embalagem: 'Embalagem',
-  pronto: 'Pronto',
-  entregue: 'Entregue',
-};
-
-const IN_PROGRESS = new Set(['aguardando','arte_final','impressao','acabamento','embalagem']);
-const DONE = new Set(['pronto','entregue']);
+const FASE_LABEL = { corte:'Corte', impressao:'Impressão', acabamento:'Acabamento', entrega:'Entrega', entregue:'Entregue' };
+const ALL_PHASES = ['corte','impressao','acabamento','entrega'];
+const IN_PROGRESS = new Set(['corte','impressao','acabamento','entrega']);
+const TIPO_LABEL = { offset:'Offset', comunicacao_visual:'CV' };
 
 let allOS = [];
 let activeTab = 'andamento';
@@ -103,65 +78,109 @@ function showToast(msg, duration = 2500) {
   setTimeout(() => t.classList.remove('show'), duration);
 }
 
+function proximaFase(tipo_servico, statusAtual) {
+  const fases = FLUXO[tipo_servico];
+  if (!fases) return null;
+  if (statusAtual === 'entrega') return 'entregue';
+  const idx = fases.indexOf(statusAtual);
+  if (idx === -1 || idx === fases.length - 1) return null;
+  return fases[idx + 1];
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 async function loadOS() {
   try {
-    const res = await api('/api/v2/os?limit=100');
+    const res = await api('/api/v2/os?limit=200');
     allOS = res.data || [];
     render();
   } catch (e) {
-    document.getElementById('content').innerHTML = '<div class="empty">Erro ao carregar OSs.</div>';
+    document.getElementById('main-content').innerHTML = '<div class="empty">Erro ao carregar OSs.</div>';
   }
 }
 
 function render() {
-  const filtered = allOS.filter(os => {
-    if (activeTab === 'andamento') return IN_PROGRESS.has(os.status);
-    if (activeTab === 'concluidas') return DONE.has(os.status);
-    return false;
-  });
+  if (activeTab === 'andamento') renderBoard();
+  else renderConcluidas();
+}
 
-  const content = document.getElementById('content');
+function renderBoard() {
+  const inProgress = allOS.filter(os => IN_PROGRESS.has(os.status));
 
-  if (filtered.length === 0) {
-    const msg = activeTab === 'andamento' ? 'Nenhuma OS em andamento.' : 'Nenhuma OS concluída.';
-    content.innerHTML = `<div class="empty">${msg}</div>`;
-    return;
-  }
-
-  content.innerHTML = filtered.map(os => {
-    const badgeClass = `badge-${os.status}`;
-    const statusLabel = STATUS_LABEL[os.status] || os.status;
-    const nextStatus = NEXT_STATUS[os.status];
-    const nextLabel = NEXT_LABEL[os.status];
-
-    const infoParts = [];
-    if (os.quantidade) infoParts.push(`Qtde: ${os.quantidade}`);
-    if (os.tipo_insumo) infoParts.push(os.tipo_insumo);
-    if (os.cores) infoParts.push(`Cores: ${os.cores}`);
-
-    const infoHtml = infoParts.length
-      ? `<div class="card-info">${infoParts.map(p => `<span>${p}</span>`).join('')}</div>`
-      : '';
-
-    let actionHtml = '';
-    if (os.status === 'entregue') {
-      actionHtml = `<div class="label-entregue">✅ Entregue</div>`;
-    } else if (nextStatus) {
-      actionHtml = `<button class="btn-advance" onclick="advanceOS(${os.id}, '${nextStatus}', this)">${nextLabel}</button>`;
-    }
-
+  const columnsHtml = ALL_PHASES.map(fase => {
+    const cards = inProgress.filter(os => os.status === fase);
+    const cardsHtml = cards.length === 0
+      ? '<div style="font-size:12px;color:#aaa;text-align:center;padding:8px">Vazio</div>'
+      : cards.map(os => {
+          const tipo = os.tipo_servico || '';
+          const proximo = proximaFase(tipo, os.status);
+          const isEntrega = os.status === 'entrega';
+          const btnLabel = isEntrega ? '✅ Confirmar Entrega' : `✓ Concluir ${FASE_LABEL[os.status] || os.status}`;
+          const btnClass = isEntrega ? 'btn-advance btn-entrega' : 'btn-advance';
+          const btnHtml = proximo
+            ? `<button class="${btnClass}" onclick="avancar('${os.id}', this)">${btnLabel}</button>`
+            : '';
+          return `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong style="font-size:14px;color:#1a237e">OS #${os.numero_os}</strong>
+              <span style="font-size:12px;color:#888">ORC #${os.numero_orcamento || '—'}</span>
+            </div>
+            <span class="card-tipo">${escHtml(TIPO_LABEL[tipo] || tipo)}</span>
+            <div class="card-desc">${escHtml(os.item_descricao || '—')}</div>
+            ${os.cliente_nome ? `<div style="font-size:12px;color:#666;margin-bottom:8px">${escHtml(os.cliente_nome)}</div>` : ''}
+            ${btnHtml}
+          </div>`;
+        }).join('');
     return `
-    <div class="card">
-      <div class="card-header">
-        <span class="card-os">OS #${os.numero_os}</span>
-        <span class="card-orc">ORC #${os.numero_orcamento || '-'}</span>
-        <span class="badge ${badgeClass}">${statusLabel}</span>
+    <div class="column">
+      <div class="column-header">
+        ${FASE_LABEL[fase]}
+        <span class="column-count">${cards.length}</span>
       </div>
-      <div class="card-desc">${os.item_descricao || '—'}</div>
-      ${infoHtml}
-      ${actionHtml}
+      ${cardsHtml}
     </div>`;
   }).join('');
+
+  document.getElementById('main-content').innerHTML = inProgress.length === 0
+    ? '<div class="empty">Nenhuma OS em andamento.</div>'
+    : `<div class="board">${columnsHtml}</div>`;
+}
+
+async function renderConcluidas() {
+  const done = allOS.filter(os => os.status === 'entregue');
+  const container = document.getElementById('main-content');
+  if (done.length === 0) {
+    container.innerHTML = '<div class="empty">Nenhuma OS concluída.</div>';
+    return;
+  }
+  container.innerHTML = '<div class="content"><div class="loading">Carregando histórico...</div></div>';
+
+  const cards = await Promise.all(done.map(async os => {
+    let timeline = '';
+    try {
+      const hist = await api(`/api/v2/os/${os.id}/historico`);
+      timeline = hist.map(h => {
+        const de = h.de_status ? `${FASE_LABEL[h.de_status] || h.de_status} → ` : '';
+        const para = FASE_LABEL[h.para_status] || h.para_status;
+        const em = new Date(h.em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        return `<div class="tl-item"><div class="tl-dot"></div><span>${de}${para} — ${em}${h.usuario_nome ? ' · ' + escHtml(h.usuario_nome) : ''}</span></div>`;
+      }).join('');
+    } catch (e) {}
+    return `
+    <div class="done-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="color:#1a237e">OS #${os.numero_os}</strong>
+        <span style="background:#1a237e;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px">Entregue</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${escHtml(os.item_descricao || '—')}</div>
+      ${os.cliente_nome ? `<div style="font-size:12px;color:#666">${escHtml(os.cliente_nome)}</div>` : ''}
+      ${timeline ? `<div class="timeline">${timeline}</div>` : ''}
+    </div>`;
+  }));
+  container.innerHTML = `<div class="content">${cards.join('')}</div>`;
 }
 
 window.switchTab = function(tab) {
@@ -171,14 +190,14 @@ window.switchTab = function(tab) {
   render();
 };
 
-window.advanceOS = async function(id, nextStatus, btn) {
+window.avancar = async function(id, btn) {
   btn.disabled = true;
   try {
-    await api(`/api/v2/os/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
-    showToast('Status atualizado!');
+    await api(`/api/v2/os/${id}/avancar`, { method: 'PATCH' });
+    showToast('Fase avançada!');
     await loadOS();
   } catch (e) {
-    showToast('Erro ao atualizar status.');
+    showToast('Erro ao avançar fase.');
     btn.disabled = false;
   }
 };
@@ -186,7 +205,7 @@ window.advanceOS = async function(id, nextStatus, btn) {
 async function init() {
   await requireAuth();
   const user = getUser();
-  if (!user || !['admin','operador','atendente'].includes(user.role)) {
+  if (!user || !['admin','operador','atendente','gestor','analista'].includes(user.role)) {
     window.location.href = '/pwa/login.html';
     return;
   }

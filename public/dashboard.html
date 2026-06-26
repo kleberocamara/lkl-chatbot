@@ -474,6 +474,12 @@
     <div id="arte-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
   </div>
 
+  <!-- ARTES -->
+  <div class="page" id="page-artes">
+    <div class="page-header"><h1>🎨 Artes</h1><span style="font-size:13px;color:#888">Envie a arte de cada item e acompanhe a aprovação do cliente</span></div>
+    <div id="artes-list" style="margin-top:12px">Carregando...</div>
+  </div>
+
   <!-- PRODUÇÃO (mobile) -->
   <div class="page" id="page-producao">
     <div class="placeholder-page">
@@ -777,6 +783,7 @@ function buildSidebar(role) {
     { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
       { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },
       { id: 'arte_final', label: 'Arte Final',           icon: '🎨', roles: ['admin','gestor','analista'] },
+      { id: 'artes',      label: 'Artes',                icon: '🎨', roles: ['admin','gestor','atendente','analista'] },
       { id: 'producao',   label: 'Produção',             icon: '🏭', roles: ['admin','gestor','analista','operador'] },
       { id: 'entregas',   label: 'Motorista / Entregas', icon: '🚚', roles: ['admin','gestor','analista','operador'] },
     ]},
@@ -968,6 +975,7 @@ function showPage(page, el) {
     nfe:          () => loadNfeMain(),
     cobrancas:    () => loadCobrancasMain(),
     analises:     () => loadAnalisesMain(),
+    artes:        loadArtes,
   };
   if (loaders[page]) loaders[page]();
   renderSubnav(page);
@@ -1777,6 +1785,41 @@ async function loadArteFinalMain() {
       <td style="font-size:12px;color:#888">${o.responsavel_nome||'—'}</td>
       <td><a href="/pwa/arte_final.html" target="_blank" class="btn btn-outline" style="font-size:12px;padding:4px 10px">Gerenciar</a></td>
     </tr>`).join('')}</tbody></table></div>`;
+}
+
+// ── ARTES ──────────────────────────────────────────────────────────────────────
+async function loadArtes() {
+  const box = document.getElementById('artes-list');
+  if (!box) return;
+  const r = await api('/api/v2/orcamentos/artes/pendentes');
+  const itens = r?.data || [];
+  if (!itens.length) { box.innerHTML = '<p style="color:#999;padding:24px;text-align:center">Nenhuma arte pendente. 🎉</p>'; return; }
+  const badge = (s) => {
+    const m = { pendente:['#9ca3af','Pendente'], enviada:['#f59e0b','Enviada — aguardando cliente'], reprovada:['#ef4444','Ajustes pedidos'] }[s] || ['#64748b', s];
+    return `<span style="background:${m[0]};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${m[1]}</span>`;
+  };
+  box.innerHTML = itens.map(it => `
+    <div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px">
+        <div style="font-weight:600">Pedido #${it.pedido_numero||'—'} · ${escHtml(it.produto||it.descricao||'item')}</div>
+        <div style="font-size:12px;color:#888">${escHtml(it.cliente_nome||'—')} · Orç #${it.numero_orcamento} ${it.arte_comentario ? '· 💬 '+escHtml(it.arte_comentario) : ''}</div>
+      </div>
+      ${badge(it.arte_status)}
+      <label class="btn btn-primary" style="font-size:12px;padding:6px 12px;cursor:pointer;margin:0">
+        ${it.arte_status==='enviada' ? '↻ Reenviar arte' : '⬆ Enviar arte'}
+        <input type="file" accept="image/*" style="display:none" onchange="enviarArteItemUI('${it.orcamento_id}','${it.id}', this)">
+      </label>
+    </div>`).join('');
+}
+
+async function enviarArteItemUI(orcId, itemId, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const fd = new FormData(); fd.append('arte', file);
+  const res = await fetch(`/api/v2/orcamentos/${orcId}/itens/${itemId}/arte`, { method:'POST', credentials:'include', body: fd });
+  const j = await res.json().catch(()=>({}));
+  if (res.ok && !j.error) { showToast('🎨 Arte enviada ao cliente'); loadArtes(); }
+  else { showToast('❌ ' + (j.error || (j.errors||[]).join(', ') || 'Falha ao enviar arte')); }
 }
 
 // ── CONTAS A PAGAR ─────────────────────────────────────────────────────────────

@@ -327,6 +327,7 @@ async function criarOSComunicacaoVisual(orcamentoId) {
      FROM orcamento_itens oi
      WHERE oi.orcamento_id = $1
        AND oi.tipo_producao = 'COMUNICAÇÃO VISUAL'
+       AND oi.arte_status = 'aprovada'
        AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)`,
     [orcamentoId]
   );
@@ -360,6 +361,7 @@ async function itensOffsetDisponiveis() {
      LEFT JOIN clientes_lkl cl ON cl.id = orc.cliente_id
      WHERE orc.status = 'aprovado'
        AND oi.tipo_producao = 'OFFSET'
+       AND oi.arte_status = 'aprovada'
        AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)
      ORDER BY cl.nome, orc.numero, oi.codigo`
   );
@@ -373,7 +375,7 @@ async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produt
   const val = await db.query(
     `SELECT oi.id, oi.quantidade, orc.cliente_id
      FROM orcamento_itens oi JOIN orcamentos orc ON orc.id = oi.orcamento_id
-     WHERE oi.id = ANY($1) AND orc.status='aprovado' AND oi.tipo_producao='OFFSET'
+     WHERE oi.id = ANY($1) AND orc.status='aprovado' AND oi.tipo_producao='OFFSET' AND oi.arte_status='aprovada'
        AND NOT EXISTS (SELECT 1 FROM os_itens oit WHERE oit.orcamento_item_id = oi.id)`,
     [item_ids]
   );

@@ -10,7 +10,11 @@ CREATE TABLE IF NOT EXISTS os_historico (
 
 CREATE INDEX IF NOT EXISTS idx_os_historico_os_id ON os_historico(os_id);
 
--- Remap legacy statuses on existing OS rows
+-- Replace legacy status check constraint with canonical statuses
+-- Canonical statuses: corte, impressao, acabamento, entrega, entregue, cancelado
+ALTER TABLE ordens_servico DROP CONSTRAINT IF EXISTS ordens_servico_status_check;
+
+-- Remap legacy statuses on existing OS rows (must run before adding new constraint)
 UPDATE ordens_servico
 SET status = CASE
   WHEN status IN ('embalagem', 'pronto') THEN 'entrega'
@@ -22,3 +26,7 @@ SET status = CASE
   ELSE status
 END
 WHERE status IN ('embalagem','pronto','arte_final','aguardando_aprovacao_arte','aguardando');
+
+-- Add new constraint with canonical statuses only
+ALTER TABLE ordens_servico ADD CONSTRAINT ordens_servico_status_check
+  CHECK (status IN ('corte','impressao','acabamento','entrega','entregue','cancelado'));

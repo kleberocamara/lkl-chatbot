@@ -340,14 +340,14 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
       if (!orc?.cliente_celular) return;
       let msg;
       if (result.tipo === 'boleto') {
-        msg = `Olá! Segue o boleto referente ao *ORC #${orc.numero}* — Gráfica LKL.\n\n` +
+        msg = `Olá! Segue o boleto referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +
               `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n` +
               `📅 *Vencimento:* ${new Date(result.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
               `*Linha digitável:*\n${result.linhaDigitavel}\n\n` +
               (result.pdfUrl ? `PDF: ${result.pdfUrl}\n\n` : '') +
               `Em caso de dúvidas, entre em contato conosco. Obrigado! 😊`;
       } else {
-        msg = `Olá! Segue a cobrança PIX referente ao *ORC #${orc.numero}* — Gráfica LKL.\n\n` +
+        msg = `Olá! Segue a cobrança PIX referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +
               `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n\n` +
               `*PIX Copia e Cola:*\n${result.pixCopiaECola}\n\n` +
               `Cole o código no app do seu banco para pagar. Obrigado! 😊`;

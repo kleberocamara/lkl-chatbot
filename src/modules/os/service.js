@@ -11,7 +11,8 @@ async function enviarArte(id, { arquivo_url }) {
 
   const existing = await db.query(
     `SELECT os.*, c.celular AS cliente_celular, c.nome AS cliente_nome,
-            o.numero AS numero_orcamento
+            o.numero AS numero_orcamento,
+            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido
      FROM ordens_servico os
      LEFT JOIN orcamentos o ON o.id = os.orcamento_id
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
@@ -33,7 +34,7 @@ async function enviarArte(id, { arquivo_url }) {
   );
 
   // Envia imagem via WhatsApp (fire-and-forget)
-  const msg = `Olá! Segue a arte para aprovação do pedido *ORC #${os.numero_orcamento}* (OS #${os.numero_os}).\n\nResponda *APROVADO* para confirmar ou envie suas alterações.`;
+  const msg = `Olá! Segue a arte para aprovação do *Pedido #${os.numero_pedido || os.numero_orcamento}*.\n\nResponda *APROVADO* para confirmar ou envie suas alterações.`;
   whatsapp.sendImage(os.cliente_celular, publicUrl, msg).catch(e =>
     console.warn('[WA-ARTE] Falha ao enviar imagem:', e.message)
   );
@@ -44,7 +45,8 @@ async function enviarArte(id, { arquivo_url }) {
 async function processarRespostaArte(phone, mensagem) {
   const celular = phone.replace(/\D/g, '');
   const osPendente = await db.query(
-    `SELECT os.id, os.numero_os, os.orcamento_id, o.numero AS numero_orcamento
+    `SELECT os.id, os.numero_os, os.orcamento_id, o.numero AS numero_orcamento,
+            (SELECT numero_os FROM orders WHERE orcamento_id = os.orcamento_id ORDER BY created_at LIMIT 1) AS numero_pedido
      FROM ordens_servico os
      LEFT JOIN orcamentos o ON o.id = os.orcamento_id
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
@@ -76,7 +78,7 @@ async function processarRespostaArte(phone, mensagem) {
         data: { os_id: os.id, status: 'impressao' },
       }).catch(() => {});
     }
-    return { aprovado: true, os_id: os.id, numero_os: os.numero_os, resposta: `Arte aprovada! ✅ Seu pedido OS #${os.numero_os} seguiu para impressão. Entraremos em contato quando estiver pronto. 🖨️` };
+    return { aprovado: true, os_id: os.id, numero_os: os.numero_os, resposta: `Arte aprovada! ✅ Seu *Pedido #${os.numero_pedido || os.numero_os}* seguiu para impressão. Entraremos em contato quando estiver pronto. 🖨️` };
   } else {
     await db.query(
       `UPDATE ordens_servico

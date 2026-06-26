@@ -66,7 +66,7 @@ async function notifyAnalyst({ contact, conversation, orderDetails }) {
   });
 }
 
-async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, total, validade_dias, prazo_entrega, itens, token, pdfBuffer }) {
+async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, numeroPedido, total, validade_dias, prazo_entrega, itens, token, pdfBuffer }) {
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
   const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${token}&r=aprovado`;
   const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${token}&r=reprovado`;
@@ -156,7 +156,7 @@ async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, total
   await transporter.sendMail({
     from: `"Gráfica LKL" <${process.env.SMTP_USER}>`,
     to: clienteEmail,
-    subject: `Orçamento Gráfica LKL #${numero} — aguardando sua aprovação`,
+    subject: `Pedido Gráfica LKL #${numeroPedido || numero} — aguardando sua aprovação`,
     html,
     attachments,
   });

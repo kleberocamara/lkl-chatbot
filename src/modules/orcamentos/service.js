@@ -321,7 +321,7 @@ async function _dispararNotificacoesEnvio(orc) {
   if (orc.cliente_celular) {
     const msg =
       `Olá, ${orc.cliente_nome || 'cliente'}! 🖨\n\n` +
-      `A Gráfica LKL preparou seu *Orçamento #${orc.numero}* no valor de *${totalFmt}*.\n\n` +
+      `A Gráfica LKL preparou seu *Pedido #${orc.pedido_numero || orc.numero}* no valor de *${totalFmt}*.\n\n` +
       `Prazo de entrega: ${orc.prazo_entrega || 'a combinar'}\n` +
       `Validade: ${orc.validade_dias || 30} dias\n\n` +
       `Para aprovar, responda *SIM*.\n` +
@@ -344,6 +344,7 @@ async function _dispararNotificacoesEnvio(orc) {
       clienteNome:   orc.cliente_nome,
       clienteEmail:  orc.cliente_email,
       numero:        orc.numero,
+      numeroPedido:  orc.pedido_numero,
       total:         orc.total,
       validade_dias: orc.validade_dias,
       prazo_entrega: orc.prazo_entrega,
@@ -382,7 +383,8 @@ async function processarRespostaWA(phone, texto) {
 
   const { rows } = await db.query(
     `SELECT oc.orcamento_id, oc.aguardando_confirmacao, oc.ultima_intencao,
-            o.numero, o.total, o.status
+            o.numero, o.total, o.status,
+            (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero
      FROM orcamento_confirmacao_wa oc
      JOIN orcamentos o ON o.id = oc.orcamento_id
      WHERE oc.phone = $1 AND oc.expires_at > NOW()`,
@@ -390,12 +392,13 @@ async function processarRespostaWA(phone, texto) {
   );
   if (!rows.length) return null;
 
-  const { orcamento_id, aguardando_confirmacao, ultima_intencao, numero, total, status } = rows[0];
+  const { orcamento_id, aguardando_confirmacao, ultima_intencao, numero, total, status, pedido_numero } = rows[0];
+  const refPedido = pedido_numero || numero;
   const totalFmt = `R$ ${parseFloat(total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
 
   if (status !== 'enviado') {
     await db.query('DELETE FROM orcamento_confirmacao_wa WHERE phone=$1', [phone]);
-    return { mensagem: `O Orçamento #${numero} já está *${status}*. Obrigado!` };
+    return { mensagem: `O Pedido #${refPedido} já está *${status}*. Obrigado!` };
   }
 
   if (!aguardando_confirmacao) {
@@ -410,7 +413,7 @@ async function processarRespostaWA(phone, texto) {
     );
     return {
       mensagem:
-        `Confirmando: deseja *${verbo}* o Orçamento *#${numero}* no valor de *${totalFmt}*?\n\n` +
+        `Confirmando: deseja *${verbo}* o Pedido *#${refPedido}* no valor de *${totalFmt}*?\n\n` +
         `Responda *SIM* para confirmar ou *NÃO* para cancelar.`,
     };
   }
@@ -421,7 +424,7 @@ async function processarRespostaWA(phone, texto) {
   if (isSim) {
     await mudarStatus(orcamento_id, ultima_intencao, { [`${ultima_intencao}_via`]: 'whatsapp' });
     const verboPassado = ultima_intencao === 'aprovado' ? 'aprovado' : 'reprovado';
-    return { mensagem: `✅ Orçamento #${numero} *${verboPassado}* com sucesso! Obrigado, em breve entraremos em contato.` };
+    return { mensagem: `✅ Pedido #${refPedido} *${verboPassado}* com sucesso! Obrigado, em breve entraremos em contato.` };
   } else {
     return { mensagem: `Ok! Nenhuma alteração feita. Se precisar de ajuda, fale com nossa equipe.` };
   }

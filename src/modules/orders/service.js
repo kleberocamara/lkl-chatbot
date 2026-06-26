@@ -1,11 +1,14 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
-const { tipoPorProduto, parseDimensoes } = require('../../constants/produtos');
+const { tipoPorProduto, parseDimensoes, selecionarMaterialId } = require('../../constants/produtos');
 
 async function _resolverMaterialId(nome) {
   const termo = String(nome || '').trim();
   if (!termo) return null;
   try {
+    const todos = await db.query('SELECT id, nome FROM materiais WHERE status=$1', ['ativo']);
+    const porTokens = selecionarMaterialId(todos.rows, termo);
+    if (porTokens) return porTokens;
     const exato = await db.query('SELECT id FROM materiais WHERE status=$1 AND nome ILIKE $2 ORDER BY nome LIMIT 1', ['ativo', termo]);
     if (exato.rows[0]) return exato.rows[0].id;
     const parcial = await db.query('SELECT id FROM materiais WHERE status=$1 AND nome ILIKE $2 ORDER BY nome LIMIT 1', ['ativo', `%${termo}%`]);

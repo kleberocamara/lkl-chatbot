@@ -1,8 +1,9 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
 const whatsapp = require('../../services/whatsapp');
+const { proximaFase } = require('../../constants/fluxoProducao');
 
-const STATUS_VALIDOS = ['aguardando', 'arte_final', 'aguardando_aprovacao_arte', 'impressao', 'acabamento', 'embalagem', 'pronto', 'entregue', 'cancelado'];
+const STATUS_VALIDOS = ['corte', 'impressao', 'acabamento', 'entrega', 'entregue', 'cancelado'];
 
 const APROVACAO_KEYWORDS = ['aprovado', 'aprovada', 'aprovo', 'ok', 'sim', 'pode', 'confirmo', 'certo', 'perfeito', 'ótimo', 'otimo', 'aceito', 'gostei', 'ficou bom', 'ficou ótimo'];
 
@@ -94,6 +95,97 @@ async function processarRespostaArte(phone, mensagem) {
     );
     return { aprovado: false, os_id: os.id, numero_os: os.numero_os, resposta: `Anotado! ✏️ Nosso time de arte vai realizar as alterações e enviará uma nova versão em breve.` };
   }
+}
+
+async function avancarFase(osId, userId) {
+  const osR = await db.query(
+    'SELECT id, numero_os, status, tipo_servico, orcamento_id, data_inicio FROM ordens_servico WHERE id=$1',
+    [osId]
+  );
+  if (!osR.rows[0]) return { erro: ['OS não encontrada'] };
+  const os = osR.rows[0];
+
+  const proximo = proximaFase(os.tipo_servico, os.status);
+  if (!proximo) {
+    return { erro: [`OS já está em fase terminal (${os.status}) ou tipo de serviço desconhecido`] };
+  }
+
+  const updates = ['status=$1', 'updated_at=NOW()'];
+  const params = [proximo];
+
+  const firstPhases = new Set(['corte', 'impressao']);
+  if (firstPhases.has(proximo) && !os.data_inicio) {
+    updates.push('data_inicio=NOW()');
+  }
+  if (proximo === 'entregue') {
+    updates.push('data_conclusao=NOW()');
+  }
+
+  params.push(osId);
+  const r = await db.query(
+    `UPDATE ordens_servico SET ${updates.join(', ')} WHERE id=$${params.length} RETURNING *`,
+    params
+  );
+  const updatedOs = r.rows[0];
+
+  db.query(
+    `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
+    [osId, os.status, proximo, userId || null]
+  ).catch(e => console.warn('[OS-HIST]', e.message));
+
+  if (proximo === 'impressao' && os.status !== 'impressao') {
+    baixarMateriais(osId, { userId }).catch(e =>
+      console.warn('[OS-3C avancarFase]', e.message)
+    );
+  }
+
+  if (proximo === 'entregue' && os.orcamento_id) {
+    db.query(
+      `SELECT COUNT(*) FROM ordens_servico WHERE orcamento_id=$1 AND status NOT IN ('entregue','cancelado')`,
+      [os.orcamento_id]
+    ).then(pendingR => {
+      if (parseInt(pendingR.rows[0].count) === 0 && global.io) {
+        global.io.emit('servico_concluido', { orcamento_id: os.orcamento_id });
+      }
+    }).catch(() => {});
+  }
+
+  const fcmLabels = {
+    corte:     'Em corte ✂️',
+    impressao: 'Em impressão 🖨️',
+    acabamento:'Em acabamento ✂️',
+    entrega:   'Pronto para entrega 📦',
+    entregue:  'Entregue 🎉',
+  };
+  const label = fcmLabels[proximo];
+  if (label && os.orcamento_id) {
+    db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [os.orcamento_id])
+      .then(orcR => {
+        if (orcR.rows[0]?.vendedor_id) {
+          fcm.sendToUser(orcR.rows[0].vendedor_id, {
+            title: `ORC #${orcR.rows[0].numero} — ${label}`,
+            body: `OS #${updatedOs.numero_os} atualizada`,
+            data: { os_id: osId, orcamento_id: os.orcamento_id, status: proximo },
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+  }
+
+  if (global.io) global.io.emit('os_status', { os_id: osId, status: proximo });
+
+  return { os: updatedOs };
+}
+
+async function historico(osId) {
+  const r = await db.query(
+    `SELECT h.id, h.de_status, h.para_status, h.em, u.name AS usuario_nome
+     FROM os_historico h
+     LEFT JOIN users u ON u.id = h.usuario_id
+     WHERE h.os_id = $1
+     ORDER BY h.em ASC`,
+    [osId]
+  );
+  return r.rows;
 }
 
 async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
@@ -211,7 +303,7 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
   const updates = ['status = $1', 'updated_at = NOW()'];
   const params = [novoStatus];
 
-  if (novoStatus === 'arte_final' || novoStatus === 'impressao') {
+  if (['corte', 'impressao'].includes(novoStatus)) {
     updates.push('data_inicio = COALESCE(data_inicio, NOW())');
   }
   if (novoStatus === 'entregue') {
@@ -252,11 +344,11 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
 
   // Send FCM push to vendedor
   const labels = {
+    corte:     'Em corte ✂️',
     impressao: 'Em impressão 🖨️',
-    acabamento: 'Em acabamento ✂️',
-    embalagem: 'Em embalagem 📦',
-    pronto: 'Pronto ✅',
-    entregue: 'Entregue 🎉',
+    acabamento:'Em acabamento ✂️',
+    entrega:   'Pronto para entrega 📦',
+    entregue:  'Entregue 🎉',
   };
   const label = labels[novoStatus];
   if (label) {
@@ -271,6 +363,11 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
     }
   }
 
+  db.query(
+    `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
+    [id, os.status, novoStatus, responsavel_id || null]
+  ).catch(e => console.warn('[OS-HIST atualizarStatus]', e.message));
+
   return { os: updatedOs };
 }
 
@@ -284,14 +381,19 @@ async function entregar(id, { nome_recebedor, foto_url }) {
     `UPDATE ordens_servico
      SET status='entregue', entrega_nome_recebedor=$1, entrega_foto_url=$2,
          data_conclusao=NOW(), updated_at=NOW()
-     WHERE id=$3 AND status='pronto'
+     WHERE id=$3 AND status='entrega'
      RETURNING *`,
     [nome_recebedor.trim(), foto_url, id]
   );
   if (!r.rows[0])
-    return { erro: ['OS não encontrada ou não está no status "pronto"'] };
+    return { erro: ['OS não encontrada ou não está no status "entrega"'] };
 
   const os = r.rows[0];
+
+  db.query(
+    `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
+    [id, 'entrega', 'entregue', null]
+  ).catch(e => console.warn('[OS-HIST entregar]', e.message));
 
   // Check if all OSs of this orcamento are done
   const pendentes = await db.query(
@@ -339,10 +441,16 @@ async function criarOSComunicacaoVisual(orcamentoId) {
 
   const osR = await db.query(
     `INSERT INTO ordens_servico (orcamento_id, status, tipo_servico, cliente_id, quantidade)
-     VALUES ($1, 'aguardando', 'comunicacao_visual', $2, $3) RETURNING id, numero_os`,
+     VALUES ($1, 'impressao', 'comunicacao_visual', $2, $3) RETURNING id, numero_os`,
     [orcamentoId, clienteId, qtdTotal]
   );
   const osId = osR.rows[0].id;
+
+  db.query(
+    `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
+    [osId, null, 'impressao', null]
+  ).catch(() => {});
+
   for (const it of itens.rows) {
     await db.query(`INSERT INTO os_itens (os_id, orcamento_item_id) VALUES ($1,$2)`, [osId, it.id]);
   }
@@ -390,10 +498,15 @@ async function criarOSOffset({ item_ids, especificacoes, observacao, tipo_produt
   const osR = await db.query(
     `INSERT INTO ordens_servico
        (status, tipo_servico, tipo_produto, cliente_id, quantidade, previsao_entrega, observacao_interna, responsavel_id)
-     VALUES ('aguardando','offset',$1,$2,$3,$4,$5,$6) RETURNING id, numero_os`,
+     VALUES ('corte','offset',$1,$2,$3,$4,$5,$6) RETURNING id, numero_os`,
     [tipo_produto || null, clienteId, qtdTotal, previsao_entrega || null, observacao || null, userId || null]
   );
   const osId = osR.rows[0].id;
+
+  db.query(
+    `INSERT INTO os_historico (os_id, de_status, para_status, usuario_id) VALUES ($1,$2,$3,$4)`,
+    [osId, null, 'corte', userId || null]
+  ).catch(() => {});
 
   for (const it of val.rows) {
     await db.query(`INSERT INTO os_itens (os_id, orcamento_item_id) VALUES ($1,$2)`, [osId, it.id]);
@@ -532,4 +645,4 @@ async function estornarRequisicao(osId, { userId } = {}) {
   }
 }
 
-module.exports = { listar, buscarPorId, atualizarStatus, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset, atualizarFichaProducao, baixarMateriais, estornarRequisicao };
+module.exports = { listar, buscarPorId, atualizarStatus, avancarFase, historico, entregar, enviarArte, processarRespostaArte, criarOSComunicacaoVisual, itensOffsetDisponiveis, criarOSOffset, atualizarFichaProducao, baixarMateriais, estornarRequisicao };

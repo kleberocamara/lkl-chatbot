@@ -1107,7 +1107,7 @@ async function prodAvancar(osId, btn) {
     await api(`/api/v2/os/${osId}/avancar`, { method: 'PATCH' });
     await loadProdBoard();
   } catch(e) {
-    alert('Erro ao avançar fase: ' + (e.message||e));
+    showToast('Erro ao avançar fase: ' + (e.message||e));
     btn.disabled = false;
   }
 }

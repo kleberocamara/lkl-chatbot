@@ -4,6 +4,8 @@ const ordersService = require('../modules/orders/service');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const { calcularOrcamento } = require('../services/quotation');
+const { PRODUTOS } = require('../constants/produtos');
+const PRODUTO_ENUM = PRODUTOS.map(p => p.produto).concat('OUTROS');
 
 const SYSTEM_PROMPT = `Você é o assistente virtual da Gráfica LKL, uma empresa especializada em:
 - Adesivação (paredes, frotas, fachadas)
@@ -71,7 +73,10 @@ REGRAS:
    - Se houver uma marcação "[CLIENTE NA BASE]" no contexto, confirme a identidade pelo nome informado ali ("Vi que você já é cliente como <NOME>. É isso mesmo? 😊"). Se o cliente confirmar, prossiga; se NEGAR (não é essa pessoa/empresa), trate como cliente novo e pergunte o nome.
    - E-mail: se a nota indicar "[CLIENTE NOVO]" ou "[CLIENTE NA BASE] ... sem e-mail", PEÇA o e-mail do cliente. Se a nota trouxer um e-mail cadastrado, CONFIRME se está correto ("Seu e-mail cadastrado é <EMAIL>, está certo? 😊") e atualize se o cliente corrigir. Nunca registre o pedido sem ter tratado o e-mail.
    - Ao chamar registrar_pedido, preencha "email" com o e-mail final e "cliente_existente_confirmado" (true se confirmou o cadastro encontrado, false se negou).
-12. MÚLTIPLOS PRODUTOS — quando o cliente pedir mais de um produto, trate CADA produto como um item separado, com suas próprias dimensões, quantidade, material e arte. No resumo, liste cada item. Ao chamar registrar_pedido, preencha o array "itens" com um objeto por produto. NUNCA junte produtos diferentes num único item.`;
+12. MÚLTIPLOS PRODUTOS — quando o cliente pedir mais de um produto, trate CADA produto como um item separado, com suas próprias dimensões, quantidade, material e arte. No resumo, liste cada item. Ao chamar registrar_pedido, preencha o array "itens" com um objeto por produto. NUNCA junte produtos diferentes num único item.
+13. PRODUTO E MATERIAL — PADRONIZAÇÃO (só para a função registrar_pedido; NÃO muda como você fala com o cliente):
+   - Ao chamar registrar_pedido, o campo "produto" (e o "produto" de cada item em "itens") DEVE ser exatamente um dos valores desta lista oficial: ${PRODUTO_ENUM.join(', ')}. Mapeie o que o cliente pediu para o nome MAIS PRÓXIMO da lista. Se nada se encaixar, use "OUTROS" e descreva o produto em "observacoes".
+   - O campo "material" deve ser um descritor limpo: família + gramatura/acabamento. Ex.: "couchê 90g", "lona 440", "vinil fosco", "cartolina 240g". Não invente material; se o cliente não souber, deixe em branco.`;
 
 const TOOLS = [
   {
@@ -84,7 +89,7 @@ const TOOLS = [
         properties: {
           mensagem_encerramento: { type: 'string', description: 'Mensagem simpática de encerramento — use {NUMERO_PEDIDO} onde deve aparecer o número do pedido' },
           tipo_servico:  { type: 'string' },
-          produto:       { type: 'string' },
+          produto:       { type: 'string', enum: PRODUTO_ENUM, description: 'Um dos valores da lista oficial de produtos LKL (ou OUTROS).' },
           dimensoes:     { type: 'string' },
           quantidade:    { type: 'number' },
           material:      { type: 'string' },
@@ -102,7 +107,7 @@ const TOOLS = [
             items: {
               type: 'object',
               properties: {
-                produto:    { type: 'string' },
+                produto:    { type: 'string', enum: PRODUTO_ENUM },
                 dimensoes:  { type: 'string' },
                 quantidade: { type: 'number' },
                 material:   { type: 'string' },

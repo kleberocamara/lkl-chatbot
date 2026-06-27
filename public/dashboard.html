@@ -1033,7 +1033,10 @@ function prodRender() {
 }
 
 function prodRenderBoard() {
-  const inProg = prodAllOS.filter(os => ['corte','impressao','acabamento','entrega'].includes(os.status));
+  const inProg = prodAllOS.filter(os =>
+    ['corte','impressao','acabamento','entrega'].includes(os.status) &&
+    (os.tipo_servico === 'comunicacao_visual' || os.ficha_pronta)
+  );
   const container = document.getElementById('prod-board-content');
   if (!container) return;
   if (inProg.length === 0) { container.innerHTML = '<p style="color:#999;padding:24px">Nenhuma OS em andamento.</p>'; return; }
@@ -1049,9 +1052,9 @@ function prodRenderBoard() {
           const btnLabel = isEntrega ? '✅ Confirmar Entrega' : `✓ Concluir ${PROD_FASE_LABEL[os.status] || os.status}`;
           const btnColor = isEntrega ? '#2e7d32' : '#1a237e';
           const btn = proximo
-            ? `<button onclick="prodAvancar('${os.id}',this)" style="width:100%;padding:8px;background:${btnColor};color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-top:6px">${btnLabel}</button>`
+            ? `<button onclick="event.stopPropagation();prodAvancar('${os.id}',this)" style="width:100%;padding:8px;background:${btnColor};color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-top:6px">${btnLabel}</button>`
             : '';
-          return `<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+          return `<div onclick="prodAbrirCard('${os.id}')" style="background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer">
             <div style="display:flex;justify-content:space-between"><strong style="font-size:13px;color:#1a237e">OS #${os.numero_os}</strong><span style="font-size:11px;color:#888">ORC #${os.numero_orcamento||'—'}</span></div>
             <span style="font-size:10px;background:#e3f2fd;color:#0277bd;border-radius:4px;padding:1px 5px;display:inline-block;margin:3px 0">${prodEsc(PROD_TIPO_LABEL[tipo]||tipo)}</span>
             <div style="font-size:12px;font-weight:600;margin:2px 0">${prodEsc(os.item_descricao||'—')}</div>
@@ -1109,6 +1112,91 @@ async function prodAvancar(osId, btn) {
   } catch(e) {
     showToast('Erro ao avançar fase: ' + (e.message||e));
     btn.disabled = false;
+  }
+}
+async function prodAbrirCard(osId) {
+  let os;
+  try { os = await api('/api/v2/os/' + osId); }
+  catch (e) { showToast('Erro ao carregar OS'); return; }
+  if (!os || os.error) { showToast('Erro ao carregar OS'); return; }
+
+  const tipo = os.tipo_servico || '';
+  const faseAtual = os.status;
+  const isCV = tipo === 'comunicacao_visual';
+
+  const itens = os.itens || [];
+  const galeria = itens.map(it => {
+    const url = it.arte_arquivo_url;
+    const thumb = url
+      ? `<a href="${prodEsc(url)}" target="_blank" style="display:block"><img src="${prodEsc(url)}" style="width:100px;height:120px;object-fit:cover;border:1px solid #e0e0e0;border-radius:8px" alt=""></a>`
+      : `<div style="width:100px;height:120px;border:1px solid #e0e0e0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:24px">🖼️</div>`;
+    return `<div style="text-align:center;font-size:11px;color:#555">
+      ${thumb}
+      <div style="margin-top:4px;font-weight:600">${prodEsc(it.produto || it.descricao || 'item')}</div>
+      <div style="color:#888">${it.quantidade || ''} un</div>
+    </div>`;
+  }).join('');
+
+  const vias = (os.materiais || []).map(m => `
+    <tr style="border-bottom:1px solid #f0f0f0">
+      <td style="padding:4px 6px">${prodEsc(m.material_nome || m.descricao || '—')}</td>
+      <td style="padding:4px 6px;text-align:right">${m.folhas_a_cortar || '—'}</td>
+      <td style="padding:4px 6px;text-align:right">${m.folhas_total || '—'}</td>
+      <td style="padding:4px 6px;text-align:right">${prodEsc(m.cores_tintas || '—')}</td>
+    </tr>`).join('');
+
+  const acab = (os.especificacoes || []).map(e =>
+    `<span style="font-size:11px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:12px;padding:2px 10px;margin:2px;display:inline-block">${prodEsc(e.nome)}</span>`
+  ).join('') || '<span style="color:#aaa;font-size:12px">Sem acabamentos cadastrados</span>';
+
+  function bloco(fase, titulo, conteudo) {
+    const ativo = fase === faseAtual;
+    return `<div style="border:1px solid ${ativo?'#1a237e':'#eee'};background:${ativo?'#f5f6fc':'#fff'};border-radius:8px;padding:10px;margin-bottom:8px;opacity:${ativo?1:.6}">
+      <div style="font-size:11px;font-weight:700;color:${ativo?'#1a237e':'#999'};letter-spacing:.5px;margin-bottom:6px">${titulo}${ativo?' — AGORA':''}</div>
+      ${conteudo}
+    </div>`;
+  }
+
+  const blocoImpressao = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="color:#888;font-size:11px"><th style="text-align:left;padding:4px 6px">Material</th><th style="text-align:right;padding:4px 6px">A cortar</th><th style="text-align:right;padding:4px 6px">Total</th><th style="text-align:right;padding:4px 6px">Cores</th></tr></thead>
+      <tbody>${vias || '<tr><td colspan="4" style="color:#aaa;padding:6px">Sem vias na ficha</td></tr>'}</tbody>
+    </table>
+    <div style="font-size:11px;color:#666;margin-top:6px">Máquina: ${prodEsc(os.maquina_nome || '—')} · Operador: ${prodEsc(os.operador_nome || '—')} · Total impressões: ${os.total_impressoes || '—'}</div>`;
+
+  const blocoCorte = `<div style="font-size:12px;color:#444">Formato de corte: ${prodEsc(os.formato_corte || '—')} · Imagens por folha: ${os.imagens_folha || '—'}</div>`;
+
+  let blocos = '';
+  if (!isCV) blocos += bloco('corte', 'CORTE', blocoCorte);
+  blocos += bloco('impressao', 'IMPRESSÃO', blocoImpressao);
+  blocos += bloco('acabamento', 'ACABAMENTO', acab);
+
+  const proximo = prodProximaFase(tipo, faseAtual);
+  const btnLabel = faseAtual === 'entrega' ? '✅ Confirmar Entrega' : `✓ Concluir ${PROD_FASE_LABEL[faseAtual] || faseAtual}`;
+  const botao = proximo
+    ? `<button onclick="prodAvancarModal('${os.id}')" style="width:100%;padding:10px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px">${btnLabel}</button>`
+    : '';
+
+  const html = `
+    <div style="font-size:13px;color:#666;margin-bottom:10px">
+      Pedido #${os.numero_pedido || '—'} · ${prodEsc(os.cliente_nome || '—')}
+      <span style="font-size:11px;background:#e3f2fd;color:#0277bd;border-radius:6px;padding:2px 8px;margin-left:6px">${prodEsc(PROD_TIPO_LABEL[tipo] || tipo)}</span>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#999;letter-spacing:.5px;margin-bottom:6px">MODELO (arte aprovada)</div>
+    <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px">${galeria || '<span style="color:#aaa;font-size:12px">Sem itens</span>'}</div>
+    ${blocos}
+    ${botao}`;
+
+  showModal(`OS #${os.numero_os}`, html, '640px');
+}
+
+async function prodAvancarModal(osId) {
+  try {
+    await api('/api/v2/os/' + osId + '/avancar', { method: 'PATCH' });
+    closeModal();
+    await loadProdBoard();
+  } catch (e) {
+    showToast('Erro ao avançar fase: ' + (e.message || e));
   }
 }
 // ===================== END PROD BOARD =====================

@@ -468,12 +468,6 @@
     <div id="os-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
   </div>
 
-  <!-- ARTE FINAL -->
-  <div class="page" id="page-arte_final">
-    <div class="page-header"><h1>🎨 Arte Final</h1><p>Aprovação e envio de artes ao cliente</p></div>
-    <div id="arte-list-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
-  </div>
-
   <!-- ARTES -->
   <div class="page" id="page-artes">
     <div class="page-header"><h1>🎨 Artes</h1><span style="font-size:13px;color:#888">Envie a arte de cada item e acompanhe a aprovação do cliente</span></div>
@@ -786,7 +780,6 @@ function buildSidebar(role) {
     ]},
     { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
       { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },
-      { id: 'arte_final', label: 'Arte Final',           icon: '🎨', roles: ['admin','gestor','analista'] },
       { id: 'artes',      label: 'Artes',                icon: '🎨', roles: ['admin','gestor','atendente','analista'] },
       { id: 'producao',   label: 'Produção',             icon: '🏭', roles: ['admin','gestor','analista','operador'] },
       { id: 'entregas',   label: 'Motorista / Entregas', icon: '🚚', roles: ['admin','gestor','analista','operador'] },
@@ -967,7 +960,6 @@ function showPage(page, el) {
     orcamentos:   loadOrcamentosMain,
     prices:       loadPrices,
     os:           loadOsMain,
-    arte_final:   loadArteFinalMain,
     contas_pagar: () => { showSubPage('cp-lista'); },
     clientes:     () => loadClientesMain(1),
     fornecedores: () => loadFornecedoresMain(1),
@@ -1987,24 +1979,6 @@ async function salvarOSOffset() {
   closeModal();
   showToast(`✅ OS #${r.numero_os} criada com ${r.itens} item(ns)`);
   loadOsMain();
-}
-
-// ── ARTE FINAL ─────────────────────────────────────────────────────────────────
-async function loadArteFinalMain() {
-  const list = document.getElementById('arte-list-main');
-  const res = await api('/api/v2/os?status=arte_final&limit=50');
-  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
-  const rows = res.data || res;
-  if (!rows.length) { list.innerHTML = '<p style="text-align:center;color:#999;padding:40px"><span style="color:#2e7d32">✅ Nenhuma arte pendente</span></p>'; return; }
-  list.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
-    <thead><tr><th>OS</th><th>Cliente</th><th>Descrição</th><th>Responsável</th><th>Ações</th></tr></thead>
-    <tbody>${rows.map(o => `<tr>
-      <td style="font-weight:600;font-family:monospace">${o.numero_os||o.id.substring(0,8)}</td>
-      <td>${o.cliente_nome||'—'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.item_descricao||'—'}</td>
-      <td style="font-size:12px;color:#888">${o.responsavel_nome||'—'}</td>
-      <td><a href="/pwa/arte_final.html" target="_blank" class="btn btn-outline" style="font-size:12px;padding:4px 10px">Gerenciar</a></td>
-    </tr>`).join('')}</tbody></table></div>`;
 }
 
 // ── ARTES ──────────────────────────────────────────────────────────────────────

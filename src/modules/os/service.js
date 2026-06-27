@@ -204,7 +204,10 @@ async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
               (SELECT o3.numero_os FROM os_itens oit JOIN orcamento_itens oi2 ON oi2.id = oit.orcamento_item_id JOIN orders o3 ON o3.orcamento_id = oi2.orcamento_id WHERE oit.os_id = os.id ORDER BY o3.created_at LIMIT 1)
             ) AS numero_pedido,
               os.previsao_entrega, os.quantidade, os.data_inicio, os.data_conclusao,
-              os.created_at, os.updated_at,
+              os.created_at, os.updated_at, os.maquina_id,
+              (os.maquina_id IS NOT NULL AND EXISTS (
+                 SELECT 1 FROM os_materiais m WHERE m.os_id = os.id AND m.folhas_total > 0
+               )) AS ficha_pronta,
               COALESCE(cli.nome, cdir.nome) AS cliente_nome,
               u.name AS responsavel_nome,
               (SELECT COUNT(*) FROM os_itens oit WHERE oit.os_id = os.id) AS itens_count,
@@ -252,6 +255,7 @@ async function buscarPorId(id) {
 
   const itens = await db.query(
     `SELECT oi.id, oi.descricao, oi.quantidade, oi.tipo_producao,
+            oi.produto, oi.arte_arquivo_url, oi.arte_status,
             orc.numero AS numero_orcamento, cl.nome AS cliente_nome
      FROM os_itens oit
      JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id

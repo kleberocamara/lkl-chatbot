@@ -379,21 +379,35 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
 
 // ── CRUD de itens ─────────────────────────────────────────────────────────────
 const db = require('../../db/index');
+const precificacao = require('../precificacao/service');
 
 router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req, res) => {
   try {
-    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total,
-            largura_cm, altura_cm, material_id, tem_arte } = req.body;
-    let { descricao } = req.body;
+    const { produto, tipo_producao, especificacao, quantidade, largura_cm, altura_cm, material_id, tem_arte, recalcular } = req.body;
+    let { descricao, valor_unitario, valor_total } = req.body;
     if (produto) descricao = especificacao ? `${produto} — ${especificacao}` : produto;
     if (!descricao || !quantidade) return res.status(400).json({ erro: ['produto/descrição e quantidade são obrigatórios'] });
+
+    // Auto-precificação: só quando não veio valor explícito (ou recalcular=true)
+    let preco_origem = 'manual', preco_memoria = null;
+    const semValor = (valor_unitario == null && valor_total == null);
+    if (semValor || recalcular) {
+      const calc = await precificacao.precificarItem({ produto, material_id, quantidade, largura_cm, altura_cm });
+      if (calc) {
+        valor_unitario = calc.valor_unitario;
+        valor_total = calc.valor_total;
+        preco_origem = 'auto';
+        preco_memoria = calc.memoria;
+      }
+    }
+
     const cod = await db.query('SELECT COALESCE(MAX(codigo),0)+1 AS c FROM orcamento_itens WHERE orcamento_id=$1', [req.params.id]);
     const { rows } = await db.query(
-      `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, tipo_producao, quantidade, valor_unitario, valor_total, largura_cm, altura_cm, material_id, tem_arte)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, tipo_producao, quantidade, valor_unitario, valor_total, largura_cm, altura_cm, material_id, tem_arte, preco_origem, preco_memoria)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [req.params.id, cod.rows[0].c, produto || null, especificacao || null, descricao, tipo_producao || null,
        quantidade, valor_unitario || 0, valor_total || 0,
-       largura_cm || null, altura_cm || null, material_id || null, !!tem_arte]
+       largura_cm || null, altura_cm || null, material_id || null, !!tem_arte, preco_origem, preco_memoria]
     );
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);
     await service._rebuildOrderItems(req.params.id);
@@ -403,23 +417,49 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
 
 router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), async (req, res) => {
   try {
-    const { produto, tipo_producao, especificacao, quantidade, valor_unitario, valor_total,
-            largura_cm, altura_cm, material_id, tem_arte } = req.body;
-    let { descricao } = req.body;
+    const { produto, tipo_producao, especificacao, quantidade, largura_cm, altura_cm, material_id, tem_arte, recalcular } = req.body;
+    let { descricao, valor_unitario, valor_total } = req.body;
     if (produto !== undefined) descricao = especificacao ? `${produto} — ${especificacao}` : produto;
+
+    let preco_origem = null, preco_memoria = null; // null = COALESCE mantém o atual
+    const valorExplicito = (valor_unitario != null || valor_total != null);
+    if (valorExplicito) {
+      preco_origem = 'manual';
+      preco_memoria = null;
+    } else if (recalcular) {
+      // Carrega o estado atual do item para preencher campos faltantes no cálculo
+      const cur = await db.query('SELECT produto, material_id, quantidade, largura_cm, altura_cm FROM orcamento_itens WHERE id=$1 AND orcamento_id=$2', [req.params.itemId, req.params.id]);
+      const it = cur.rows[0] || {};
+      const calc = await precificacao.precificarItem({
+        produto: produto ?? it.produto,
+        material_id: material_id ?? it.material_id,
+        quantidade: quantidade ?? it.quantidade,
+        largura_cm: largura_cm ?? it.largura_cm,
+        altura_cm: altura_cm ?? it.altura_cm,
+      });
+      if (calc) {
+        valor_unitario = calc.valor_unitario;
+        valor_total = calc.valor_total;
+        preco_origem = 'auto';
+        preco_memoria = calc.memoria;
+      }
+    }
+
     const { rows } = await db.query(
       `UPDATE orcamento_itens SET
          produto=COALESCE($1,produto), especificacao=COALESCE($2,especificacao),
          descricao=COALESCE($3,descricao), tipo_producao=COALESCE($4,tipo_producao),
          quantidade=COALESCE($5,quantidade), valor_unitario=COALESCE($6,valor_unitario), valor_total=COALESCE($7,valor_total),
          largura_cm=COALESCE($8,largura_cm), altura_cm=COALESCE($9,altura_cm), material_id=COALESCE($10,material_id),
-         tem_arte=COALESCE($11,tem_arte)
+         tem_arte=COALESCE($11,tem_arte),
+         preco_origem=COALESCE($14,preco_origem),
+         preco_memoria=CASE WHEN $14 IS NULL THEN preco_memoria ELSE $15 END
        WHERE id=$12 AND orcamento_id=$13 RETURNING *`,
       [produto ?? null, especificacao ?? null, descricao ?? null, tipo_producao ?? null,
        quantidade ?? null, valor_unitario ?? null, valor_total ?? null,
        largura_cm ?? null, altura_cm ?? null, material_id ?? null,
        (tem_arte === undefined ? null : !!tem_arte),
-       req.params.itemId, req.params.id]
+       req.params.itemId, req.params.id, preco_origem, preco_memoria]
     );
     if (!rows[0]) return res.status(404).json({ erro: ['Item não encontrado'] });
     await db.query(`UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id=$1) WHERE id=$1`, [req.params.id]);

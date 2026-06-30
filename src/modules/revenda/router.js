@@ -1,0 +1,30 @@
+const express = require('express');
+const service = require('./service');
+const { requireRole } = require('../../middleware/auth');
+
+const router = express.Router();
+const adminGestor = requireRole('admin', 'gestor');
+const wrap = (fn) => async (req, res) => { try { await fn(req, res); } catch (e) { console.error(e); res.status(500).json({ error: 'Erro interno' }); } };
+
+router.get('/categorias', adminGestor, wrap(async (req, res) => res.json(await service.listarCategorias())));
+router.post('/categorias', adminGestor, wrap(async (req, res) => {
+  const r = await service.criarCategoria(req.body); if (r.erro) return res.status(400).json({ errors: r.erro }); res.status(201).json(r.item);
+}));
+router.put('/categorias/:id', adminGestor, wrap(async (req, res) => {
+  const r = await service.atualizarCategoria(req.params.id, req.body); if (r.erro) return res.status(400).json({ errors: r.erro }); res.json(r.item);
+}));
+
+router.get('/produtos', wrap(async (req, res) => res.json(await service.listarProdutos({ busca: req.query.busca }))));
+router.get('/produtos/:id', wrap(async (req, res) => {
+  const p = await service.detalheProduto(req.params.id); if (!p) return res.status(404).json({ error: 'Produto não encontrado' }); res.json(p);
+}));
+
+router.post('/sincronizar', adminGestor, wrap(async (req, res) => {
+  const r = await service.dispararSync(); if (r.erro) return res.status(409).json({ errors: r.erro }); res.json({ ok: true });
+}));
+router.get('/sync/status', wrap(async (req, res) => res.json(await service.statusSync())));
+
+router.get('/config', wrap(async (req, res) => res.json(await service.getConfig())));
+router.put('/config', adminGestor, wrap(async (req, res) => res.json((await service.setConfig(req.body)).item)));
+
+module.exports = router;

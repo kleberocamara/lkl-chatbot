@@ -15,6 +15,7 @@ router.use('/maquinas', requireAuthApi, require('./maquinas/router'));
 router.use('/entradas', requireAuthApi, require('./entradas/router'));
 router.use('/price-table', requireAuthApi, require('./price-table/router'));
 router.use('/precificacao', requireAuthApi, require('./precificacao/router'));
+router.use('/revenda', requireAuthApi, require('./revenda/router'));
 router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));
 // GET /orcamentos/resposta é público (link de aprovação/reprovação por e-mail); demais rotas exigem auth

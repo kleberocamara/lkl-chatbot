@@ -19,6 +19,14 @@ const io = new Server(server);
 global.io = io;
 require('./jobs/contas-pagar');
 
+// Revenda: sync diária às 04:00 (spawn do job em processo filho — Chromium fora do web)
+const _revCron = require('node-cron');
+const { spawn: _revSpawn } = require('child_process');
+_revCron.schedule('0 4 * * *', () => {
+  const p = _revSpawn('node', [require('path').join(__dirname, 'jobs', 'revenda-sync.js')], { stdio: 'inherit' });
+  p.on('exit', (code) => console.log(`[REVENDA-SYNC] cron finalizou code=${code}`));
+}, { timezone: 'America/Sao_Paulo' });
+
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.BASE_URL, credentials: true }));

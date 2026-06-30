@@ -453,6 +453,28 @@
     </div>
   </div>
 
+  <!-- REVENDA -->
+  <div class="page" id="page-revenda">
+    <div class="page-header"><div><h1>🛰️ Revenda (Graficonauta)</h1><p>Catálogo sincronizado e configuração de margem</p></div></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="sincronizarRevenda()">🔄 Sincronizar agora</button>
+      <span id="revenda-sync-status" style="font-size:13px;color:#666"></span>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="flex:1;min-width:280px"><h3 style="margin:0 0 8px">Categorias a sincronizar</h3>
+        <div id="revenda-categorias">Carregando…</div>
+        <button class="btn btn-outline" style="margin-top:8px" onclick="abrirNovaCategoriaRevenda()">➕ Nova categoria</button></div>
+      <div style="flex:1;min-width:280px"><h3 style="margin:0 0 8px">Configuração</h3>
+        <label style="font-size:13px">Margem global (%)<br><input id="rev-markup" type="number" step="0.01" style="width:120px;padding:6px;border:1px solid #ddd;border-radius:6px"></label>
+        <label style="font-size:13px;margin-left:12px">Prazo padrão<br>
+          <select id="rev-prazo" style="padding:6px;border:1px solid #ddd;border-radius:6px"><option value="12">12h</option><option value="24">24h</option><option value="48">48h</option></select></label>
+        <div><button class="btn btn-outline" style="margin-top:8px" onclick="salvarConfigRevenda()">Salvar config</button></div></div>
+    </div>
+    <h3 style="margin:0 0 8px">Catálogo</h3>
+    <input id="rev-busca" placeholder="Buscar por nome ou Ref…" oninput="loadCatalogoRevenda()" style="width:100%;max-width:360px;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:10px">
+    <div id="revenda-catalogo">Carregando…</div>
+  </div>
+
   <!-- ORÇAMENTOS -->
   <div class="page" id="page-orcamentos">
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -808,6 +830,7 @@ function buildSidebar(role) {
       { id: 'clientes', label: 'Cadastros', icon: '🗂️', roles: ['admin','gestor','analista','atendente'] },
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
+    { id: 'revenda',   label: 'Revenda',       icon: '🛰️', roles: ['admin','gestor'] },
     { section: 'Configurações', roles: ['admin','gestor','analista','atendente'], children: [
       { id: 'settings', label: 'Configurações', icon: '⚙️', roles: ['admin'] },
       { id: 'usuarios', label: 'Usuários',      icon: '👤', roles: ['admin','gestor','analista','atendente'] },
@@ -971,6 +994,7 @@ function showPage(page, el) {
     orders:       loadOrders,
     orcamentos:   loadOrcamentosMain,
     prices:       loadPrices,
+    revenda:      loadRevenda,
     os:           loadOsMain,
     contas_pagar: () => { showSubPage('cp-lista'); },
     clientes:     () => loadClientesMain(1),
@@ -3444,6 +3468,81 @@ async function previewPrecoItem(prefix) {
   } else if (mem) {
     mem.textContent = 'Sem regra automática — preço manual.';
   }
+}
+
+// ── REVENDA (Graficonauta) ────────────────────────────────────────────────────
+async function loadRevenda() {
+  loadCategoriasRevenda(); loadCatalogoRevenda(); loadConfigRevenda(); atualizarStatusRevenda();
+}
+async function loadCategoriasRevenda() {
+  const host = document.getElementById('revenda-categorias'); if (!host) return;
+  const cats = await api('/api/v2/revenda/categorias');
+  host.innerHTML = (Array.isArray(cats) && cats.length)
+    ? cats.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0">
+         <span>${escHtml(c.nome)} ${c.ativo ? '' : '<span style="color:#c00">(inativa)</span>'}</span>
+         <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="toggleCategoriaRevenda('${c.id}', ${!c.ativo})">${c.ativo ? 'desativar' : 'ativar'}</button>
+       </div>`).join('')
+    : '<p style="color:#888;font-size:13px">Nenhuma categoria cadastrada.</p>';
+}
+function abrirNovaCategoriaRevenda() {
+  showModal('Nova categoria de revenda', `
+    <label style="font-size:13px">Apelido<br><input id="rc-nome" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
+    <label style="font-size:13px">URL da categoria (Graficonauta)<br><input id="rc-url" placeholder="https://sistema.graficonauta.com.br/c/..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px"></label>
+    <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarCategoriaRevenda()">Salvar</button>`);
+}
+async function salvarCategoriaRevenda() {
+  const body = { nome: document.getElementById('rc-nome').value, url: document.getElementById('rc-url').value };
+  const r = await api('/api/v2/revenda/categorias', { method: 'POST', body: JSON.stringify(body) });
+  if (r && !r.errors) { closeModal(); showToast('✅ Categoria salva'); loadCategoriasRevenda(); }
+  else showToast('❌ ' + (r?.errors?.[0] || 'Erro'));
+}
+async function toggleCategoriaRevenda(id, ativo) {
+  await api('/api/v2/revenda/categorias/' + id, { method: 'PUT', body: JSON.stringify({ ativo }) });
+  loadCategoriasRevenda();
+}
+async function loadCatalogoRevenda() {
+  const host = document.getElementById('revenda-catalogo'); if (!host) return;
+  const busca = document.getElementById('rev-busca')?.value || '';
+  const prods = await api('/api/v2/revenda/produtos?busca=' + encodeURIComponent(busca));
+  host.innerHTML = (Array.isArray(prods) && prods.length)
+    ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#f5f7ff;text-align:left"><th style="padding:8px">Ref</th><th style="padding:8px">Produto</th><th style="padding:8px"></th></tr></thead><tbody>'
+      + prods.map(p => `<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px">${escHtml(p.ref)}</td><td style="padding:8px">${escHtml(p.nome)}</td>
+          <td style="padding:8px"><button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="verProdutoRevenda('${p.id}')">ver preços</button></td></tr>`).join('')
+      + '</tbody></table>'
+    : '<p style="color:#888;font-size:13px">Catálogo vazio — cadastre uma categoria e sincronize.</p>';
+}
+async function verProdutoRevenda(id) {
+  const p = await api('/api/v2/revenda/produtos/' + id); if (!p) return;
+  const prazos = [12, 24, 48];
+  const qts = [...new Set((p.precos || []).map(x => x.quantidade))].sort((a, b) => a - b);
+  const cell = (q, h) => { const r = p.precos.find(x => x.quantidade === q && x.prazo_horas === h); return r ? 'R$ ' + Number(r.preco_total).toFixed(2) : '—'; };
+  const matriz = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="padding:6px;text-align:left">Qtd</th>'
+    + prazos.map(h => `<th style="padding:6px">${h}h</th>`).join('') + '</tr></thead><tbody>'
+    + qts.map(q => `<tr><td style="padding:6px">${q}</td>${prazos.map(h => `<td style="padding:6px;text-align:center">${cell(q, h)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+  const acab = (p.acabamentos || []).length ? '<h4 style="margin:12px 0 4px">Acabamentos / Serviços</h4>' + p.acabamentos.map(a => `<div>${escHtml(a.nome)} — R$ ${Number(a.preco).toFixed(2)} <span style="color:#888">(${a.tipo})</span></div>`).join('') : '';
+  showModal(p.nome, matriz + acab);
+}
+async function loadConfigRevenda() {
+  const c = await api('/api/v2/revenda/config'); if (!c) return;
+  document.getElementById('rev-markup').value = c.markup_percent;
+  document.getElementById('rev-prazo').value = c.prazo_padrao_horas;
+}
+async function salvarConfigRevenda() {
+  const body = { markup_percent: document.getElementById('rev-markup').value, prazo_padrao_horas: document.getElementById('rev-prazo').value };
+  await api('/api/v2/revenda/config', { method: 'PUT', body: JSON.stringify(body) });
+  showToast('✅ Config salva');
+}
+async function sincronizarRevenda() {
+  const r = await api('/api/v2/revenda/sincronizar', { method: 'POST', body: '{}' });
+  if (r && r.errors) { showToast('❌ ' + r.errors[0]); return; }
+  showToast('🔄 Sincronização iniciada'); atualizarStatusRevenda();
+}
+async function atualizarStatusRevenda() {
+  const el = document.getElementById('revenda-sync-status'); if (!el) return;
+  const s = await api('/api/v2/revenda/sync/status');
+  if (!s) { el.textContent = 'Nunca sincronizado.'; return; }
+  el.textContent = `Última: ${new Date(s.iniciado_em).toLocaleString('pt-BR')} — ${s.status}${s.produtos_atualizados ? ' (' + s.produtos_atualizados + ' produtos)' : ''}${s.erro ? ' · ' + s.erro : ''}`;
+  if (s.status === 'rodando') setTimeout(atualizarStatusRevenda, 5000);
 }
 
 // ── PEDIDOS ───────────────────────────────────────────────────────────────────

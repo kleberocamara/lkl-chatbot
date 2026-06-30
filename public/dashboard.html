@@ -439,6 +439,18 @@
         <tbody id="priceBody"><tr><td colspan="11" style="padding:24px;text-align:center;color:#aaa">Carregando...</td></tr></tbody>
       </table>
     </div>
+
+    <div style="margin-top:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h2 style="margin:0;font-size:18px">Regras de preço (automação do orçamento)</h2>
+          <p style="margin:2px 0 0;color:#888;font-size:13px">Define como cada produto é precificado: manual, fixo, m², m² com bobina, faixa ou revenda.</p></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="abrirBobinasMaterial()">🧵 Bobinas por material</button>
+          <button class="btn btn-primary" onclick="abrirNovaRegraPreco()">➕ Nova regra</button>
+        </div>
+      </div>
+      <div id="regras-preco-lista" style="margin-top:12px">Carregando…</div>
+    </div>
   </div>
 
   <!-- ORÇAMENTOS -->
@@ -1419,7 +1431,9 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
       <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
         <input id="ei-qtd" type="number" min="1" value="${qtd}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
       <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
-        <input id="ei-val" type="number" step="0.01" min="0" value="${valorUnit}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+        <input id="ei-val" type="number" step="0.01" min="0" value="${valorUnit}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px">
+        <button type="button" onclick="previewPrecoItem('ei')" class="btn btn-outline" style="margin-top:6px;width:100%;padding:5px;font-size:12px">🔄 calcular preço</button>
+        <small id="ei-memoria" style="display:block;color:#666;margin-top:4px"></small></div>
     </div>
     <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">COMUNICAÇÃO VISUAL (opcional)</label>
       <div style="display:flex;gap:8px;margin-bottom:6px">
@@ -1478,17 +1492,19 @@ async function salvarItemOrc(orcId, itemId) {
   const produto = document.getElementById('ei-produto').value || null;
   const especificacao = document.getElementById('ei-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ei-qtd').value);
-  const valor_unitario = parseFloat(document.getElementById('ei-val').value);
+  const valRaw = document.getElementById('ei-val').value;
+  const valor_unitario = parseFloat(valRaw);
   if (!produto) { showToast('Selecione o produto/serviço'); return; }
-  if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
-  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario,
-      largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
-      altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
-      material_id: document.getElementById('ei-mat')?.value || null,
-      tem_arte: document.getElementById('ei-arte')?.value === 'true' })
-  });
+  if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
+  const auto = (!valRaw || valor_unitario === 0);
+  const body = { produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade,
+    largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
+    altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
+    material_id: document.getElementById('ei-mat')?.value || null,
+    tem_arte: document.getElementById('ei-arte')?.value === 'true' };
+  if (auto) body.recalcular = true;
+  else { body.valor_unitario = valor_unitario; body.valor_total = quantidade * valor_unitario; }
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) });
   if (res && !res.erro) {
     closeModal(); showToast('✅ Item atualizado');
     const panel = document.getElementById(`orc-items-${orcId}`);
@@ -1530,7 +1546,9 @@ function abrirAdicionarItemOrc(orcId) {
       <div style="flex:1"><label style="font-size:12px;color:#666">Qtd</label>
         <input id="ni-qtd" type="number" min="1" value="1" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
       <div style="flex:1"><label style="font-size:12px;color:#666">Valor unitário (R$)</label>
-        <input id="ni-val" type="number" step="0.01" min="0" value="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px"></div>
+        <input id="ni-val" type="number" step="0.01" min="0" value="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px">
+        <button type="button" onclick="previewPrecoItem('ni')" class="btn btn-outline" style="margin-top:6px;width:100%;padding:5px;font-size:12px">🔄 calcular preço</button>
+        <small id="ni-memoria" style="display:block;color:#666;margin-top:4px"></small></div>
     </div>
     <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">COMUNICAÇÃO VISUAL (opcional)</label>
       <div style="display:flex;gap:8px;margin-bottom:6px">
@@ -1551,15 +1569,18 @@ async function adicionarItemOrc(orcId) {
   if (!produto) { showToast('Selecione o produto/serviço'); return; }
   const especificacao = document.getElementById('ni-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ni-qtd').value);
-  const valor_unitario = parseFloat(document.getElementById('ni-val').value);
-  if (isNaN(quantidade) || isNaN(valor_unitario)) { showToast('Preencha quantidade e valor'); return; }
-  const res = await api(`/api/v2/orcamentos/${orcId}/itens`, {
-    method: 'POST',
-    body: JSON.stringify({ produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade, valor_unitario, valor_total: quantidade * valor_unitario,
-      largura_cm: document.getElementById('ni-larg')?.value ? parseFloat(document.getElementById('ni-larg').value) : null,
-      altura_cm: document.getElementById('ni-alt')?.value ? parseFloat(document.getElementById('ni-alt').value) : null,
-      material_id: document.getElementById('ni-mat')?.value || null })
-  });
+  const valRaw = document.getElementById('ni-val').value;
+  const valor_unitario = parseFloat(valRaw);
+  if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
+  // Valor vazio ou 0 → deixa o backend precificar pela regra do produto (preco_origem='auto')
+  const auto = (!valRaw || valor_unitario === 0);
+  const body = { produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade,
+    largura_cm: document.getElementById('ni-larg')?.value ? parseFloat(document.getElementById('ni-larg').value) : null,
+    altura_cm: document.getElementById('ni-alt')?.value ? parseFloat(document.getElementById('ni-alt').value) : null,
+    material_id: document.getElementById('ni-mat')?.value || null };
+  if (auto) body.recalcular = true;
+  else { body.valor_unitario = valor_unitario; body.valor_total = quantidade * valor_unitario; }
+  const res = await api(`/api/v2/orcamentos/${orcId}/itens`, { method: 'POST', body: JSON.stringify(body) });
   if (res && !res.erro) {
     closeModal(); showToast('✅ Item adicionado');
     const panel = document.getElementById(`orc-items-${orcId}`);
@@ -3273,6 +3294,7 @@ async function loadPrices() {
       <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0"><button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="savePrice(${p.id})">💾</button></td>
     </tr>`;
   }).join('');
+  loadRegrasPreco();
 }
 
 async function savePrice(id) {
@@ -3282,6 +3304,141 @@ async function savePrice(id) {
   const res = await api(`/api/prices/${id}`, { method: "POST", body: JSON.stringify({ valor_unitario: valor, prazo_dias: prazo, active }) });
   if (res?.ok) showToast('✅ Preço atualizado!');
   else showToast('❌ Erro ao salvar');
+}
+
+// ── REGRAS DE PREÇO (automação do orçamento) ──────────────────────────────────
+const METODOS_PRECO = [
+  ['manual','Manual (digitar)'], ['fixo','Fixo por unidade'], ['m2','Por m²'],
+  ['m2_bobina','Por m² com bobina'], ['faixa','Por faixa de quantidade'], ['revenda','Revenda (sincronizado)'],
+];
+const _metodoLabel = (m) => (METODOS_PRECO.find(x => x[0] === m) || [])[1] || m;
+
+async function loadRegrasPreco() {
+  const host = document.getElementById('regras-preco-lista');
+  if (!host) return;
+  const regras = await api('/api/v2/precificacao/regras');
+  if (!Array.isArray(regras) || !regras.length) {
+    host.innerHTML = '<p style="color:#888;font-size:13px">Nenhuma regra cadastrada — produtos sem regra ficam manuais.</p>';
+    return;
+  }
+  host.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:#f5f7ff;text-align:left">'
+    + '<th style="padding:8px 10px">Produto</th><th style="padding:8px 10px">Material</th>'
+    + '<th style="padding:8px 10px">Método</th><th style="padding:8px 10px">Preço base</th><th style="padding:8px 10px"></th></tr></thead><tbody>'
+    + regras.map(r => `<tr style="border-bottom:1px solid #f0f0f0">
+        <td style="padding:8px 10px">${escHtml(r.produto)}</td>
+        <td style="padding:8px 10px">${r.material_nome ? escHtml(r.material_nome) : '<i style="color:#aaa">qualquer</i>'}</td>
+        <td style="padding:8px 10px">${_metodoLabel(r.metodo_calculo)}</td>
+        <td style="padding:8px 10px">${r.preco_base != null ? 'R$ ' + Number(r.preco_base).toFixed(2) : '—'}</td>
+        <td style="padding:8px 10px"><button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="abrirEditarRegraPreco('${r.id}')">editar</button></td>
+      </tr>`).join('') + '</tbody></table>';
+}
+
+function _formRegraPreco(r) {
+  const opts = METODOS_PRECO.map(m => `<option value="${m[0]}" ${r && r.metodo_calculo === m[0] ? 'selected' : ''}>${m[1]}</option>`).join('');
+  const prods = (PRODUTOS_LKL || []).map(p => `<option ${r && r.produto === p.produto ? 'selected' : ''}>${p.produto}</option>`).join('');
+  const fld = (label, id, val) => `<label style="font-size:12px;color:#666;display:block;margin-bottom:8px">${label}<br><input id="${id}" type="number" step="0.0001" value="${val != null ? val : ''}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></label>`;
+  return `
+    <label style="font-size:12px;color:#666;display:block;margin-bottom:8px">Produto<br>
+      <select id="rp-produto" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px">${prods}</select></label>
+    <label style="font-size:12px;color:#666;display:block;margin-bottom:8px">Método<br>
+      <select id="rp-metodo" onchange="_rpToggle()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px">${opts}</select></label>
+    <div id="rp-precobase">${fld('Preço base (R$/m² ou R$/un)', 'rp-preco', r && r.preco_base)}</div>
+    <div id="rp-m2min">${fld('m² mínimo (opcional)', 'rp-m2min-i', r && r.m2_minimo)}</div>
+    <div id="rp-corte">${fld('Folga de corte cm (m² com bobina)', 'rp-corte-i', r ? r.espaco_corte_cm : 0)}</div>
+    <p style="color:#888;font-size:12px">Faixas e bobinas são cadastradas após salvar a regra (bobinas pelo botão "Bobinas por material").</p>`;
+}
+function _rpToggle() {
+  const m = document.getElementById('rp-metodo').value;
+  document.getElementById('rp-precobase').style.display = (m === 'fixo' || m === 'm2' || m === 'm2_bobina') ? '' : 'none';
+  document.getElementById('rp-m2min').style.display = (m === 'm2' || m === 'm2_bobina') ? '' : 'none';
+  document.getElementById('rp-corte').style.display = (m === 'm2_bobina') ? '' : 'none';
+}
+function abrirNovaRegraPreco() {
+  showModal('Nova regra de preço', _formRegraPreco(null) + `<button onclick="salvarRegraPreco()" class="btn btn-primary" style="width:100%;margin-top:8px">Salvar</button>`);
+  _rpToggle();
+}
+async function abrirEditarRegraPreco(id) {
+  const regras = await api('/api/v2/precificacao/regras');
+  const r = (regras || []).find(x => String(x.id) === String(id));
+  showModal('Editar regra de preço', _formRegraPreco(r) + `<button onclick="salvarRegraPreco('${id}')" class="btn btn-primary" style="width:100%;margin-top:8px">Salvar</button>`);
+  _rpToggle();
+}
+async function salvarRegraPreco(id) {
+  const body = {
+    produto: document.getElementById('rp-produto').value,
+    metodo_calculo: document.getElementById('rp-metodo').value,
+    preco_base: document.getElementById('rp-preco').value || null,
+    m2_minimo: document.getElementById('rp-m2min-i').value || null,
+    espaco_corte_cm: document.getElementById('rp-corte-i').value || 0,
+  };
+  const res = id
+    ? await api('/api/v2/precificacao/regras/' + id, { method: 'PUT', body: JSON.stringify(body) })
+    : await api('/api/v2/precificacao/regras', { method: 'POST', body: JSON.stringify(body) });
+  if (res && !res.errors) { closeModal(); showToast('✅ Regra salva'); loadRegrasPreco(); }
+  else showToast('❌ ' + (res?.errors?.[0] || 'Erro ao salvar regra'));
+}
+
+// Bobinas por material
+async function abrirBobinasMaterial() {
+  const r = await api('/api/v2/materiais?status=ativo&limit=500');
+  const mats = r?.materiais || [];
+  const opts = mats.map(m => `<option value="${m.id}">${escHtml(m.nome)}</option>`).join('');
+  showModal('Bobinas por material', `
+    <label style="font-size:12px;color:#666;display:block;margin-bottom:8px">Material<br>
+      <select id="bob-mat" onchange="loadBobinas()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px">
+        <option value="">— selecione —</option>${opts}</select></label>
+    <div id="bob-lista" style="margin:10px 0;font-size:13px;color:#888">Selecione um material.</div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <label style="font-size:12px;color:#666;flex:1">Nova largura (cm)<br>
+        <input id="bob-larg" type="number" step="0.01" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></label>
+      <button onclick="addBobina()" class="btn btn-primary" style="padding:8px 14px">Adicionar</button>
+    </div>`);
+}
+async function loadBobinas() {
+  const matId = document.getElementById('bob-mat').value;
+  const host = document.getElementById('bob-lista');
+  if (!matId) { host.innerHTML = 'Selecione um material.'; return; }
+  const bobs = await api('/api/v2/precificacao/materiais/' + matId + '/bobinas');
+  if (!Array.isArray(bobs) || !bobs.length) { host.innerHTML = '<i style="color:#aaa">Nenhuma bobina cadastrada.</i>'; return; }
+  host.innerHTML = bobs.map(b => `<span style="display:inline-flex;align-items:center;gap:6px;background:#f5f7ff;border-radius:14px;padding:4px 10px;margin:3px">
+      ${Number(b.largura_cm).toFixed(2)} cm
+      <button onclick="delBobina('${b.id}')" style="border:none;background:none;cursor:pointer;color:#c00">×</button></span>`).join('');
+}
+async function addBobina() {
+  const matId = document.getElementById('bob-mat').value;
+  if (!matId) { showToast('Selecione um material'); return; }
+  const largura_cm = parseFloat(document.getElementById('bob-larg').value);
+  if (isNaN(largura_cm) || largura_cm <= 0) { showToast('Informe a largura'); return; }
+  const res = await api('/api/v2/precificacao/materiais/' + matId + '/bobinas', { method: 'POST', body: JSON.stringify({ largura_cm }) });
+  if (res && !res.errors) { document.getElementById('bob-larg').value = ''; loadBobinas(); }
+  else showToast('❌ ' + (res?.errors?.[0] || 'Erro'));
+}
+async function delBobina(id) {
+  await api('/api/v2/precificacao/bobinas/' + id, { method: 'DELETE' });
+  loadBobinas();
+}
+
+// Preview de preço no formulário de item (prefixo 'ni' = novo item, 'ei' = editar item)
+async function previewPrecoItem(prefix) {
+  const g = (suf) => document.getElementById(prefix + '-' + suf);
+  const produto = g('produto')?.value;
+  if (!produto) { showToast('Selecione o produto'); return; }
+  const body = {
+    produto,
+    material_id: g('mat')?.value || null,
+    quantidade: g('qtd')?.value,
+    largura_cm: g('larg')?.value || null,
+    altura_cm: g('alt')?.value || null,
+  };
+  const r = await api('/api/v2/precificacao/preview', { method: 'POST', body: JSON.stringify(body) });
+  const mem = g('memoria');
+  if (r && r.auto) {
+    if (g('val')) g('val').value = r.valor_unitario;
+    if (mem) mem.textContent = r.memoria;
+  } else if (mem) {
+    mem.textContent = 'Sem regra automática — preço manual.';
+  }
 }
 
 // ── PEDIDOS ───────────────────────────────────────────────────────────────────

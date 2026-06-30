@@ -1497,6 +1497,7 @@ async function salvarItemOrc(orcId, itemId) {
   if (!produto) { showToast('Selecione o produto/serviço'); return; }
   if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
   const auto = (!valRaw || valor_unitario === 0);
+  if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
   const body = { produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade,
     largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
     altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
@@ -1574,6 +1575,7 @@ async function adicionarItemOrc(orcId) {
   if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
   // Valor vazio ou 0 → deixa o backend precificar pela regra do produto (preco_origem='auto')
   const auto = (!valRaw || valor_unitario === 0);
+  if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
   const body = { produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade,
     largura_cm: document.getElementById('ni-larg')?.value ? parseFloat(document.getElementById('ni-larg').value) : null,
     altura_cm: document.getElementById('ni-alt')?.value ? parseFloat(document.getElementById('ni-alt').value) : null,
@@ -3336,7 +3338,7 @@ async function loadRegrasPreco() {
 
 function _formRegraPreco(r) {
   const opts = METODOS_PRECO.map(m => `<option value="${m[0]}" ${r && r.metodo_calculo === m[0] ? 'selected' : ''}>${m[1]}</option>`).join('');
-  const prods = (PRODUTOS_LKL || []).map(p => `<option ${r && r.produto === p.produto ? 'selected' : ''}>${p.produto}</option>`).join('');
+  const prods = (PRODUTOS_LKL || []).map(p => `<option value="${p.produto}" ${r && r.produto === p.produto ? 'selected' : ''}>${p.produto}</option>`).join('');
   const fld = (label, id, val) => `<label style="font-size:12px;color:#666;display:block;margin-bottom:8px">${label}<br><input id="${id}" type="number" step="0.0001" value="${val != null ? val : ''}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:4px;font-size:13px;box-sizing:border-box"></label>`;
   return `
     <label style="font-size:12px;color:#666;display:block;margin-bottom:8px">Produto<br>
@@ -3361,6 +3363,7 @@ function abrirNovaRegraPreco() {
 async function abrirEditarRegraPreco(id) {
   const regras = await api('/api/v2/precificacao/regras');
   const r = (regras || []).find(x => String(x.id) === String(id));
+  if (!r) { showToast('Regra não encontrada'); return; }
   showModal('Editar regra de preço', _formRegraPreco(r) + `<button onclick="salvarRegraPreco('${id}')" class="btn btn-primary" style="width:100%;margin-top:8px">Salvar</button>`);
   _rpToggle();
 }
@@ -3415,7 +3418,8 @@ async function addBobina() {
   else showToast('❌ ' + (res?.errors?.[0] || 'Erro'));
 }
 async function delBobina(id) {
-  await api('/api/v2/precificacao/bobinas/' + id, { method: 'DELETE' });
+  const res = await api('/api/v2/precificacao/bobinas/' + id, { method: 'DELETE' });
+  if (res && res.errors) { showToast('❌ ' + (res.errors[0] || 'Erro')); return; }
   loadBobinas();
 }
 
@@ -3427,13 +3431,14 @@ async function previewPrecoItem(prefix) {
   const body = {
     produto,
     material_id: g('mat')?.value || null,
-    quantidade: g('qtd')?.value,
+    quantidade: parseFloat(g('qtd')?.value) || null,
     largura_cm: g('larg')?.value || null,
     altura_cm: g('alt')?.value || null,
   };
   const r = await api('/api/v2/precificacao/preview', { method: 'POST', body: JSON.stringify(body) });
   const mem = g('memoria');
-  if (r && r.auto) {
+  if (!r) { if (mem) mem.textContent = 'Erro ao consultar preço.'; return; }
+  if (r.auto) {
     if (g('val')) g('val').value = r.valor_unitario;
     if (mem) mem.textContent = r.memoria;
   } else if (mem) {

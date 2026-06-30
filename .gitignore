@@ -35,3 +35,6 @@ logs/
 dist/
 tmp/
 backups/
+
+# Fixtures de revenda (HTML logado — dados da conta, não commitar)
+tests/fixtures/revenda/

@@ -42,6 +42,7 @@ CREATE TABLE regras_preco (
                   CHECK (metodo_calculo IN ('manual','fixo','m2','m2_bobina','faixa','revenda')),
   preco_base      NUMERIC(12,4),        -- R$/m² (m2/m2_bobina), R$/un (fixo); NULL p/ faixa/revenda/manual
   m2_minimo       NUMERIC(10,4),        -- área mínima cobrada (m²); NULL = sem mínimo
+  espaco_corte_cm NUMERIC(6,2) DEFAULT 0, -- folga de separação entre imagens na composição (método m2_bobina)
   ativo           BOOLEAN DEFAULT TRUE,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -69,6 +70,7 @@ CREATE TABLE material_bobinas (
   ativo           BOOLEAN DEFAULT TRUE
 );
 CREATE INDEX idx_material_bobinas_material ON material_bobinas(material_id);
+-- Cada material pode ter várias larguras de bobina (ex.: adesivo com 3 larguras, lona com 3 larguras).
 
 -- Espelho de preços da revenda (preenchido pelo AO-2; criado VAZIO aqui)
 CREATE TABLE precos_revenda (
@@ -117,24 +119,25 @@ memoria = "{largura}m × {altura}m = {area}m² × R$ {preco_base}/m² = R$ {vu}/
 Se `largura_cm` ou `altura_cm` ausentes → não calcula (retorna `null`, item fica manual).
 
 ### método `m2_bobina`
-Escolhe, entre as bobinas ativas do material (`ctx.bobinas`), a **mais econômica** para a largura da arte, considerando quantos itens cabem lado a lado na largura da bobina (mesma lógica de aproveitamento do módulo `formatos`/melhor-corte):
+Escolhe, entre as bobinas ativas do material (`ctx.bobinas`), a **mais econômica** para a largura da arte, considerando quantos itens cabem lado a lado na largura da bobina **descontando a folga de corte** `espaco_corte_cm` (`g`) entre imagens vizinhas (mesma lógica de aproveitamento do módulo `formatos`/melhor-corte, agora com gap):
 
 ```
-para cada bobina B com largura_cm = Lb (Lb >= largura_arte):
-    n_por_largura = floor(Lb / largura_arte)         # itens lado a lado
-    largura_util_por_item = Lb / n_por_largura        # largura "imputada" a cada item
-    desperdicio = (Lb - n_por_largura*largura_arte) / Lb
+g = espaco_corte_cm (folga entre imagens; default 0)
+para cada bobina B com largura_cm = Lb:
+    # n itens lado a lado exigem n*largura_arte + (n-1)*g <= Lb
+    n_por_largura = floor( (Lb + g) / (largura_arte + g) )
+    se n_por_largura < 1: descarta a bobina (arte não cabe nem 1 vez)
+    largura_util_por_item = Lb / n_por_largura        # largura "imputada" a cada item (paga a bobina cheia / n)
 escolhe a bobina que MINIMIZA largura_util_por_item (menor custo por item).
-Bobinas com Lb < largura_arte são descartadas.
 
 area_cobrada = (largura_util_por_item/100) × (altura_cm/100)
 vu = area_cobrada × preco_base
 vt = vu × quantidade
-memoria = "Bobina {Lb}m ({n_por_largura} por largura) → {largura_util_por_item}m × {altura}m = {area_cobrada}m² × R$ {preco_base}/m² = R$ {vu}/un × {qtd} = R$ {vt}"
+memoria = "Bobina {Lb}m ({n_por_largura} por largura, folga {g}cm) → {largura_util_por_item}m × {altura}m = {area_cobrada}m² × R$ {preco_base}/m² = R$ {vu}/un × {qtd} = R$ {vt}"
 ```
-Sem bobinas cadastradas que comportem a arte, OU dimensões ausentes → não calcula (item fica manual).
+Sem bobinas que comportem a arte (nenhuma cabe nem 1 item), OU dimensões ausentes → não calcula (item fica manual).
 
-> Premissa: a perda é só na **largura** (a altura é sob demanda na bobina, sem perda no comprimento). Margem de refile não é considerada no AO-1 (ajustar em caso real, como no melhor-corte).
+> Premissa: a perda é só na **largura** (a altura é sob demanda na bobina, sem perda no comprimento). A folga `g` é aplicada **entre** imagens (n−1 folgas); margem de refile nas bordas da bobina não é considerada no AO-1 (ajustar em caso real, como no melhor-corte).
 
 ### método `faixa`
 ```
@@ -191,7 +194,7 @@ Auth: cookie-session (`api(path,{method,body:JSON.stringify})`), padrão do dash
 - **Unitários (TDD)** em `tests/precificacao.test.js` — um bloco por método do engine:
   - `fixo`: preço × qtd.
   - `m2`: área simples + aplicação de `m2_minimo`.
-  - `m2_bobina`: escolha da bobina mais econômica (ex.: arte 0,50m com bobinas 1,52m e 1,10m → escolhe a que dá menor largura imputada; arte 1,20m com bobina 1,10m e 1,52m → descarta 1,10 e usa 1,52), dimensão ausente → null.
+  - `m2_bobina`: escolha da bobina mais econômica (ex.: arte 0,50m com bobinas 1,52m e 1,10m → escolhe a que dá menor largura imputada; arte 1,20m com bobina 1,10m e 1,52m → descarta 1,10 e usa 1,52); folga de corte reduz n por largura (ex.: arte 0,50m, bobina 1,52m, folga 0 → n=3; folga 2cm → n=floor(1,54/0,52)=2); dimensão ausente ou nenhuma bobina comporta → null.
   - `faixa`: seleção da faixa por quantidade; fora de faixa → null.
   - `revenda`: lookup; vazio → null.
   - `manual`: sempre null.

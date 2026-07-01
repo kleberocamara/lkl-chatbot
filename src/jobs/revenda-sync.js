@@ -52,7 +52,9 @@ async function runSync() {
           try {
             const tabHtml = await scraper.fetchProduto(page, p.url);
             const tabela = parser.parseTabelaPreco(tabHtml);
-            if (!tabela.linhas.length) { log(`produto ${p.ref} sem matriz — pulado`); continue; }
+            // Sem matriz (ex.: adesivo/vinil por m²): registra o produto como REFERÊNCIA (sem preços);
+            // o atendente digita o preço manualmente no orçamento.
+            if (!tabela.linhas.length) log(`produto ${p.ref} sem matriz — registrado como referência (preço manual)`);
             await upsertProduto(cat.id, p, tabela);
             refsVistos.push(p.ref);
             count++;

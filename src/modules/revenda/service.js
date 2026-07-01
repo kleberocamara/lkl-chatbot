@@ -1,6 +1,7 @@
 const db = require('../../db');
 const path = require('path');
 const { spawn } = require('child_process');
+const pricer = require('./pricer');
 
 // Categorias
 async function listarCategorias() {
@@ -60,9 +61,25 @@ async function setConfig(d) {
   return { item: r.rows[0] };
 }
 
+// Precificação
+async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos }) {
+  if (!revenda_produto_id) return null;
+  const cfg = (await db.query('SELECT markup_percent, prazo_padrao_horas FROM revenda_config WHERE id=1')).rows[0] || { markup_percent: 0, prazo_padrao_horas: 24 };
+  const prazo = Number(prazo_horas) > 0 ? Number(prazo_horas) : cfg.prazo_padrao_horas;
+  const faixas = (await db.query('SELECT quantidade, prazo_horas, preco_total FROM revenda_precos WHERE produto_id=$1', [revenda_produto_id])).rows;
+  const acabs = (await db.query('SELECT nome, preco FROM revenda_acabamentos WHERE produto_id=$1', [revenda_produto_id])).rows;
+  const calc = pricer.calcularRevenda(
+    { faixas, acabamentos: acabs, markup_percent: cfg.markup_percent },
+    { quantidade, prazo_horas: prazo, selecionados: Array.isArray(acabamentos) ? acabamentos.map((a) => (typeof a === 'string' ? a : a.nome)) : [] }
+  );
+  if (!calc) return null;
+  return { ...calc, prazo_horas: prazo };
+}
+
 module.exports = {
   listarCategorias, criarCategoria, atualizarCategoria,
   listarProdutos, detalheProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
+  precificarItemRevenda,
 };

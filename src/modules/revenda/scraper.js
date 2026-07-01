@@ -30,20 +30,22 @@ function checarLogin(page) {
 }
 
 // HTML da página de categoria, após o Vue renderizar os cards de produto.
+// Usa 'domcontentloaded' (não 'networkidle', que nunca dispara na SPA com conexões abertas)
+// + espera o seletor de conteúdo. Sem conteúdo em ~12s, devolve o que houver (o parser ignora).
 async function fetchCategoria(page, url) {
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   checarLogin(page);
-  await page.waitForSelector('.card-produto', { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForSelector('.card-produto', { timeout: 12000 }).catch(() => {});
+  await page.waitForTimeout(800);
   return page.content();
 }
 
 // HTML da página de produto, após o Vue renderizar a matriz de preço.
 async function fetchProduto(page, url) {
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   checarLogin(page);
-  await page.waitForSelector('.conteudo-body', { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForSelector('.conteudo-body', { timeout: 12000 }).catch(() => {});
+  await page.waitForTimeout(800);
   return page.content();
 }
 

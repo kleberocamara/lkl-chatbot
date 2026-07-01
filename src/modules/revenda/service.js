@@ -41,6 +41,8 @@ async function statusSync() {
   return (await db.query('SELECT * FROM revenda_sync_log ORDER BY iniciado_em DESC LIMIT 1')).rows[0] || null;
 }
 async function dispararSync() {
+  // Marca como 'erro' qualquer sync 'rodando' há mais de 20 min (processo morto/travado) → destrava.
+  await db.query("UPDATE revenda_sync_log SET status='erro', finalizado_em=NOW(), erro='sync travada (>20min) — encerrada automaticamente' WHERE status='rodando' AND iniciado_em < NOW() - INTERVAL '20 minutes'");
   const atual = await statusSync();
   if (atual && atual.status === 'rodando') return { erro: ['Já há uma sincronização em andamento'] };
   const job = path.join(__dirname, '..', '..', 'jobs', 'revenda-sync.js');

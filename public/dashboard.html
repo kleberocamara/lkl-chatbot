@@ -1440,12 +1440,13 @@ function renderOrcItens(orcId, itens) {
 
 // ── Modal editar item ──────────────────────────────────────────────────────────
 async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, voltarOrderId) {
+  await carregarCatalogoRevenda();
   const partes = String(descricao||'').split(' — ');
   const prodGuess = partes[0] || '';
   const especGuess = partes.slice(1).join(' — ') || '';
   const html = `
     ${voltarOrderId ? `<button type="button" onclick="editarPedido('${voltarOrderId}')" class="btn btn-outline" style="margin-bottom:10px;padding:5px 12px;font-size:12px">← Voltar ao pedido</button>` : ''}
-    <div style="margin-bottom:10px">${selectProduto('ei-produto', "document.getElementById('ei-tipo').value = tipoPorProduto(this.value)")}</div>
+    <div style="margin-bottom:10px">${selectProduto('ei-produto', "onItemProdutoChange('ei')")}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       ${campoTipoProd('ei-tipo')}
       <div><label style="font-size:12px;color:#666">Especificação</label>
@@ -1476,6 +1477,7 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
         <button type="button" id="ei-arte-nao" onclick="setArteEi(false)" class="btn btn-primary" style="flex:1;padding:6px">Não</button>
       </div>
     </div>
+    <div id="ei-revenda" style="display:none"></div>
     <button onclick="salvarItemOrc('${orcId}','${itemId}')" class="btn btn-primary" style="width:100%">💾 Salvar alterações</button>`;
   showModal('Editar Item', html);
   const sel = document.getElementById('ei-produto');
@@ -1514,6 +1516,11 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
 
 async function salvarItemOrc(orcId, itemId) {
   const produto = document.getElementById('ei-produto').value || null;
+  const revSel = produto && produto.startsWith('revenda:');
+  const revenda_produto_id = revSel ? produto.slice(8) : null;
+  const revenda_prazo_horas = revSel ? parseInt(document.getElementById('ei-rev-prazo')?.value, 10) : null;
+  const revenda_acabamentos = revSel ? [...document.querySelectorAll('.ei-acab:checked')].map(c => ({ nome: c.value, preco: parseFloat(c.dataset.preco) })) : undefined;
+  const produtoNome = revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto;
   const especificacao = document.getElementById('ei-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ei-qtd').value);
   const valRaw = document.getElementById('ei-val').value;
@@ -1522,11 +1529,13 @@ async function salvarItemOrc(orcId, itemId) {
   if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
   const auto = (!valRaw || valor_unitario === 0);
   if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
-  const body = { produto, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade,
+  const body = { produto: produtoNome, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade,
     largura_cm: document.getElementById('ei-larg')?.value ? parseFloat(document.getElementById('ei-larg').value) : null,
     altura_cm: document.getElementById('ei-alt')?.value ? parseFloat(document.getElementById('ei-alt').value) : null,
     material_id: document.getElementById('ei-mat')?.value || null,
-    tem_arte: document.getElementById('ei-arte')?.value === 'true' };
+    tem_arte: document.getElementById('ei-arte')?.value === 'true',
+    revenda_produto_id, revenda_prazo_horas };
+  if (revenda_acabamentos !== undefined) body.revenda_acabamentos = revenda_acabamentos;
   if (auto) body.recalcular = true;
   else { body.valor_unitario = valor_unitario; body.valor_total = quantidade * valor_unitario; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) });
@@ -1559,9 +1568,10 @@ async function excluirItemOrc(orcId, itemId, descricao) {
   } else { showToast('❌ Erro ao excluir'); }
 }
 
-function abrirAdicionarItemOrc(orcId) {
+async function abrirAdicionarItemOrc(orcId) {
+  await carregarCatalogoRevenda();
   const html = `
-    <div style="margin-bottom:10px">${selectProduto('ni-produto', "document.getElementById('ni-tipo').value = tipoPorProduto(this.value)")}</div>
+    <div style="margin-bottom:10px">${selectProduto('ni-produto', "onItemProdutoChange('ni')")}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       ${campoTipoProd('ni-tipo')}
       <div><label style="font-size:12px;color:#666">Especificação</label>
@@ -1584,6 +1594,7 @@ function abrirAdicionarItemOrc(orcId) {
       </div>
       <select id="ni-mat" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">— material (Comunicação Visual) —</option></select>
     </div>
+    <div id="ni-revenda" style="display:none"></div>
     <button onclick="adicionarItemOrc('${orcId}')" class="btn btn-primary" style="width:100%">➕ Adicionar item</button>`;
   showModal('Novo Item', html);
   _popularMateriaisSelect('ni-mat', null);
@@ -1592,6 +1603,11 @@ function abrirAdicionarItemOrc(orcId) {
 async function adicionarItemOrc(orcId) {
   const produto = document.getElementById('ni-produto').value;
   if (!produto) { showToast('Selecione o produto/serviço'); return; }
+  const revSel = produto && produto.startsWith('revenda:');
+  const revenda_produto_id = revSel ? produto.slice(8) : null;
+  const revenda_prazo_horas = revSel ? parseInt(document.getElementById('ni-rev-prazo')?.value, 10) : null;
+  const revenda_acabamentos = revSel ? [...document.querySelectorAll('.ni-acab:checked')].map(c => ({ nome: c.value, preco: parseFloat(c.dataset.preco) })) : undefined;
+  const produtoNome = revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto;
   const especificacao = document.getElementById('ni-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ni-qtd').value);
   const valRaw = document.getElementById('ni-val').value;
@@ -1600,10 +1616,12 @@ async function adicionarItemOrc(orcId) {
   // Valor vazio ou 0 → deixa o backend precificar pela regra do produto (preco_origem='auto')
   const auto = (!valRaw || valor_unitario === 0);
   if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
-  const body = { produto, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade,
+  const body = { produto: produtoNome, tipo_producao: document.getElementById('ni-tipo').value || null, especificacao, quantidade,
     largura_cm: document.getElementById('ni-larg')?.value ? parseFloat(document.getElementById('ni-larg').value) : null,
     altura_cm: document.getElementById('ni-alt')?.value ? parseFloat(document.getElementById('ni-alt').value) : null,
-    material_id: document.getElementById('ni-mat')?.value || null };
+    material_id: document.getElementById('ni-mat')?.value || null,
+    revenda_produto_id, revenda_prazo_horas };
+  if (revenda_acabamentos !== undefined) body.revenda_acabamentos = revenda_acabamentos;
   if (auto) body.recalcular = true;
   else { body.valor_unitario = valor_unitario; body.valor_total = quantidade * valor_unitario; }
   const res = await api(`/api/v2/orcamentos/${orcId}/itens`, { method: 'POST', body: JSON.stringify(body) });
@@ -3470,6 +3488,53 @@ async function previewPrecoItem(prefix) {
   }
 }
 
+function onItemProdutoChange(prefix) {
+  const val = document.getElementById(prefix + '-produto').value;
+  const box = document.getElementById(prefix + '-revenda');
+  const cvEls = document.querySelectorAll(`#${prefix}-larg, #${prefix}-alt, #${prefix}-mat`);
+  if (val.startsWith('revenda:')) {
+    const id = val.slice(8);
+    const p = (REVENDA_CATALOGO || []).find(x => String(x.id) === id);
+    cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = 'none'; });
+    renderModoRevenda(prefix, id, p);
+    if (box) box.style.display = '';
+  } else {
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = ''; });
+    const tipoEl = document.getElementById(prefix + '-tipo'); if (tipoEl) tipoEl.value = tipoPorProduto(val) || '';
+  }
+}
+async function renderModoRevenda(prefix, id, p) {
+  const det = await api('/api/v2/revenda/produtos/' + id);
+  const acabs = (det?.acabamentos || []).map(a =>
+    `<label style="display:block;font-size:13px"><input type="checkbox" class="${prefix}-acab" value="${escHtml(a.nome)}" data-preco="${a.preco}" onchange="previewRevenda('${prefix}')"> ${escHtml(a.nome)} — R$ ${Number(a.preco).toFixed(2)}</label>`).join('');
+  document.getElementById(prefix + '-revenda').innerHTML = `
+    <div style="border:1px solid #e0e6ff;border-radius:8px;padding:10px;margin-bottom:8px;background:#f7f9ff">
+      <div style="font-size:12px;color:#555;font-weight:600;margin-bottom:6px">🛰️ REVENDA — tiragem, prazo e acabamentos</div>
+      <label style="font-size:12px">Prazo<br>
+        <select id="${prefix}-rev-prazo" onchange="previewRevenda('${prefix}')" style="padding:6px;border:1px solid #ddd;border-radius:6px">
+          <option value="12">12h</option><option value="24" selected>24h</option><option value="48">48h</option></select></label>
+      <div style="margin-top:8px">${acabs || '<span style="color:#999;font-size:12px">Sem acabamentos.</span>'}</div>
+      <button type="button" class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:5px 10px" onclick="previewRevenda('${prefix}')">🔄 calcular preço</button>
+      <small id="${prefix}-rev-memoria" style="display:block;color:#666;margin-top:4px"></small>
+    </div>`;
+  previewRevenda(prefix);
+}
+async function previewRevenda(prefix) {
+  const val = document.getElementById(prefix + '-produto').value;
+  if (!val.startsWith('revenda:')) return;
+  const id = val.slice(8);
+  const quantidade = parseFloat(document.getElementById(prefix + '-qtd').value) || 1;
+  const prazo_horas = parseInt(document.getElementById(prefix + '-rev-prazo').value, 10);
+  const acabamentos = [...document.querySelectorAll('.' + prefix + '-acab:checked')].map(c => c.value);
+  const r = await api('/api/v2/revenda/preview', { method: 'POST', body: JSON.stringify({ revenda_produto_id: id, quantidade, prazo_horas, acabamentos }) });
+  const mem = document.getElementById(prefix + '-rev-memoria');
+  if (r && r.auto) {
+    const vEl = document.getElementById(prefix + '-val'); if (vEl) vEl.value = r.valor_unitario;
+    if (mem) mem.textContent = r.memoria;
+  } else if (mem) { mem.textContent = 'Sem preço para essa combinação.'; }
+}
+
 // ── REVENDA (Graficonauta) ────────────────────────────────────────────────────
 async function loadRevenda() {
   loadCategoriasRevenda(); loadCatalogoRevenda(); loadConfigRevenda(); atualizarStatusRevenda();
@@ -3557,6 +3622,13 @@ async function atualizarStatusRevenda() {
 // ── PEDIDOS ───────────────────────────────────────────────────────────────────
 let ordersData = [];
 
+let REVENDA_CATALOGO = [];
+async function carregarCatalogoRevenda() {
+  if (REVENDA_CATALOGO.length) return REVENDA_CATALOGO;
+  try { REVENDA_CATALOGO = await api('/api/v2/revenda/produtos') || []; } catch (e) { REVENDA_CATALOGO = []; }
+  return REVENDA_CATALOGO;
+}
+
 const PRODUTOS_LKL = [
   { produto: 'ACRILICO',           tipo: 'COMUNICAÇÃO VISUAL' },
   { produto: 'ADESIVOS',           tipo: 'COMUNICAÇÃO VISUAL' },
@@ -3614,13 +3686,13 @@ function setArteEi(val) {
 }
 
 function selectProduto(id, onchange) {
-  const opts = PRODUTOS_LKL.map(p =>
-    `<option value="${p.produto}">${p.produto}</option>`
-  ).join('');
+  const opts = PRODUTOS_LKL.map(p => `<option value="${p.produto}">${p.produto}</option>`).join('');
+  const rev = (REVENDA_CATALOGO || []).map(p => `<option value="revenda:${p.id}">🛰️ ${escHtml(p.nome)} [${escHtml(p.ref)}]</option>`).join('');
+  const grupoRev = rev ? `<optgroup label="Revenda (Graficonauta)">${rev}</optgroup>` : '';
   return `<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">PRODUTO / SERVIÇO *</label>
     <select id="${id}" onchange="${onchange}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
-      <option value="">Selecione...</option>${opts}
+      <option value="">Selecione...</option>${opts}${grupoRev}
     </select>
   </div>`;
 }

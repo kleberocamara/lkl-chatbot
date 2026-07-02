@@ -51,3 +51,36 @@ describe('calcularRevenda', () => {
     expect(r.faixa_usada).toBe(2500);
   });
 });
+
+const { calcularInternoM2 } = require('../src/modules/revenda/pricer');
+
+const bobinasAdesivo = [{ largura_cm: 106 }, { largura_cm: 127 }, { largura_cm: 150 }];
+const bobinasLona = [{ largura_cm: 160 }, { largura_cm: 220 }, { largura_cm: 320 }];
+
+describe('calcularInternoM2', () => {
+  test('adesivo 1,00m x 2,00m → melhor bobina 106 → 1,06×2,00 × R$30 = 63,60', () => {
+    const r = calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 100, altura_cm: 200, quantidade: 1 });
+    expect(r.bobina_cm).toBe(106);
+    expect(r.valor_total).toBeCloseTo(63.60, 2);
+  });
+  test('lona 2,00m x 1,00m → bobina 220 → 2,20×1,00 × 30 = 66,00', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 200, altura_cm: 100, quantidade: 1 });
+    expect(r.bobina_cm).toBe(220);
+    expect(r.valor_total).toBeCloseTo(66.00, 2);
+  });
+  test('arte 0,50m cabe 3× na bobina 150 (util 0,50m) × qtd 3 = 45,00', () => {
+    const r = calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 },
+      { largura_cm: 50, altura_cm: 100, quantidade: 3 });
+    expect(r.bobina_cm).toBe(150);
+    expect(r.valor_total).toBeCloseTo(45.00, 2);
+  });
+  test('dimensão ausente → null', () => {
+    expect(calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 }, { quantidade: 1 })).toBeNull();
+  });
+  test('arte mais larga que todas as bobinas → null', () => {
+    expect(calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 },
+      { largura_cm: 200, altura_cm: 100, quantidade: 1 })).toBeNull();
+  });
+});

@@ -475,6 +475,21 @@
     <div id="revenda-catalogo">Carregando…</div>
   </div>
 
+  <!-- COMPRAS REVENDA -->
+  <div class="page" id="page-revenda_compras">
+    <div class="page-header"><div><h1>🛒 Compras Revenda (Graficonauta)</h1><p>Itens terceirizados a comprar e acompanhamento dos pedidos</p></div></div>
+    <h3 style="margin:0 0 8px">A comprar</h3>
+    <div id="rc-a-comprar">Carregando…</div>
+    <button class="btn btn-primary" style="margin-top:8px" onclick="criarCompraRevenda()">🛒 Criar compra dos selecionados</button>
+    <h3 style="margin:20px 0 8px">Compras</h3>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-outline" onclick="loadComprasLista('pedido_feito')">Pedido feito</button>
+      <button class="btn btn-outline" onclick="loadComprasLista('recebido')">Recebidas</button>
+      <button class="btn btn-outline" onclick="loadComprasLista('')">Todas</button>
+    </div>
+    <div id="rc-compras">Carregando…</div>
+  </div>
+
   <!-- ORÇAMENTOS -->
   <div class="page" id="page-orcamentos">
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -831,6 +846,7 @@ function buildSidebar(role) {
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
     { id: 'revenda',   label: 'Revenda',       icon: '🛰️', roles: ['admin','gestor'] },
+    { id: 'revenda_compras', label: 'Compras Revenda', icon: '🛒', roles: ['admin','gestor','atendente'] },
     { section: 'Configurações', roles: ['admin','gestor','analista','atendente'], children: [
       { id: 'settings', label: 'Configurações', icon: '⚙️', roles: ['admin'] },
       { id: 'usuarios', label: 'Usuários',      icon: '👤', roles: ['admin','gestor','analista','atendente'] },
@@ -995,6 +1011,7 @@ function showPage(page, el) {
     orcamentos:   loadOrcamentosMain,
     prices:       loadPrices,
     revenda:      loadRevenda,
+    revenda_compras: loadComprasRevenda,
     os:           loadOsMain,
     contas_pagar: () => { showSubPage('cp-lista'); },
     clientes:     () => loadClientesMain(1),
@@ -3561,6 +3578,63 @@ async function previewRevenda(prefix) {
     const vEl = document.getElementById(prefix + '-val'); if (vEl) vEl.value = r.valor_unitario;
     if (mem) mem.textContent = r.memoria;
   } else if (mem) { mem.textContent = 'Sem preço automático — informe manual.'; }
+}
+
+// ── COMPRAS REVENDA (terceirização) ──────────────────────────────────────────
+async function loadComprasRevenda() { loadAComprar(); loadComprasLista('pedido_feito'); }
+
+async function loadAComprar() {
+  const host = document.getElementById('rc-a-comprar'); if (!host) return;
+  const itens = await api('/api/v2/revenda-compras/a-comprar');
+  host.innerHTML = (Array.isArray(itens) && itens.length)
+    ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#f5f7ff;text-align:left"><th style="padding:6px"></th><th style="padding:6px">Cliente</th><th style="padding:6px">Orç.</th><th style="padding:6px">Produto</th><th style="padding:6px">Ref</th><th style="padding:6px">Qtd</th><th style="padding:6px">Arte</th></tr></thead><tbody>'
+      + itens.map(i => `<tr style="border-bottom:1px solid #f0f0f0">
+          <td style="padding:6px"><input type="checkbox" class="rc-item" value="${i.id}"></td>
+          <td style="padding:6px">${escHtml(i.cliente_nome || '-')}</td>
+          <td style="padding:6px">#${i.numero_orcamento || '-'}</td>
+          <td style="padding:6px">${escHtml(i.produto_revenda || i.descricao || '-')}</td>
+          <td style="padding:6px">${escHtml(i.ref || '-')}</td>
+          <td style="padding:6px">${i.quantidade}</td>
+          <td style="padding:6px">${i.arte_arquivo_url ? `<a href="${i.arte_arquivo_url}" target="_blank">🖼️</a>` : '—'}</td>
+        </tr>`).join('') + '</tbody></table>'
+    : '<p style="color:#888;font-size:13px">Nenhum item terceirizado a comprar (aprovado + arte aprovada).</p>';
+}
+
+function criarCompraRevenda() {
+  const ids = [...document.querySelectorAll('.rc-item:checked')].map(c => c.value);
+  if (!ids.length) { showToast('Selecione ao menos um item'); return; }
+  showModal('Criar compra na revenda', `
+    <p style="font-size:13px;color:#666">${ids.length} item(ns) selecionado(s).</p>
+    <label style="font-size:13px">Nº do pedido no Graficonauta<br><input id="rc-pedido" placeholder="ex.: 123456" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
+    <label style="font-size:13px">Previsão de entrega (opcional)<br><input id="rc-prev" type="date" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
+    <label style="font-size:13px">Observação (opcional)<br><input id="rc-obs" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px"></label>
+    <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick='salvarCompraRevenda(${JSON.stringify(ids)})'>Criar compra</button>`);
+}
+async function salvarCompraRevenda(ids) {
+  const body = { item_ids: ids, pedido_graficonauta: document.getElementById('rc-pedido').value || null,
+    previsao_entrega: document.getElementById('rc-prev').value || null, observacao: document.getElementById('rc-obs').value || null };
+  const r = await api('/api/v2/revenda-compras', { method: 'POST', body: JSON.stringify(body) });
+  if (r && !r.errors) { closeModal(); showToast('✅ Compra criada'); loadAComprar(); loadComprasLista('pedido_feito'); }
+  else showToast('❌ ' + (r?.errors?.[0] || 'Erro'));
+}
+
+async function loadComprasLista(status) {
+  const host = document.getElementById('rc-compras'); if (!host) return;
+  const compras = await api('/api/v2/revenda-compras' + (status ? '?status=' + status : ''));
+  host.innerHTML = (Array.isArray(compras) && compras.length)
+    ? compras.map(c => `<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b>Compra #${c.numero}</b> · ${escHtml(c.cliente_nome || '-')} · ${c.num_itens} item(ns)
+            ${c.pedido_graficonauta ? '· pedido ' + escHtml(c.pedido_graficonauta) : ''}
+            <span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${c.status === 'recebido' ? '#e8f5e9' : '#fff3e0'}">${c.status}</span></div>
+          ${c.status === 'pedido_feito' ? `<button class="btn btn-outline" style="font-size:12px;padding:4px 10px" onclick="receberCompraRevenda('${c.id}')">📦 marcar recebido</button>` : ''}
+        </div></div>`).join('')
+    : '<p style="color:#888;font-size:13px">Nenhuma compra.</p>';
+}
+async function receberCompraRevenda(id) {
+  const r = await api('/api/v2/revenda-compras/' + id + '/receber', { method: 'PATCH', body: '{}' });
+  if (r && !r.errors) { showToast('✅ Recebido — entrega gerada'); loadComprasLista('pedido_feito'); }
+  else showToast('❌ ' + (r?.errors?.[0] || 'Erro'));
 }
 
 // ── REVENDA (Graficonauta) ────────────────────────────────────────────────────

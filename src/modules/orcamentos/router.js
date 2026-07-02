@@ -397,7 +397,7 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
     if (semValor || recalcular) {
       let calc = null;
       if (revenda_produto_id) {
-        calc = await revendaService.precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas: revenda_prazo_horas, acabamentos: revenda_acabamentos });
+        calc = await revendaService.precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas: revenda_prazo_horas, acabamentos: revenda_acabamentos, largura_cm, altura_cm });
       } else {
         calc = await precificacao.precificarItem({ produto, material_id, quantidade, largura_cm, altura_cm });
       }
@@ -450,6 +450,8 @@ router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), as
           quantidade: quantidade ?? it.quantidade,
           prazo_horas: revenda_prazo_horas ?? it.revenda_prazo_horas,
           acabamentos: revenda_acabamentos ?? it.revenda_acabamentos,
+          largura_cm: largura_cm ?? it.largura_cm,
+          altura_cm: altura_cm ?? it.altura_cm,
         });
       } else {
         calc = await precificacao.precificarItem({

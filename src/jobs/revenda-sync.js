@@ -41,7 +41,7 @@ async function runSync() {
   const logId = logR.rows[0].id;
   let count = 0;
   try {
-    const cats = (await db.query('SELECT id, url FROM revenda_categorias WHERE ativo=TRUE')).rows;
+    const cats = (await db.query("SELECT id, url FROM revenda_categorias WHERE ativo=TRUE AND COALESCE(sincronizavel,TRUE) AND url ILIKE 'http%'")).rows;
     await scraper.comCookie(async (page) => {
       for (const cat of cats) {
         const listaHtml = await scraper.fetchCategoria(page, cat.url);

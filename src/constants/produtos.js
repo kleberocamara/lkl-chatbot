@@ -79,4 +79,15 @@ function selecionarMaterialId(materiais, termo) {
   return cand[0].id;
 }
 
-module.exports = { PRODUTOS, matchProduto, tipoPorProduto, parseDimensoes, tokensMaterial, selecionarMaterialId };
+// AO-4a: tipo_producao do item de revenda conforme a estratégia do produto do catálogo.
+function tipoProducaoDoItemRevenda(estrategia, tipo_servico) {
+  if (estrategia === 'interno_m2') return 'COMUNICAÇÃO VISUAL';
+  if (estrategia === 'manual') {
+    if (tipo_servico === 'OFFSET') return 'OFFSET';
+    if (tipo_servico === 'COMUNICAÇÃO VISUAL') return 'COMUNICAÇÃO VISUAL';
+    return 'REVENDA';
+  }
+  return 'REVENDA';
+}
+
+module.exports = { PRODUTOS, matchProduto, tipoPorProduto, parseDimensoes, tokensMaterial, selecionarMaterialId, tipoProducaoDoItemRevenda };

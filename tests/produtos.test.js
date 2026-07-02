@@ -54,3 +54,29 @@ describe('selecionarMaterialId', () => {
     expect(selecionarMaterialId(f2, 'couchê 90g')).toBe('x');
   });
 });
+
+const { tipoProducaoDoItemRevenda } = require('../src/constants/produtos');
+
+describe('tipoProducaoDoItemRevenda', () => {
+  test('interno_m2 é sempre COMUNICAÇÃO VISUAL', () => {
+    expect(tipoProducaoDoItemRevenda('interno_m2', 'COMUNICAÇÃO VISUAL')).toBe('COMUNICAÇÃO VISUAL');
+    expect(tipoProducaoDoItemRevenda('interno_m2', 'OFFSET')).toBe('COMUNICAÇÃO VISUAL');
+  });
+  test('manual OFFSET → OFFSET', () => {
+    expect(tipoProducaoDoItemRevenda('manual', 'OFFSET')).toBe('OFFSET');
+  });
+  test('manual CV → COMUNICAÇÃO VISUAL', () => {
+    expect(tipoProducaoDoItemRevenda('manual', 'COMUNICAÇÃO VISUAL')).toBe('COMUNICAÇÃO VISUAL');
+  });
+  test('manual IMP. DIGITAL → REVENDA', () => {
+    expect(tipoProducaoDoItemRevenda('manual', 'IMP. DIGITAL')).toBe('REVENDA');
+  });
+  test('revenda_matriz → REVENDA', () => {
+    expect(tipoProducaoDoItemRevenda('revenda_matriz', 'OFFSET')).toBe('REVENDA');
+    expect(tipoProducaoDoItemRevenda('revenda_matriz', 'COMUNICAÇÃO VISUAL')).toBe('REVENDA');
+  });
+  test('estrategia/tipo ausentes → REVENDA', () => {
+    expect(tipoProducaoDoItemRevenda(null, null)).toBe('REVENDA');
+    expect(tipoProducaoDoItemRevenda(undefined, undefined)).toBe('REVENDA');
+  });
+});

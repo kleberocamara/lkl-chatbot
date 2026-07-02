@@ -3495,7 +3495,9 @@ function onItemProdutoChange(prefix) {
   if (val.startsWith('revenda:')) {
     const id = val.slice(8);
     const p = (REVENDA_CATALOGO || []).find(x => String(x.id) === id);
-    cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = 'none'; });
+    const est = p ? p.estrategia : 'revenda_matriz';
+    const escondeCV = (est !== 'interno_m2');
+    cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = escondeCV ? 'none' : ''; });
     renderModoRevenda(prefix, id, p);
     if (box) box.style.display = '';
   } else {
@@ -3505,10 +3507,26 @@ function onItemProdutoChange(prefix) {
   }
 }
 async function renderModoRevenda(prefix, id, p) {
+  const box = document.getElementById(prefix + '-revenda');
+  const est = p ? p.estrategia : 'revenda_matriz';
+  if (est === 'manual') {
+    box.innerHTML = '<div style="border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;color:#888">Produto manual — digite o valor.</div>';
+    return;
+  }
+  if (est === 'interno_m2') {
+    box.innerHTML = `
+      <div style="border:1px solid #e0e6ff;border-radius:8px;padding:10px;margin-bottom:8px;background:#f7f9ff">
+        <div style="font-size:12px;color:#555;font-weight:600;margin-bottom:6px">📐 INTERNO (m²) — informe largura/altura (cm) acima</div>
+        <button type="button" class="btn btn-outline" style="font-size:12px;padding:5px 10px" onclick="previewRevenda('${prefix}')">🔄 calcular preço (m²)</button>
+        <small id="${prefix}-rev-memoria" style="display:block;color:#666;margin-top:4px"></small>
+      </div>`;
+    previewRevenda(prefix);
+    return;
+  }
   const det = await api('/api/v2/revenda/produtos/' + id);
   const acabs = (det?.acabamentos || []).map(a =>
     `<label style="display:block;font-size:13px"><input type="checkbox" class="${prefix}-acab" value="${escHtml(a.nome)}" data-preco="${a.preco}" onchange="previewRevenda('${prefix}')"> ${escHtml(a.nome)} — R$ ${Number(a.preco).toFixed(2)}</label>`).join('');
-  document.getElementById(prefix + '-revenda').innerHTML = `
+  box.innerHTML = `
     <div style="border:1px solid #e0e6ff;border-radius:8px;padding:10px;margin-bottom:8px;background:#f7f9ff">
       <div style="font-size:12px;color:#555;font-weight:600;margin-bottom:6px">🛰️ REVENDA — tiragem, prazo e acabamentos</div>
       <label style="font-size:12px">Prazo<br>
@@ -3524,15 +3542,25 @@ async function previewRevenda(prefix) {
   const val = document.getElementById(prefix + '-produto').value;
   if (!val.startsWith('revenda:')) return;
   const id = val.slice(8);
-  const quantidade = parseFloat(document.getElementById(prefix + '-qtd').value) || 1;
-  const prazo_horas = parseInt(document.getElementById(prefix + '-rev-prazo').value, 10);
-  const acabamentos = [...document.querySelectorAll('.' + prefix + '-acab:checked')].map(c => c.value);
-  const r = await api('/api/v2/revenda/preview', { method: 'POST', body: JSON.stringify({ revenda_produto_id: id, quantidade, prazo_horas, acabamentos }) });
+  const p = (REVENDA_CATALOGO || []).find(x => String(x.id) === id);
+  const est = p ? p.estrategia : 'revenda_matriz';
   const mem = document.getElementById(prefix + '-rev-memoria');
+  if (est === 'manual') return;
+  const quantidade = parseFloat(document.getElementById(prefix + '-qtd').value) || 1;
+  const body = { revenda_produto_id: id, quantidade };
+  if (est === 'interno_m2') {
+    body.largura_cm = parseFloat(document.getElementById(prefix + '-larg').value) || null;
+    body.altura_cm = parseFloat(document.getElementById(prefix + '-alt').value) || null;
+  } else {
+    const prazoEl = document.getElementById(prefix + '-rev-prazo');
+    body.prazo_horas = prazoEl ? parseInt(prazoEl.value, 10) : 24;
+    body.acabamentos = [...document.querySelectorAll('.' + prefix + '-acab:checked')].map(c => c.value);
+  }
+  const r = await api('/api/v2/revenda/preview', { method: 'POST', body: JSON.stringify(body) });
   if (r && r.auto) {
     const vEl = document.getElementById(prefix + '-val'); if (vEl) vEl.value = r.valor_unitario;
     if (mem) mem.textContent = r.memoria;
-  } else if (mem) { mem.textContent = 'Sem preço para essa combinação.'; }
+  } else if (mem) { mem.textContent = 'Sem preço automático — informe manual.'; }
 }
 
 // ── REVENDA (Graficonauta) ────────────────────────────────────────────────────

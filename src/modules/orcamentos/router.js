@@ -1,5 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../../middleware/auth');
+const { tipoProducaoDoItemRevenda } = require('../../constants/produtos');
 const service = require('./service');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
 const whatsapp = require('../../services/whatsapp');
@@ -393,6 +394,10 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
     // Auto-precificação: só quando não veio valor explícito (ou recalcular=true)
     let preco_origem = 'manual', preco_memoria = null;
     let tp = tipo_producao || null;
+    if (revenda_produto_id) {
+      const rp = (await db.query('SELECT estrategia, tipo_servico FROM revenda_produtos WHERE id=$1', [revenda_produto_id])).rows[0];
+      tp = tipoProducaoDoItemRevenda(rp?.estrategia, rp?.tipo_servico);
+    }
     const semValor = (valor_unitario == null && valor_total == null);
     if (semValor || recalcular) {
       let calc = null;
@@ -406,7 +411,6 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
         valor_total = calc.valor_total;
         preco_origem = 'auto';
         preco_memoria = calc.memoria;
-        if (revenda_produto_id) tp = 'REVENDA';
       }
     }
 
@@ -432,6 +436,13 @@ router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), as
             revenda_produto_id, revenda_prazo_horas, revenda_acabamentos } = req.body;
     let { descricao, valor_unitario, valor_total } = req.body;
     if (produto !== undefined) descricao = especificacao ? `${produto} — ${especificacao}` : produto;
+
+    let tpPatch = tipo_producao ?? null;
+    const revIdPatch = revenda_produto_id !== undefined ? revenda_produto_id : null;
+    if (revIdPatch) {
+      const rp = (await db.query('SELECT estrategia, tipo_servico FROM revenda_produtos WHERE id=$1', [revIdPatch])).rows[0];
+      tpPatch = tipoProducaoDoItemRevenda(rp?.estrategia, rp?.tipo_servico);
+    }
 
     let preco_origem = null, preco_memoria = null; // null = COALESCE mantém o atual
     const valorExplicito = (valor_unitario != null || valor_total != null);
@@ -483,7 +494,7 @@ router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), as
          revenda_prazo_horas=COALESCE($17,revenda_prazo_horas),
          revenda_acabamentos=COALESCE($18,revenda_acabamentos)
        WHERE id=$12 AND orcamento_id=$13 RETURNING *`,
-      [produto ?? null, especificacao ?? null, descricao ?? null, tipo_producao ?? null,
+      [produto ?? null, especificacao ?? null, descricao ?? null, tpPatch,
        quantidade ?? null, valor_unitario ?? null, valor_total ?? null,
        largura_cm ?? null, altura_cm ?? null, material_id ?? null,
        (tem_arte === undefined ? null : !!tem_arte),

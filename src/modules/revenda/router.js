@@ -28,8 +28,8 @@ router.get('/config', wrap(async (req, res) => res.json(await service.getConfig(
 router.put('/config', adminGestor, wrap(async (req, res) => res.json((await service.setConfig(req.body)).item)));
 
 router.post('/preview', wrap(async (req, res) => {
-  const { revenda_produto_id, quantidade, prazo_horas, acabamentos } = req.body;
-  const r = await service.precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos });
+  const { revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm } = req.body;
+  const r = await service.precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm });
   if (!r) return res.json({ auto: false });
   res.json({ auto: true, ...r });
 }));

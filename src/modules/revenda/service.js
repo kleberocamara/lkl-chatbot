@@ -64,8 +64,24 @@ async function setConfig(d) {
 }
 
 // Precificação
-async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos }) {
+async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm }) {
   if (!revenda_produto_id) return null;
+  const prod = (await db.query('SELECT estrategia, bobina_grupo, preco_m2, espaco_corte_cm FROM revenda_produtos WHERE id=$1', [revenda_produto_id])).rows[0];
+  if (!prod) return null;
+
+  if (prod.estrategia === 'manual') return null;
+
+  if (prod.estrategia === 'interno_m2') {
+    if (!prod.bobina_grupo) return null;
+    const bobinas = (await db.query('SELECT largura_cm FROM revenda_bobina_grupos WHERE grupo=$1 AND ativo=TRUE ORDER BY largura_cm', [prod.bobina_grupo])).rows;
+    const calc = pricer.calcularInternoM2(
+      { bobinas, preco_m2: prod.preco_m2, espaco_corte_cm: prod.espaco_corte_cm },
+      { largura_cm, altura_cm, quantidade }
+    );
+    return calc ? { ...calc, estrategia: 'interno_m2' } : null;
+  }
+
+  // revenda_matriz (default)
   const cfg = (await db.query('SELECT markup_percent, prazo_padrao_horas FROM revenda_config WHERE id=1')).rows[0] || { markup_percent: 0, prazo_padrao_horas: 24 };
   const prazo = Number(prazo_horas) > 0 ? Number(prazo_horas) : cfg.prazo_padrao_horas;
   const faixas = (await db.query('SELECT quantidade, prazo_horas, preco_total FROM revenda_precos WHERE produto_id=$1', [revenda_produto_id])).rows;
@@ -74,8 +90,7 @@ async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_hor
     { faixas, acabamentos: acabs, markup_percent: cfg.markup_percent },
     { quantidade, prazo_horas: prazo, selecionados: Array.isArray(acabamentos) ? acabamentos.map((a) => (typeof a === 'string' ? a : a.nome)) : [] }
   );
-  if (!calc) return null;
-  return { ...calc, prazo_horas: prazo };
+  return calc ? { ...calc, prazo_horas: prazo, estrategia: 'revenda_matriz' } : null;
 }
 
 module.exports = {

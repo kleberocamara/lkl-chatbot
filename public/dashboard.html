@@ -148,6 +148,7 @@
   .msg-outbound.human { background: #2e7d32; }
   .msg-time { font-size: 10px; opacity: .6; margin-top: 4px; }
   .msg-day-sep { align-self: center; margin: 12px 0 6px; font-size: 11px; color: var(--muted); background: rgba(0,0,0,.05); padding: 2px 12px; border-radius: 10px; }
+  .conv-stalled { background: #d32f2f; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 9px; margin-left: 6px; white-space: nowrap; }
   .chat-input { background: white; padding: 14px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
   .chat-input textarea {
     flex: 1; border: 1px solid var(--border); border-radius: 10px;
@@ -927,6 +928,17 @@ async function init() {
   });
 
   socket.on('conversation_updated', () => loadConversations());
+  socket.on('alerta_humano', (data) => {
+    if (document.getElementById('page-conversations').classList.contains('active')) loadConversations();
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880; g.gain.value = 0.1;
+      o.start(); o.stop(ctx.currentTime + 0.2);
+    } catch (e) {}
+    if (typeof showToast === 'function') showToast(`⏱ ${data.nome || 'Cliente'} aguarda retorno há ${data.horas}h`);
+  });
 }
 
 async function api(url, options = {}) {
@@ -3061,7 +3073,9 @@ async function loadDashboard() {
   document.getElementById('lastUpdate').textContent = 'Atualizado em ' + new Date().toLocaleTimeString('pt-BR');
 
   const badge = document.getElementById('waitingBadge');
-  if (data.waitingHuman > 0) { badge.style.display = ''; badge.textContent = data.waitingHuman; }
+  const paradas = data.stalledHuman || 0;
+  if (paradas > 0) { badge.style.display = ''; badge.textContent = paradas; badge.style.background = '#d32f2f'; }
+  else if (data.waitingHuman > 0) { badge.style.display = ''; badge.textContent = data.waitingHuman; badge.style.background = ''; }
   else badge.style.display = 'none';
 
   const logList = document.getElementById('activityLogs');
@@ -3097,21 +3111,47 @@ async function loadConversations() {
   renderConversations(allConversations);
 }
 
+function _horasParada(c) {
+  if (c.status !== 'aguardando_humano') return 0;
+  const ts = c.last_message_at || c.started_at;
+  if (!ts) return 0;
+  return (Date.now() - new Date(ts).getTime()) / 3600000;
+}
+
 function renderConversations(list) {
   const ul = document.getElementById('convList');
-  ul.innerHTML = list.map(c => `
+  const arr = [...list];
+  arr.sort((a, b) => {
+    const pa = _horasParada(a) >= 2, pb = _horasParada(b) >= 2;
+    if (pa && pb) return _horasParada(b) - _horasParada(a);
+    if (pa) return -1;
+    if (pb) return 1;
+    return 0;
+  });
+  ul.innerHTML = arr.map(c => {
+    const h = _horasParada(c);
+    const pastilha = h >= 2 ? `<span class="conv-stalled">⏱ parada há ${Math.floor(h)}h</span>` : '';
+    return `
     <li class="conv-item ${c.id === currentConvId ? 'selected' : ''}" onclick="openConversation('${c.id}', this)">
       <div class="conv-avatar">${(c.name || c.profile_name || c.phone)[0].toUpperCase()}</div>
       <div class="conv-info">
-        <div class="conv-name">${c.name || c.profile_name || c.phone}</div>
+        <div class="conv-name">${c.name || c.profile_name || c.phone}${pastilha}</div>
         <div class="conv-preview">${c.last_message || 'Sem mensagens'}</div>
       </div>
       <div class="conv-meta">
         <div class="conv-time">${timeAgo(c.last_message_at || c.started_at)}</div>
         <span class="status-badge status-${c.status}">${convStatusLabel(c.status)}</span>
       </div>
-    </li>
-  `).join('') || '<li style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Nenhuma conversa encontrada</li>';
+    </li>`;
+  }).join('') || '<li style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Nenhuma conversa encontrada</li>';
+
+  const nParadas = arr.filter(c => _horasParada(c) >= 2).length;
+  const tabAg = document.querySelector('.filter-tab[onclick*="aguardando_humano"]');
+  if (tabAg) {
+    tabAg.textContent = nParadas > 0 ? `Aguardando (${nParadas})` : 'Aguardando';
+    tabAg.style.color = nParadas > 0 ? '#d32f2f' : '';
+    tabAg.style.fontWeight = nParadas > 0 ? '700' : '';
+  }
 }
 
 function convStatusLabel(s) {

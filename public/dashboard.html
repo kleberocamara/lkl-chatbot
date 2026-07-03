@@ -149,6 +149,8 @@
   .msg-time { font-size: 10px; opacity: .6; margin-top: 4px; }
   .msg-day-sep { align-self: center; margin: 12px 0 6px; font-size: 11px; color: var(--muted); background: rgba(0,0,0,.05); padding: 2px 12px; border-radius: 10px; }
   .conv-stalled { background: #d32f2f; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 9px; margin-left: 6px; white-space: nowrap; }
+  .banner-paradas { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 12px 16px; background: #fdecea; border: 1px solid #f5c6c2; border-left: 4px solid #d32f2f; border-radius: 8px; color: #a01d17; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .banner-paradas .banner-cta { margin-left: auto; background: #d32f2f; color: #fff; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 6px; white-space: nowrap; }
   .chat-input { background: white; padding: 14px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
   .chat-input textarea {
     flex: 1; border: 1px solid var(--border); border-radius: 10px;
@@ -295,6 +297,7 @@
       <h1>Conversas</h1>
       <p>Acompanhe e responda às conversas dos clientes</p>
     </div>
+    <div id="bannerParadas" class="banner-paradas" style="display:none" onclick="verParadas()"></div>
     <div class="chat-layout">
       <div class="chat-sidebar">
         <div class="chat-sidebar-header">
@@ -3109,6 +3112,24 @@ async function loadConversations() {
   const url = currentFilter === 'all' ? '/api/conversations' : `/api/conversations?status=${currentFilter}`;
   allConversations = await api(url) || [];
   renderConversations(allConversations);
+  atualizarBannerParadas();
+}
+
+async function atualizarBannerParadas() {
+  const el = document.getElementById('bannerParadas'); if (!el) return;
+  const stats = await api('/api/dashboard/stats').catch(() => null);
+  const n = (stats && stats.stalledHuman) || 0;
+  if (n > 0) {
+    el.innerHTML = `⏱ <span>${n} cliente${n > 1 ? 's' : ''} aguarda${n > 1 ? 'm' : ''} retorno há mais de 2h</span><span class="banner-cta">Ver agora</span>`;
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function verParadas() {
+  const tab = document.querySelector('.filter-tab[onclick*="aguardando_humano"]');
+  if (tab) setFilter('aguardando_humano', tab);
 }
 
 function _horasParada(c) {

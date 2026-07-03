@@ -29,3 +29,30 @@ describe('calcularRevenda com dobra', () => {
     expect(r.valor_total).toBe(120);
   });
 });
+
+const { escolherFolheto } = require('../src/modules/revenda/service');
+
+describe('escolherFolheto', () => {
+  const skus = [
+    { id: 'a', gramatura: 115, larg_cm: 10, alt_cm: 14, impressao: '4/4' },
+    { id: 'b', gramatura: 115, larg_cm: 10, alt_cm: 21, impressao: '4/4' },
+    { id: 'c', gramatura: 115, larg_cm: 10, alt_cm: 28, impressao: '4/4' },
+    { id: 'd', gramatura: 150, larg_cm: 10, alt_cm: 21, impressao: '4/4' },
+    { id: 'e', gramatura: 115, larg_cm: 10, alt_cm: 21, impressao: '4/0' },
+  ];
+  test('menor tamanho >= pedido, impressão e gramatura corretas', () => {
+    const r = escolherFolheto(skus, { gramatura: 115, largura_cm: 10, altura_cm: 20, impressao: '4/4' });
+    expect(r.id).toBe('b');
+  });
+  test('respeita a impressão', () => {
+    const r = escolherFolheto(skus, { gramatura: 115, largura_cm: 10, altura_cm: 21, impressao: '4/0' });
+    expect(r.id).toBe('e');
+  });
+  test('gramatura mais próxima', () => {
+    const r = escolherFolheto(skus, { gramatura: 140, largura_cm: 10, altura_cm: 21, impressao: '4/4' });
+    expect(r.id).toBe('d');
+  });
+  test('nada serve → null', () => {
+    expect(escolherFolheto(skus, { gramatura: 115, largura_cm: 50, altura_cm: 50, impressao: '4/4' })).toBeNull();
+  });
+});

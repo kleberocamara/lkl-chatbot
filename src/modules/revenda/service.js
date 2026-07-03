@@ -75,7 +75,12 @@ function pontuarSku(textoPedido, nomeSku) {
 const _semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 // Casa {produto, material, tipo_producao} ao SKU mais provável do catálogo (ou null).
-async function resolverProdutoRevenda({ produto, material, tipo_producao }) {
+async function resolverProdutoRevenda({ produto, material, tipo_producao, largura_cm, altura_cm, impressao }) {
+  // Família folheto/flyer/folder: casa por gramatura+tamanho+impressão.
+  if (/FOLDER|FOLHETO|FLYER/.test(_semAcento(produto)) && Number(largura_cm) > 0 && Number(altura_cm) > 0) {
+    const f = await resolverFolheto({ material, largura_cm, altura_cm, impressao });
+    if (f) return f;
+  }
   const texto = `${produto || ''} ${material || ''}`.trim();
   if (!texto) return null;
   const alvoTipo = _semAcento(tipo_producao); // 'COMUNICACAO VISUAL' | 'OFFSET' | ...
@@ -91,6 +96,38 @@ async function resolverProdutoRevenda({ produto, material, tipo_producao }) {
     }
   }
   return bestScore > 0 ? best : null;
+}
+
+// Escolha pura: menor tamanho >= pedido (nas 2 orientações), impressão exata, gramatura mais próxima.
+function escolherFolheto(skus, { gramatura, largura_cm, altura_cm, impressao }) {
+  const imp = (impressao === '4/0' || impressao === '4/4') ? impressao : '4/4';
+  const pl = Number(largura_cm), pa = Number(altura_cm);
+  const cabe = (s) => (s.larg_cm >= pl && s.alt_cm >= pa) || (s.larg_cm >= pa && s.alt_cm >= pl);
+  let cands = skus.filter((s) => s.impressao === imp && cabe(s));
+  if (!cands.length) return null;
+  if (Number.isFinite(gramatura)) {
+    let melhorG = null;
+    for (const s of cands) { const d = Math.abs(s.gramatura - gramatura); if (melhorG == null || d < melhorG) melhorG = d; }
+    cands = cands.filter((s) => Math.abs(s.gramatura - gramatura) === melhorG);
+  }
+  cands.sort((a, b) => (a.larg_cm * a.alt_cm) - (b.larg_cm * b.alt_cm));
+  return cands[0] || null;
+}
+
+// Casa a família folheto/flyer/folder ao SKU certo (gramatura+tamanho+impressão). Retorna a linha ou null.
+async function resolverFolheto({ material, largura_cm, altura_cm, impressao }) {
+  const { rows } = await db.query(
+    `SELECT id, nome FROM revenda_produtos WHERE ativo=TRUE AND estrategia='revenda_matriz' AND nome ILIKE 'Folheto %'`);
+  const parsed = [];
+  for (const r of rows) {
+    const m = r.nome.match(/Folheto\s+(\d+)g\s*\|\s*(\d+)\s*x\s*(\d+)\s*cm\s*\|\s*(4\/0|4\/4)/i);
+    if (!m) continue;
+    parsed.push({ id: r.id, nome: r.nome, gramatura: Number(m[1]), larg_cm: Number(m[2]), alt_cm: Number(m[3]), impressao: m[4] });
+  }
+  const g = (String(material || '').match(/(\d+)\s*g/i) || [])[1];
+  const escolhido = escolherFolheto(parsed, { gramatura: g ? Number(g) : NaN, largura_cm, altura_cm, impressao });
+  if (!escolhido) return null;
+  return { id: escolhido.id, nome: escolhido.nome, estrategia: 'revenda_matriz' };
 }
 
 // Precificação
@@ -135,5 +172,5 @@ module.exports = {
   listarProdutos, detalheProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
-  precificarItemRevenda, pontuarSku, resolverProdutoRevenda,
+  precificarItemRevenda, pontuarSku, resolverProdutoRevenda, escolherFolheto, resolverFolheto,
 };

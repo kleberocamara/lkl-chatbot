@@ -830,6 +830,7 @@ function buildSidebar(role) {
     { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
       { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },
       { id: 'artes',      label: 'Artes',                icon: '🎨', roles: ['admin','gestor','atendente','analista'] },
+      { id: 'revenda_compras', label: 'Compras Revenda', icon: '🛒', roles: ['admin','gestor','atendente'] },
       { id: 'producao',   label: 'Produção',             icon: '🏭', roles: ['admin','gestor','analista','operador'] },
       { id: 'entregas',   label: 'Motorista / Entregas', icon: '🚚', roles: ['admin','gestor','analista','operador'] },
     ]},
@@ -846,7 +847,6 @@ function buildSidebar(role) {
     ]},
     { id: 'prices',    label: 'Preços',        icon: '🏷️', roles: ['admin','gestor'] },
     { id: 'revenda',   label: 'Revenda',       icon: '🛰️', roles: ['admin','gestor'] },
-    { id: 'revenda_compras', label: 'Compras Revenda', icon: '🛒', roles: ['admin','gestor','atendente'] },
     { section: 'Configurações', roles: ['admin','gestor','analista','atendente'], children: [
       { id: 'settings', label: 'Configurações', icon: '⚙️', roles: ['admin'] },
       { id: 'usuarios', label: 'Usuários',      icon: '👤', roles: ['admin','gestor','analista','atendente'] },

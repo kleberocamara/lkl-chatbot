@@ -2,39 +2,15 @@
 //   node scripts/dedup-clientes.js            (dry-run: só relata)
 //   node scripts/dedup-clientes.js --apply    (executa o merge)
 const db = require('../src/db');
-const { normalizarTelefone, normalizarNome } = require('../src/ai/agent');
+const { agruparClientes, escolherCanonicoCliente } = require('../src/ai/agent');
 
 const REF_TABLES = ['orders', 'orcamentos', 'ordens_servico', 'revenda_compras'];
-
-function chaveGrupo(r) {
-  const cpf = String(r.cpf_cnpj || '').replace(/\D/g, '');
-  if (cpf) return `cpf:${cpf}`;
-  return `nt:${normalizarNome(r.nome)}|${normalizarTelefone(r.celular || r.telefone)}`;
-}
-
-function escolherCanonico(g) {
-  return g.slice().sort((a, b) => {
-    const ca = String(a.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
-    const cb = String(b.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
-    if (ca !== cb) return cb - ca;
-    const da = new Date(a.updated_at || a.created_at || 0).getTime();
-    const dbt = new Date(b.updated_at || b.created_at || 0).getTime();
-    if (da !== dbt) return dbt - da;
-    return String(a.id).localeCompare(String(b.id));
-  })[0];
-}
 
 async function main() {
   const apply = process.argv.includes('--apply');
   const { rows } = await db.query(
     `SELECT id, nome, tipo_pessoa, celular, telefone, email, cpf_cnpj, updated_at, created_at FROM clientes_lkl`);
-  const grupos = new Map();
-  for (const r of rows) {
-    const k = chaveGrupo(r);
-    if (!grupos.has(k)) grupos.set(k, []);
-    grupos.get(k).push(r);
-  }
-  const dups = [...grupos.values()].filter(g => g.length > 1);
+  const dups = agruparClientes(rows).filter(g => g.length > 1);
   console.log(`Total de clientes: ${rows.length} | Grupos duplicados: ${dups.length}`);
 
   let removidos = 0;
@@ -44,7 +20,7 @@ async function main() {
   try {
     if (apply) await client.query('BEGIN');
     for (const g of dups) {
-      const canon = escolherCanonico(g);
+      const canon = escolherCanonicoCliente(g);
       const outros = g.filter(r => r.id !== canon.id);
       console.log(`\nGrupo (${g.length}) canônico=${canon.nome} [${canon.id}]`);
       for (const d of outros) {

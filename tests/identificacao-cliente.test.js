@@ -41,4 +41,11 @@ describe('dedupClientes', () => {
     expect(r.length).toBe(1);
     expect(r[0].id).toBe(2);
   });
+  test('dobra row SEM cpf no grupo COM cpf quando nome+telefone batem; canônico é o com cpf', () => {
+    const comCpf = { id: 1, nome: 'KLEBER DE OLIVEIRA CAMARA', tipo_pessoa: 'PF', celular: '21988596449', telefone: null, email: null, cpf_cnpj: '11122233344', updated_at: '2026-01-01' };
+    const semCpf = { id: 2, nome: 'Kleber de Oliveira Camara', tipo_pessoa: 'PF', celular: '21988596449', telefone: null, email: null, cpf_cnpj: null, updated_at: '2026-02-01' };
+    const r = dedupClientes([comCpf, semCpf]);
+    expect(r.length).toBe(1);
+    expect(r[0].id).toBe(1); // canônico = o que tem cpf
+  });
 });

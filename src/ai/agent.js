@@ -20,16 +20,9 @@ function normalizarNome(s) {
 
 // Agrupa cadastros idênticos e retorna 1 canônico por grupo.
 // Chave: cpf_cnpj (só dígitos) quando preenchido; senão nome normalizado + telefone normalizado.
-function dedupClientes(rows) {
-  const grupos = new Map();
-  for (const r of rows) {
-    const cpf = String(r.cpf_cnpj || '').replace(/\D/g, '');
-    const tel = normalizarTelefone(r.celular || r.telefone);
-    const chave = cpf ? `cpf:${cpf}` : `nt:${normalizarNome(r.nome)}|${tel}`;
-    if (!grupos.has(chave)) grupos.set(chave, []);
-    grupos.get(chave).push(r);
-  }
-  const melhor = (g) => g.slice().sort((a, b) => {
+// Canônico de um grupo: prefere quem tem cpf_cnpj; empate → mais recente; último → menor id.
+function escolherCanonicoCliente(g) {
+  return g.slice().sort((a, b) => {
     const ca = String(a.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
     const cb = String(b.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
     if (ca !== cb) return cb - ca;
@@ -38,7 +31,32 @@ function dedupClientes(rows) {
     if (da !== db) return db - da;
     return String(a.id).localeCompare(String(b.id));
   })[0];
-  return [...grupos.values()].map(melhor);
+}
+
+// Agrupa cadastros idênticos. Chave: cpf_cnpj quando preenchido; senão nome+telefone.
+// 2ª passada: dobra uma row SEM cpf no grupo COM cpf quando nome+telefone batem.
+function agruparClientes(rows) {
+  const ntParaCpf = new Map();
+  for (const r of rows) {
+    const cpf = String(r.cpf_cnpj || '').replace(/\D/g, '');
+    if (cpf) {
+      const nt = `${normalizarNome(r.nome)}|${normalizarTelefone(r.celular || r.telefone)}`;
+      if (!ntParaCpf.has(nt)) ntParaCpf.set(nt, `cpf:${cpf}`);
+    }
+  }
+  const grupos = new Map();
+  for (const r of rows) {
+    const cpf = String(r.cpf_cnpj || '').replace(/\D/g, '');
+    const nt = `${normalizarNome(r.nome)}|${normalizarTelefone(r.celular || r.telefone)}`;
+    const chave = cpf ? `cpf:${cpf}` : (ntParaCpf.get(nt) || `nt:${nt}`);
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(r);
+  }
+  return [...grupos.values()];
+}
+
+function dedupClientes(rows) {
+  return agruparClientes(rows).map(escolherCanonicoCliente);
 }
 
 // Busca todos os cadastros ligados ao telefone (celular OU telefone, normalizados) e deduplica.
@@ -372,4 +390,4 @@ async function processMessage(conversationId, userMessage) {
   return { response: cleanResponse, isComplete, orderDetails };
 }
 
-module.exports = { processMessage, SYSTEM_PROMPT, normalizarTelefone, normalizarNome, dedupClientes };
+module.exports = { processMessage, SYSTEM_PROMPT, normalizarTelefone, normalizarNome, dedupClientes, agruparClientes, escolherCanonicoCliente };

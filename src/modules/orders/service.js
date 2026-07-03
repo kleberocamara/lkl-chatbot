@@ -153,11 +153,11 @@ async function criarOrder(dados, userId) {
       // Auto-precificação (rascunho): casa o item a um SKU e usa o motor de preço da revenda.
       let valorUnit = 0, valorTotal = 0, precoOrigem = 'manual', precoMemoria = null, revProdId = null;
       try {
-        const prod = await revendaService.resolverProdutoRevenda({ produto: it.produto, material: it.material, tipo_producao: tipo });
+        const prod = await revendaService.resolverProdutoRevenda({ produto: it.produto, material: it.material, tipo_producao: tipo, largura_cm: larg, altura_cm: alt, impressao: it.impressao });
         if (prod && prod.estrategia !== 'manual') {
           const calc = await revendaService.precificarItemRevenda({
             revenda_produto_id: prod.id, quantidade: it.quantidade,
-            largura_cm: larg, altura_cm: alt, prazo_horas: null, acabamentos: [],
+            largura_cm: larg, altura_cm: alt, prazo_horas: null, acabamentos: [], dobras: it.dobras,
           });
           if (calc && Number(calc.valor_total) > 0) {
             valorUnit = calc.valor_unitario; valorTotal = calc.valor_total;

@@ -72,6 +72,27 @@ function pontuarSku(textoPedido, nomeSku) {
   return toks.reduce((n, t) => n + (setSku.has(t) ? 1 : 0), 0);
 }
 
+const _semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+
+// Casa {produto, material, tipo_producao} ao SKU mais provável do catálogo (ou null).
+async function resolverProdutoRevenda({ produto, material, tipo_producao }) {
+  const texto = `${produto || ''} ${material || ''}`.trim();
+  if (!texto) return null;
+  const alvoTipo = _semAcento(tipo_producao); // 'COMUNICACAO VISUAL' | 'OFFSET' | ...
+  const filtrarTipo = (alvoTipo === 'COMUNICACAO VISUAL' || alvoTipo === 'OFFSET');
+  const { rows } = await db.query(
+    `SELECT id, nome, tipo_servico, estrategia, bobina_grupo, preco_m2 FROM revenda_produtos WHERE ativo = TRUE`);
+  let best = null, bestScore = 0;
+  for (const p of rows) {
+    if (filtrarTipo && _semAcento(p.tipo_servico) !== alvoTipo) continue;
+    const s = pontuarSku(texto, p.nome);
+    if (s > bestScore || (s === bestScore && s > 0 && best && p.estrategia === 'interno_m2' && best.estrategia !== 'interno_m2')) {
+      best = p; bestScore = s;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
 // Precificação
 async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm }) {
   if (!revenda_produto_id) return null;
@@ -107,5 +128,5 @@ module.exports = {
   listarProdutos, detalheProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
-  precificarItemRevenda, pontuarSku,
+  precificarItemRevenda, pontuarSku, resolverProdutoRevenda,
 };

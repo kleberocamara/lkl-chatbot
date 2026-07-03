@@ -58,4 +58,19 @@ async function sendToUser(userId, { title, body, data = {} }) {
   }
 }
 
-module.exports = { init, sendToUser };
+// Envia o mesmo push a todos os usuários cujos papéis estão na lista (reusa sendToUser).
+async function sendToRoles(roles, payload) {
+  if (!initialized) return;
+  const { rows } = await db.query(
+    `SELECT DISTINCT dt.user_id FROM device_tokens dt
+     JOIN users u ON u.id = dt.user_id
+     WHERE u.role = ANY($1)`,
+    [roles]
+  );
+  for (const r of rows) {
+    try { await sendToUser(r.user_id, payload); }
+    catch (e) { console.warn('[FCM sendToRoles]', e.message); }
+  }
+}
+
+module.exports = { init, sendToUser, sendToRoles };

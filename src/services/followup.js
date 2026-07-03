@@ -1,6 +1,7 @@
 const db = require('../db');
 const { sendMessage } = require('./whatsapp');
 const { log } = require('./logger');
+const fcm = require('./fcm');
 const OpenAI = require('openai');
 const _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -205,6 +206,42 @@ function deveAlertarHumano(conv, agora) {
   return (agora.getTime() - new Date(conv.ultima_msg_at).getTime()) > ALERTA_HUMANO_APOS_MS;
 }
 
+// Detecta conversas paradas 2h+ em aguardando_humano e dispara UM push à equipe (horário comercial).
+async function processAlertasHumano() {
+  const agora = new Date();
+  if (isWeekendSP(agora)) return;
+  const horaSP = getHourSP(agora);
+  if (horaSP < 9 || horaSP >= 18) return;
+
+  const cand = await db.query(`
+    SELECT c.id, c.status, c.alerta_humano_em, ct.name, ct.phone,
+           (SELECT MAX(created_at) FROM messages m WHERE m.conversation_id = c.id) AS ultima_msg_at
+    FROM conversations c
+    JOIN contacts ct ON ct.id = c.contact_id
+    WHERE c.status = 'aguardando_humano'
+      AND c.alerta_humano_em IS NULL
+  `);
+
+  for (const conv of cand.rows) {
+    if (!deveAlertarHumano(conv, agora)) continue;
+    try {
+      const horas = Math.floor((agora.getTime() - new Date(conv.ultima_msg_at).getTime()) / 3600000);
+      const nome = conv.name || conv.phone;
+      await fcm.sendToRoles(['admin', 'gestor', 'analista', 'atendente'], {
+        title: '⏱ Cliente aguardando',
+        body: `Cliente ${nome} aguarda retorno há ${horas}h`,
+        data: { conversationId: conv.id, tipo: 'alerta_humano' },
+      });
+      await db.query('UPDATE conversations SET alerta_humano_em = NOW() WHERE id = $1', [conv.id]);
+      await log('alerta_humano', `Alerta de parada (${horas}h) enviado — ${conv.phone}`, { conversationId: conv.id });
+      if (global.io) global.io.emit('alerta_humano', { conversationId: conv.id, nome, horas });
+    } catch (err) {
+      console.error(`[ALERTA-HUMANO] Erro na conversa ${conv.id}:`, err.message);
+      // Não grava o flag: tenta na próxima rodada.
+    }
+  }
+}
+
 // Gera e envia a mensagem de reengajamento para conversas paradas 2+ dias em aguardando_humano.
 async function processReengajamentos() {
   const agora = new Date();
@@ -271,7 +308,8 @@ function startScheduler() {
   setInterval(() => {
     processFollowUps().catch(err => console.error('[follow-up] Erro no scheduler:', err.message));
     processReengajamentos().catch(err => console.error('[reengajamento] Erro no scheduler:', err.message));
+    processAlertasHumano().catch(err => console.error('[alerta-humano] Erro no scheduler:', err.message));
   }, 60 * 1000);
 }
 
-module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar, processReengajamentos, deveAlertarHumano };
+module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar, processReengajamentos, deveAlertarHumano, processAlertasHumano };

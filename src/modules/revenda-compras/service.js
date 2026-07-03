@@ -21,6 +21,15 @@ async function itensACompra() {
   return r.rows;
 }
 
+// Valida os dados da conta a pagar informados pelo operador (função pura, testável sem banco).
+function validarDadosConta({ valor_compra, vencimento }) {
+  const erros = [];
+  const v = Number(valor_compra);
+  if (!Number.isFinite(v) || v <= 0) erros.push('Informe o valor da compra (maior que zero)');
+  if (!vencimento) erros.push('Informe o vencimento da conta a pagar');
+  return erros;
+}
+
 async function criarCompra({ item_ids, pedido_graficonauta, previsao_entrega, observacao }, userId) {
   if (!Array.isArray(item_ids) || !item_ids.length) return { erro: ['Selecione ao menos um item'] };
   const client = await db.pool.connect();
@@ -122,4 +131,4 @@ async function detalhe(id) {
   return compra;
 }
 
-module.exports = { itensACompra, criarCompra, receber, listar, detalhe };
+module.exports = { itensACompra, criarCompra, receber, listar, detalhe, validarDadosConta };

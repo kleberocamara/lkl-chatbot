@@ -2,6 +2,14 @@ const engine = require('../precificacao/engine');
 const round2 = (x) => Math.round(x * 100) / 100;
 const round4 = (x) => Math.round(x * 10000) / 10000;
 
+// Custo da dobra pela regra da Graficonauta: (base + adicional*(dobras-1)) por MILHEIRO.
+function custoDobraMilheiro({ dobras, quantidade, base, adicional }) {
+  const d = Number(dobras) || 0;
+  if (d < 1) return 0;
+  const tarifa = Number(base) + Number(adicional) * (d - 1);
+  return round2(tarifa * (Number(quantidade) / 1000));
+}
+
 // ctx = { faixas, acabamentos, markup_percent } ; opts = { quantidade, prazo_horas, selecionados }
 function calcularRevenda(ctx, opts) {
   const qtd = Number(opts.quantidade) > 0 ? Number(opts.quantidade) : 1;
@@ -20,10 +28,16 @@ function calcularRevenda(ctx, opts) {
     .reduce((s, a) => s + Number(a.preco), 0);
 
   const markup = Number(ctx.markup_percent) || 0;
-  const total = round2((base + acab) * (1 + markup / 100));
+  const dobra = custoDobraMilheiro({
+    dobras: opts.dobras, quantidade: faixa.quantidade,
+    base: ctx.dobra_base != null ? ctx.dobra_base : 10,
+    adicional: ctx.dobra_adicional != null ? ctx.dobra_adicional : 5,
+  });
+  const total = round2((base + acab + dobra) * (1 + markup / 100));
   const valor_unitario = round4(total / qtd);
   const memoria = `Faixa ${faixa.quantidade}un/${prazo}h R$ ${round2(base)}`
     + (acab ? ` + acab R$ ${round2(acab)}` : '')
+    + (dobra ? ` + dobra R$ ${round2(dobra)}` : '')
     + ` ×(1+${markup}%) = R$ ${total} (un R$ ${valor_unitario})`;
 
   return { valor_unitario, valor_total: total, memoria, faixa_usada: faixa.quantidade };
@@ -43,4 +57,4 @@ function calcularInternoM2(ctx, item) {
   return { valor_unitario: vu, valor_total: vt, memoria, bobina_cm: b.largura_cm };
 }
 
-module.exports = { calcularRevenda, round2, calcularInternoM2 };
+module.exports = { calcularRevenda, round2, calcularInternoM2, custoDobraMilheiro };

@@ -30,8 +30,10 @@ function validarDadosConta({ valor_compra, vencimento }) {
   return erros;
 }
 
-async function criarCompra({ item_ids, pedido_graficonauta, previsao_entrega, observacao }, userId) {
+async function criarCompra({ item_ids, pedido_graficonauta, previsao_entrega, observacao, valor_compra, vencimento }, userId) {
   if (!Array.isArray(item_ids) || !item_ids.length) return { erro: ['Selecione ao menos um item'] };
+  const errosConta = validarDadosConta({ valor_compra, vencimento });
+  if (errosConta.length) return { erro: errosConta };
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -48,16 +50,26 @@ async function criarCompra({ item_ids, pedido_graficonauta, previsao_entrega, ob
     }
     const clienteId = val.rows[0].cliente_id || null;
     const compraR = await client.query(
-      `INSERT INTO revenda_compras (status, pedido_graficonauta, cliente_id, previsao_entrega, observacao, responsavel_id)
-       VALUES ('pedido_feito', $1, $2, $3, $4, $5) RETURNING id, numero`,
-      [pedido_graficonauta || null, clienteId, previsao_entrega || null, observacao || null, userId || null]
+      `INSERT INTO revenda_compras (status, pedido_graficonauta, cliente_id, previsao_entrega, observacao, responsavel_id, valor_compra)
+       VALUES ('pedido_feito', $1, $2, $3, $4, $5, $6) RETURNING id, numero`,
+      [pedido_graficonauta || null, clienteId, previsao_entrega || null, observacao || null, userId || null, valor_compra]
     );
     const compraId = compraR.rows[0].id;
+    const numero = compraR.rows[0].numero;
     for (const it of val.rows) {
       await client.query('INSERT INTO revenda_compra_itens (compra_id, orcamento_item_id) VALUES ($1,$2)', [compraId, it.id]);
     }
+    const contaR = await client.query(
+      `INSERT INTO contas_pagar
+         (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, tipo_entrada, observacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [`Compra revenda #${numero} — pedido Graficonauta ${pedido_graficonauta || 's/nº'}`,
+       'Graficonauta', 'SERVICO_TERCEIRIZADO', valor_compra, vencimento,
+       'boleto', 'manual', `Gerada automaticamente da compra revenda #${numero}`]
+    );
+    await client.query('UPDATE revenda_compras SET conta_pagar_id=$1 WHERE id=$2', [contaR.rows[0].id, compraId]);
     await client.query('COMMIT');
-    return { item: { id: compraId, numero: compraR.rows[0].numero } };
+    return { item: { id: compraId, numero, conta_pagar_id: contaR.rows[0].id } };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

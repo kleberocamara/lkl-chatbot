@@ -195,6 +195,16 @@ function deveReengajar(conv, agora) {
   return (agora.getTime() - ultima) > REENGAJAR_APOS_MS;
 }
 
+const ALERTA_HUMANO_APOS_MS = 2 * 3600 * 1000;
+
+// Função pura: a conversa deve gerar alerta à equipe? (parada 2h+ em aguardando_humano, sem alerta ainda).
+function deveAlertarHumano(conv, agora) {
+  if (!conv || conv.status !== 'aguardando_humano') return false;
+  if (conv.alerta_humano_em != null) return false;
+  if (!conv.ultima_msg_at) return false;
+  return (agora.getTime() - new Date(conv.ultima_msg_at).getTime()) > ALERTA_HUMANO_APOS_MS;
+}
+
 // Gera e envia a mensagem de reengajamento para conversas paradas 2+ dias em aguardando_humano.
 async function processReengajamentos() {
   const agora = new Date();
@@ -264,4 +274,4 @@ function startScheduler() {
   }, 60 * 1000);
 }
 
-module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar, processReengajamentos };
+module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar, processReengajamentos, deveAlertarHumano };

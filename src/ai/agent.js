@@ -41,6 +41,20 @@ function dedupClientes(rows) {
   return [...grupos.values()].map(melhor);
 }
 
+// Busca todos os cadastros ligados ao telefone (celular OU telefone, normalizados) e deduplica.
+async function buscarClientesPorTelefone(phone) {
+  const tel = normalizarTelefone(phone);
+  if (tel.length < 8) return []; // muito curto → não arrisca match
+  const r = await db.query(
+    `SELECT id, nome, tipo_pessoa, celular, telefone, email, cpf_cnpj, updated_at, created_at
+     FROM clientes_lkl
+     WHERE regexp_replace(COALESCE(celular,''),  '\\D','','g') LIKE $1
+        OR regexp_replace(COALESCE(telefone,''), '\\D','','g') LIKE $1`,
+    [`%${tel}`]
+  );
+  return dedupClientes(r.rows);
+}
+
 const SYSTEM_PROMPT = `Você é o assistente virtual da Gráfica LKL, uma empresa especializada em:
 - Adesivação (paredes, frotas, fachadas)
 - Impressão digital (banners, lonas, adesivos vinílicos)
@@ -105,6 +119,7 @@ REGRAS:
    - ATENÇÃO: só indique esse número quando tiver CERTEZA de que o assunto está fora do escopo. Em caso de dúvida, tente entender melhor o que o cliente precisa antes de redirecionar. Nunca redirecione um cliente que está pedindo um serviço gráfico ou consultando um pedido.
 11. IDENTIFICAÇÃO DO CLIENTE E E-MAIL — siga a nota de contexto:
    - Se houver uma marcação "[CLIENTE NA BASE]" no contexto, confirme a identidade pelo nome informado ali ("Vi que você já é cliente como <NOME>. É isso mesmo? 😊"). Se o cliente confirmar, prossiga; se NEGAR (não é essa pessoa/empresa), trate como cliente novo e pergunte o nome.
+   - Se houver "[CLIENTES NA BASE]" (VÁRIOS cadastros), LISTE os cadastros para o cliente e pergunte para qual deles é este pedido, ou se é um cadastro novo. NUNCA escolha sozinho. Quando o cliente escolher um existente, use em "nome_cliente" exatamente o nome desse cadastro. Se ele disser que nenhum é (ou é novo), trate como cadastro novo e peça nome + e-mail.
    - E-mail: se a nota indicar "[CLIENTE NOVO]" ou "[CLIENTE NA BASE] ... sem e-mail", PEÇA o e-mail do cliente. Se a nota trouxer um e-mail cadastrado, CONFIRME se está correto ("Seu e-mail cadastrado é <EMAIL>, está certo? 😊") e atualize se o cliente corrigir. Nunca registre o pedido sem ter tratado o e-mail.
    - Ao chamar registrar_pedido, preencha "email" com o e-mail final e "cliente_existente_confirmado" (true se confirmou o cadastro encontrado, false se negou).
 12. MÚLTIPLOS PRODUTOS — quando o cliente pedir mais de um produto, trate CADA produto como um item separado, com suas próprias dimensões, quantidade, material e arte. No resumo, liste cada item. Ao chamar registrar_pedido, preencha o array "itens" com um objeto por produto. NUNCA junte produtos diferentes num único item.
@@ -208,16 +223,19 @@ async function processMessage(conversationId, userMessage) {
       [conversationId]);
     const phone = cinfo.rows[0]?.phone;
     if (phone) {
-      const cel = phone.replace(/\D/g, '');
-      const cli = await db.query(
-        `SELECT nome, email FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${cel.slice(-9)}`]);
-      if (cli.rows[0]) {
-        const nm = cli.rows[0].nome, em = cli.rows[0].email;
+      const cands = await buscarClientesPorTelefone(phone);
+      if (cands.length === 0) {
+        clienteNota = `\n\n[CLIENTE NOVO] Telefone não cadastrado. Faça o cadastro mínimo: peça o nome e o e-mail do cliente.`;
+      } else if (cands.length === 1) {
+        const nm = cands[0].nome, em = cands[0].email;
         clienteNota = em
           ? `\n\n[CLIENTE NA BASE] Telefone cadastrado como "${nm}", e-mail "${em}". Confirme a identidade pelo nome e confirme se esse e-mail está correto (atualize se o cliente corrigir).`
           : `\n\n[CLIENTE NA BASE] Telefone cadastrado como "${nm}", sem e-mail. Confirme a identidade pelo nome e peça o e-mail.`;
       } else {
-        clienteNota = `\n\n[CLIENTE NOVO] Telefone não cadastrado. Faça o cadastro mínimo: peça o nome e o e-mail do cliente.`;
+        const lista = cands.slice(0, 5)
+          .map((c, i) => `${i + 1}) ${c.nome} (${c.tipo_pessoa === 'PJ' ? 'PJ' : 'PF'})`).join('\n');
+        const extra = cands.length > 5 ? '\n(entre outros — confirme o nome/empresa)' : '';
+        clienteNota = `\n\n[CLIENTES NA BASE] O telefone está ligado a mais de um cadastro:\n${lista}${extra}\nPergunte para QUAL desses cadastros é este pedido, ou se é um cadastro novo. NÃO escolha por conta própria. Ao registrar, use em "nome_cliente" exatamente o nome do cadastro escolhido.`;
       }
     }
   } catch (e) { console.warn('[CHATBOT-CLIENTE] lookup falhou:', e.message); }
@@ -259,11 +277,15 @@ async function processMessage(conversationId, userMessage) {
         let clienteId = null;
         if (row?.phone) {
           const celular = row.phone.replace(/\D/g, '');
-          const existing = await db.query(
-            `SELECT id, email FROM clientes_lkl WHERE celular LIKE $1 LIMIT 1`, [`%${celular.slice(-9)}`]);
-          const matched = existing.rows[0];
-          const confirmado = args.cliente_existente_confirmado !== false; // ausente/true => usa o existente
-          if (matched && confirmado) {
+          const cands = await buscarClientesPorTelefone(row.phone);
+          const confirmado = args.cliente_existente_confirmado !== false; // ausente/true => usa existente
+          let matched = null;
+          if (confirmado && cands.length) {
+            const alvo = normalizarNome(args.nome_cliente);
+            matched = (alvo && cands.find(c => normalizarNome(c.nome) === alvo))
+              || (cands.length === 1 ? cands[0] : null);
+          }
+          if (matched) {
             clienteId = matched.id;
             if (!matched.email && args.email) {
               await db.query('UPDATE clientes_lkl SET email = $1 WHERE id = $2', [args.email, clienteId]);

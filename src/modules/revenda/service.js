@@ -94,7 +94,7 @@ async function resolverProdutoRevenda({ produto, material, tipo_producao }) {
 }
 
 // Precificação
-async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm }) {
+async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm, dobras }) {
   if (!revenda_produto_id) return null;
   const prod = (await db.query('SELECT estrategia, bobina_grupo, preco_m2, espaco_corte_cm FROM revenda_produtos WHERE id=$1', [revenda_produto_id])).rows[0];
   if (!prod) return null;
@@ -116,9 +116,16 @@ async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_hor
   const prazo = Number(prazo_horas) > 0 ? Number(prazo_horas) : cfg.prazo_padrao_horas;
   const faixas = (await db.query('SELECT quantidade, prazo_horas, preco_total FROM revenda_precos WHERE produto_id=$1', [revenda_produto_id])).rows;
   const acabs = (await db.query('SELECT nome, preco FROM revenda_acabamentos WHERE produto_id=$1', [revenda_produto_id])).rows;
+  const _sget = async (k, def) => {
+    const r = await db.query('SELECT value FROM settings WHERE key=$1', [k]);
+    const v = Number(r.rows[0]?.value);
+    return Number.isFinite(v) ? v : def;
+  };
+  const dobraBase = await _sget('revenda_dobra_base_milheiro', 10);
+  const dobraAdic = await _sget('revenda_dobra_adicional_milheiro', 5);
   const calc = pricer.calcularRevenda(
-    { faixas, acabamentos: acabs, markup_percent: cfg.markup_percent },
-    { quantidade, prazo_horas: prazo, selecionados: Array.isArray(acabamentos) ? acabamentos.map((a) => (typeof a === 'string' ? a : a.nome)) : [] }
+    { faixas, acabamentos: acabs, markup_percent: cfg.markup_percent, dobra_base: dobraBase, dobra_adicional: dobraAdic },
+    { quantidade, prazo_horas: prazo, selecionados: Array.isArray(acabamentos) ? acabamentos.map((a) => (typeof a === 'string' ? a : a.nome)) : [], dobras: Number(dobras) || 0 }
   );
   return calc ? { ...calc, prazo_horas: prazo, estrategia: 'revenda_matriz' } : null;
 }

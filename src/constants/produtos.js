@@ -48,11 +48,11 @@ function tipoPorProduto(nome) { const h = matchProduto(nome); return h ? h.tipo 
 
 function parseDimensoes(texto) {
   if (!texto) return null;
-  const m = String(texto).match(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i);
+  const m = String(texto).match(/(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i);
   if (!m) return null;
   const num = (s) => parseFloat(String(s).replace(',', '.'));
-  let l = num(m[1]), a = num(m[2]);
-  const unidade = (m[3] || '').toLowerCase();
+  let l = num(m[1]), a = num(m[3]);
+  const unidade = (m[4] || m[2] || '').toLowerCase();
   if (unidade === 'm') { l *= 100; a *= 100; }
   else if (unidade === 'mm') { l /= 10; a /= 10; }
   if (!(l > 0) || !(a > 0)) return null;

@@ -3603,15 +3603,20 @@ async function loadAComprar() {
 function criarCompraRevenda() {
   const ids = [...document.querySelectorAll('.rc-item:checked')].map(c => c.value);
   if (!ids.length) { showToast('Selecione ao menos um item'); return; }
+  const hoje = new Date().toISOString().slice(0, 10);
   showModal('Criar compra na revenda', `
     <p style="font-size:13px;color:#666">${ids.length} item(ns) selecionado(s).</p>
     <label style="font-size:13px">Nº do pedido no Graficonauta<br><input id="rc-pedido" placeholder="ex.: 123456" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
+    <label style="font-size:13px">Valor da compra (R$)<br><input id="rc-valor" type="number" step="0.01" min="0" placeholder="ex.: 150.00" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
+    <label style="font-size:13px">Vencimento<br><input id="rc-venc" type="date" value="${hoje}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
     <label style="font-size:13px">Previsão de entrega (opcional)<br><input id="rc-prev" type="date" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px"></label>
     <label style="font-size:13px">Observação (opcional)<br><input id="rc-obs" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px"></label>
     <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick='salvarCompraRevenda(${JSON.stringify(ids)})'>Criar compra</button>`);
 }
 async function salvarCompraRevenda(ids) {
   const body = { item_ids: ids, pedido_graficonauta: document.getElementById('rc-pedido').value || null,
+    valor_compra: document.getElementById('rc-valor').value || null,
+    vencimento: document.getElementById('rc-venc').value || null,
     previsao_entrega: document.getElementById('rc-prev').value || null, observacao: document.getElementById('rc-obs').value || null };
   const r = await api('/api/v2/revenda-compras', { method: 'POST', body: JSON.stringify(body) });
   if (r && !r.errors) { closeModal(); showToast('✅ Compra criada'); loadAComprar(); loadComprasLista('pedido_feito'); }
@@ -3626,7 +3631,9 @@ async function loadComprasLista(status) {
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div><b>Compra #${c.numero}</b> · ${escHtml(c.cliente_nome || '-')} · ${c.num_itens} item(ns)
             ${c.pedido_graficonauta ? '· pedido ' + escHtml(c.pedido_graficonauta) : ''}
-            <span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${c.status === 'recebido' ? '#e8f5e9' : '#fff3e0'}">${c.status}</span></div>
+            ${c.valor_compra != null ? '· R$ ' + Number(c.valor_compra).toFixed(2) : ''}
+            <span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${c.status === 'recebido' ? '#e8f5e9' : '#fff3e0'}">${c.status}</span>
+            ${c.conta_pagar_id ? '<span style="padding:2px 8px;border-radius:10px;font-size:11px;background:#e3f2fd;margin-left:4px">💰 conta a pagar #' + c.conta_pagar_id + '</span>' : ''}</div>
           ${c.status === 'pedido_feito' ? `<button class="btn btn-outline" style="font-size:12px;padding:4px 10px" onclick="receberCompraRevenda('${c.id}')">📦 marcar recebido</button>` : ''}
         </div></div>`).join('')
     : '<p style="color:#888;font-size:13px">Nenhuma compra.</p>';

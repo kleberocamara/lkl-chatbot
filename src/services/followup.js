@@ -1,6 +1,8 @@
 const db = require('../db');
 const { sendMessage } = require('./whatsapp');
 const { log } = require('./logger');
+const OpenAI = require('openai');
+const _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // São Paulo é sempre UTC-3 (sem horário de verão desde 2019)
 const SP_OFFSET_MS = 3 * 3600 * 1000;
@@ -193,13 +195,73 @@ function deveReengajar(conv, agora) {
   return (agora.getTime() - ultima) > REENGAJAR_APOS_MS;
 }
 
+// Gera e envia a mensagem de reengajamento para conversas paradas 2+ dias em aguardando_humano.
+async function processReengajamentos() {
+  const agora = new Date();
+  // Só em dia útil e horário comercial (9h–18h SP) — reusa os helpers de fuso.
+  if (isWeekendSP(agora)) return;
+  const horaSP = getHourSP(agora);
+  if (horaSP < 9 || horaSP >= 18) return;
+
+  const cand = await db.query(`
+    SELECT c.id, c.ai_context, c.reengajado_em, c.pedido_numero, c.status, ct.phone,
+           (SELECT MAX(created_at) FROM messages m WHERE m.conversation_id = c.id) AS ultima_msg_at
+    FROM conversations c
+    JOIN contacts ct ON ct.id = c.contact_id
+    WHERE c.status = 'aguardando_humano'
+      AND c.pedido_numero IS NULL
+      AND c.reengajado_em IS NULL
+  `);
+
+  for (const conv of cand.rows) {
+    if (!deveReengajar(conv, agora)) continue;
+    try {
+      const historico = Array.isArray(conv.ai_context) ? conv.ai_context.slice(-20) : [];
+      let mensagem = 'Oi! 😊 Voltando aqui pra te ajudar a finalizar seu orçamento na Gráfica LKL. Ainda tem interesse?';
+      try {
+        const r = await _openai.chat.completions.create({
+          model: process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: [
+            { role: 'system', content: 'Você é o assistente da Gráfica LKL. Escreva UMA mensagem curta e simpática de reengajamento em português BR, retomando de onde a conversa parou: cite o produto/serviço em questão (se houver no histórico) e pergunte se o cliente ainda tem interesse em seguir com o orçamento. Não invente preços. Máx. 2 frases.' },
+            ...historico,
+            { role: 'user', content: '[SISTEMA] Gere agora a mensagem de reengajamento.' },
+          ],
+          temperature: 0.7,
+          max_tokens: 200,
+        });
+        const gerada = r.choices?.[0]?.message?.content?.trim();
+        if (gerada) mensagem = gerada;
+      } catch (e) {
+        console.warn('[REENGAJAMENTO] OpenAI falhou, usando template:', e.message);
+      }
+
+      await sendMessage(conv.phone, mensagem);
+      await db.query(
+        `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by)
+         SELECT $1, c.contact_id, $2, 'outbound', 'ai' FROM conversations c WHERE c.id = $1`,
+        [conv.id, mensagem]
+      );
+      await db.query(
+        `UPDATE conversations SET status = 'active', reengajado_em = NOW(), updated_at = NOW() WHERE id = $1`,
+        [conv.id]
+      );
+      await log('reengajamento', `Reengajamento enviado para ${conv.phone}`, { conversationId: conv.id });
+      if (global.io) global.io.emit('conversation_updated', { conversationId: conv.id });
+    } catch (err) {
+      console.error(`[REENGAJAMENTO] Erro na conversa ${conv.id}:`, err.message);
+      // Não consome o flag: tenta na próxima rodada.
+    }
+  }
+}
+
 // Inicia o scheduler — verifica a cada minuto
 function startScheduler() {
   console.log('🔔 Follow-up scheduler iniciado (verifica a cada 60s)');
   processFollowUps().catch(err => console.error('[follow-up] Erro inicial:', err.message));
   setInterval(() => {
     processFollowUps().catch(err => console.error('[follow-up] Erro no scheduler:', err.message));
+    processReengajamentos().catch(err => console.error('[reengajamento] Erro no scheduler:', err.message));
   }, 60 * 1000);
 }
 
-module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar };
+module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar, processReengajamentos };

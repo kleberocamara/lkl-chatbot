@@ -76,6 +76,7 @@ async function handleInboundMessage(phone, profileName, messageText, waMessageId
 
   // Salva mensagem do cliente
   await saveMessage(conversation.id, contact.id, messageText, 'inbound', waMessageId, 'ai');
+  await db.query('UPDATE conversations SET reengajado_em = NULL WHERE id = $1 AND reengajado_em IS NOT NULL', [conversation.id]);
 
   await log('message_received', `Mensagem recebida de ${phone}`, {
     contactId: contact.id,

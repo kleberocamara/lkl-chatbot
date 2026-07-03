@@ -38,11 +38,14 @@ router.post('/auth/logout', (req, res) => {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 
 router.get('/dashboard/stats', requireAuthApi, async (req, res) => {
-  const [contacts, conversations, todayMessages, waitingHuman, logs] = await Promise.all([
+  const [contacts, conversations, todayMessages, waitingHuman, stalledHuman, logs] = await Promise.all([
     db.query('SELECT COUNT(*) FROM contacts'),
     db.query('SELECT COUNT(*) FROM conversations'),
     db.query(`SELECT COUNT(*) FROM messages WHERE created_at >= CURRENT_DATE`),
     db.query(`SELECT COUNT(*) FROM conversations WHERE status = 'aguardando_humano'`),
+    db.query(`SELECT COUNT(*) FROM conversations c
+              WHERE c.status = 'aguardando_humano'
+                AND (SELECT MAX(created_at) FROM messages m WHERE m.conversation_id = c.id) < NOW() - INTERVAL '2 hours'`),
     db.query(`SELECT event_type, description, created_at, metadata FROM activity_logs ORDER BY created_at DESC LIMIT 50`),
   ]);
 
@@ -51,6 +54,7 @@ router.get('/dashboard/stats', requireAuthApi, async (req, res) => {
     totalConversations: parseInt(conversations.rows[0].count),
     todayMessages: parseInt(todayMessages.rows[0].count),
     waitingHuman: parseInt(waitingHuman.rows[0].count),
+    stalledHuman: parseInt(stalledHuman.rows[0].count),
     recentLogs: logs.rows,
   });
 });
@@ -115,6 +119,7 @@ router.post('/conversations/:id/reply', requireAuthApi, async (req, res) => {
     `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by, sent_by_name) VALUES ($1, $2, $3, 'outbound', 'human', $4)`,
     [convId, contact_id, message, req.user.name]
   );
+  await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
   await log('human_reply', `${req.user.name} respondeu em ${convId}`, {
     conversationId: convId, userId: req.user.id,
     metadata: { message: message.substring(0, 100) },
@@ -138,7 +143,7 @@ router.post('/conversations/:id/orcamento-enviado', requireAuthApi, async (req, 
   const now = new Date();
   await db.query(
     `UPDATE conversations SET status = 'orcamento_enviado', pedido_status = 'orcamento_enviado',
-     orcamento_enviado_at = $1, updated_at = NOW() WHERE id = $2`,
+     orcamento_enviado_at = $1, alerta_humano_em = NULL, updated_at = NOW() WHERE id = $2`,
     [now.toISOString(), id]
   );
 
@@ -157,7 +162,7 @@ router.post('/conversations/:id/orcamento-enviado', requireAuthApi, async (req, 
 router.post('/conversations/:id/orcamento-aprovado', requireAuthApi, async (req, res) => {
   const { id } = req.params;
   await db.query(
-    `UPDATE conversations SET pedido_status = 'orcamento_aprovado', status = 'aguardando_humano', updated_at = NOW() WHERE id = $1`,
+    `UPDATE conversations SET pedido_status = 'orcamento_aprovado', status = 'aguardando_humano', alerta_humano_em = NULL, updated_at = NOW() WHERE id = $1`,
     [id]
   );
   await db.query(
@@ -174,7 +179,7 @@ router.post('/conversations/:id/orcamento-aprovado', requireAuthApi, async (req,
 // Resolve conversa
 router.post('/conversations/:id/resolve', requireAuthApi, async (req, res) => {
   await db.query(
-    `UPDATE conversations SET status = 'resolved', resolved_at = NOW(), updated_at = NOW() WHERE id = $1`,
+    `UPDATE conversations SET status = 'resolved', resolved_at = NOW(), alerta_humano_em = NULL, updated_at = NOW() WHERE id = $1`,
     [req.params.id]
   );
   await log('conversation_resolved', `Conversa ${req.params.id} resolvida`, {

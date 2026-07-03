@@ -162,7 +162,12 @@ REGRAS:
    - Toda dimensão é registrada em METROS com vírgula: "1,20m x 1,20m", "0,30m x 0,45m". NUNCA misture metro e centímetro na mesma medida.
    - Se o cliente informar cm ou mm, CONVERTA e CONFIRME antes de seguir. Ex.: "Só confirmando: 30cm × 45cm = 0,30m × 0,45m, certo? 😊" (30cm→0,30m; 1200mm→1,20m; 90x120cm→0,90m × 1,20m).
    - SEMPRE confirme as dimensões com o cliente antes do resumo.
-   - Ao chamar registrar_pedido, o campo "dimensoes" (e o de cada objeto em "itens") DEVE vir sempre em metros no formato "L,LLm x A,AAm".`;
+   - Ao chamar registrar_pedido, o campo "dimensoes" (e o de cada objeto em "itens") DEVE vir sempre em metros no formato "L,LLm x A,AAm".
+16. FOLHETO / FLYER / FOLDER — colete para orçar certo (mesmo serviço-base; folder = folheto + dobra):
+   - SEMPRE pergunte o TAMANHO (em metros/cm) — não registre sem tamanho.
+   - SEMPRE pergunte a IMPRESSÃO: só frente (4/0) ou frente e verso (4/4). Ex.: "É impresso só na frente ou frente e verso? 😊"
+   - Se for FOLDER, pergunte também o Nº DE DOBRAS (1, 2 ou 3). Folheto/flyer não têm dobra.
+   - Ao chamar registrar_pedido, preencha "impressao" ("4/0" ou "4/4") e "dobras" (0 para folheto/flyer; 1–3 para folder) no item.`;
 
 const TOOLS = [
   {
@@ -179,6 +184,8 @@ const TOOLS = [
           dimensoes:     { type: 'string' },
           quantidade:    { type: 'number' },
           material:      { type: 'string' },
+          impressao:     { type: 'string', enum: ['4/0', '4/4'], description: 'Impressão: 4/0 (só frente) ou 4/4 (frente e verso). Para folheto/flyer/folder.' },
+          dobras:        { type: 'number', description: 'Nº de dobras (folder): 1–3; 0 para folheto/flyer.' },
           prazo:         { type: 'string' },
           tem_arte:      { type: 'boolean' },
           entrega:       { type: 'string', description: '"retirada" ou "entrega"' },
@@ -198,6 +205,8 @@ const TOOLS = [
                 quantidade: { type: 'number' },
                 material:   { type: 'string' },
                 tem_arte:   { type: 'boolean' },
+                impressao:  { type: 'string', enum: ['4/0', '4/4'] },
+                dobras:     { type: 'number' },
               },
               required: ['produto', 'quantidade'],
             },
@@ -327,10 +336,12 @@ async function processMessage(conversationId, userMessage) {
         const itensDados = itensBrutos.map(it => ({
           produto: (it.produto || args.tipo_servico || 'Pedido via chatbot'),
           quantidade: parseInt(it.quantidade) || 1,
-          especificacao: [it.dimensoes, it.material].filter(Boolean).join(' · ') || null,
+          especificacao: [it.dimensoes, it.material, it.impressao, (Number(it.dobras) > 0 ? `${it.dobras} dobra(s)` : null)].filter(Boolean).join(' · ') || null,
           tem_arte: !!it.tem_arte,
           dimensoes: it.dimensoes || null,
           material: it.material || null,
+          impressao: it.impressao || args.impressao || null,
+          dobras: Number(it.dobras || args.dobras) || 0,
         }));
         const dados = {
           origin_channel: 'chatbot',

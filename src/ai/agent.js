@@ -7,6 +7,40 @@ const { calcularOrcamento } = require('../services/quotation');
 const { PRODUTOS } = require('../constants/produtos');
 const PRODUTO_ENUM = PRODUTOS.map(p => p.produto).concat('OUTROS');
 
+function normalizarTelefone(s) {
+  let d = String(s || '').replace(/\D/g, '');
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  return d.slice(-9);
+}
+
+function normalizarNome(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+// Agrupa cadastros idênticos e retorna 1 canônico por grupo.
+// Chave: cpf_cnpj (só dígitos) quando preenchido; senão nome normalizado + telefone normalizado.
+function dedupClientes(rows) {
+  const grupos = new Map();
+  for (const r of rows) {
+    const cpf = String(r.cpf_cnpj || '').replace(/\D/g, '');
+    const tel = normalizarTelefone(r.celular || r.telefone);
+    const chave = cpf ? `cpf:${cpf}` : `nt:${normalizarNome(r.nome)}|${tel}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(r);
+  }
+  const melhor = (g) => g.slice().sort((a, b) => {
+    const ca = String(a.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
+    const cb = String(b.cpf_cnpj || '').replace(/\D/g, '') ? 1 : 0;
+    if (ca !== cb) return cb - ca;
+    const da = new Date(a.updated_at || a.created_at || 0).getTime();
+    const db = new Date(b.updated_at || b.created_at || 0).getTime();
+    if (da !== db) return db - da;
+    return String(a.id).localeCompare(String(b.id));
+  })[0];
+  return [...grupos.values()].map(melhor);
+}
+
 const SYSTEM_PROMPT = `Você é o assistente virtual da Gráfica LKL, uma empresa especializada em:
 - Adesivação (paredes, frotas, fachadas)
 - Impressão digital (banners, lonas, adesivos vinílicos)
@@ -316,4 +350,4 @@ async function processMessage(conversationId, userMessage) {
   return { response: cleanResponse, isComplete, orderDetails };
 }
 
-module.exports = { processMessage, SYSTEM_PROMPT };
+module.exports = { processMessage, SYSTEM_PROMPT, normalizarTelefone, normalizarNome, dedupClientes };

@@ -76,7 +76,26 @@ REGRAS:
 12. MÚLTIPLOS PRODUTOS — quando o cliente pedir mais de um produto, trate CADA produto como um item separado, com suas próprias dimensões, quantidade, material e arte. No resumo, liste cada item. Ao chamar registrar_pedido, preencha o array "itens" com um objeto por produto. NUNCA junte produtos diferentes num único item.
 13. PRODUTO E MATERIAL — PADRONIZAÇÃO (só para a função registrar_pedido; NÃO muda como você fala com o cliente):
    - Ao chamar registrar_pedido, o campo "produto" (e o "produto" de cada item em "itens") DEVE ser exatamente um dos valores desta lista oficial: ${PRODUTO_ENUM.join(', ')}. Mapeie o que o cliente pediu para o nome MAIS PRÓXIMO da lista. Se nada se encaixar, use "OUTROS" e descreva o produto em "observacoes".
-   - O campo "material" deve ser um descritor limpo: família + gramatura/acabamento. Ex.: "couchê 90g", "lona 440", "vinil fosco", "cartolina 240g". Não invente material; se o cliente não souber, deixe em branco.`;
+   - O campo "material" deve ser um descritor limpo: família + gramatura/acabamento. Ex.: "couchê 90g", "lona 440", "vinil fosco", "cartolina 240g". Não invente material; se o cliente não souber, deixe em branco.
+14. GUIA DE MATERIAIS — sugira quando o cliente não souber (NÃO invente material fora do guia):
+   Quando o cliente não souber ou tiver dúvida sobre material/acabamento ("não sei", "o que vocês recomendam?", "tanto faz"), NÃO pergunte de forma aberta — SUGIRA a opção padrão abaixo e confirme de leve. Ex.: "Pra banner a gente usa lona 440g. Prefere acabamento fosco ou brilho? 😊"
+   | Serviço                    | Sugestão padrão   | Variações comuns                                  |
+   |----------------------------|-------------------|---------------------------------------------------|
+   | Banner                     | lona 440g         | fosco / brilho                                    |
+   | Adesivo / Adesivação       | vinil fosco       | vinil brilho, vinil transparente, vinil perfurado |
+   | Lona (fachada/faixa)       | lona 440g         | com ilhós / bastão                                |
+   | Cartão de visita           | couché 300g       | verniz total, laminação fosca/brilho              |
+   | Folder / Folheto / Flyer   | couché 150g       | couché 115g / 170g                                |
+   | Cartaz                     | couché 150g       | —                                                 |
+   | Placa / Sinalização        | ACM 3mm           | PS 2mm, PVC expandido                             |
+   | Painel ACM                 | ACM 3mm           | —                                                 |
+   | Wind Banner                | tecido (sublimação)| P / M / G                                        |
+   Se o cliente pedir algo fora do guia, registre o que ele descreveu e deixe a equipe ajustar. NUNCA trave esperando o cliente saber termos técnicos.
+15. UNIDADE PADRÃO = METRO (regra obrigatória para dimensões):
+   - Toda dimensão é registrada em METROS com vírgula: "1,20m x 1,20m", "0,30m x 0,45m". NUNCA misture metro e centímetro na mesma medida.
+   - Se o cliente informar cm ou mm, CONVERTA e CONFIRME antes de seguir. Ex.: "Só confirmando: 30cm × 45cm = 0,30m × 0,45m, certo? 😊" (30cm→0,30m; 1200mm→1,20m; 90x120cm→0,90m × 1,20m).
+   - SEMPRE confirme as dimensões com o cliente antes do resumo.
+   - Ao chamar registrar_pedido, o campo "dimensoes" (e o de cada objeto em "itens") DEVE vir sempre em metros no formato "L,LLm x A,AAm".`;
 
 const TOOLS = [
   {
@@ -297,4 +316,4 @@ async function processMessage(conversationId, userMessage) {
   return { response: cleanResponse, isComplete, orderDetails };
 }
 
-module.exports = { processMessage };
+module.exports = { processMessage, SYSTEM_PROMPT };

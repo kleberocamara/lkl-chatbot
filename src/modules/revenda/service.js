@@ -2,6 +2,7 @@ const db = require('../../db');
 const path = require('path');
 const { spawn } = require('child_process');
 const pricer = require('./pricer');
+const { tokensMaterial } = require('../../constants/produtos');
 
 // Categorias
 async function listarCategorias() {
@@ -63,6 +64,14 @@ async function setConfig(d) {
   return { item: r.rows[0] };
 }
 
+// Score de aproximação entre o texto do pedido e o nome do SKU: nº de tokens do pedido presentes no SKU.
+function pontuarSku(textoPedido, nomeSku) {
+  const toks = tokensMaterial(textoPedido);
+  if (!toks.length) return 0;
+  const setSku = new Set(tokensMaterial(nomeSku));
+  return toks.reduce((n, t) => n + (setSku.has(t) ? 1 : 0), 0);
+}
+
 // Precificação
 async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_horas, acabamentos, largura_cm, altura_cm }) {
   if (!revenda_produto_id) return null;
@@ -98,5 +107,5 @@ module.exports = {
   listarProdutos, detalheProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
-  precificarItemRevenda,
+  precificarItemRevenda, pontuarSku,
 };

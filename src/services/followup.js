@@ -180,6 +180,19 @@ async function processFollowUps() {
   }
 }
 
+const REENGAJAR_APOS_MS = 48 * 3600 * 1000;
+
+// Função pura: a conversa deve ser reengajada pelo bot? (após 2 dias parada em aguardando_humano,
+// sem pedido registrado — o próximo passo é do cliente).
+function deveReengajar(conv, agora) {
+  if (!conv || conv.status !== 'aguardando_humano') return false;
+  if (conv.pedido_numero != null) return false;   // pedido já registrado → espera a equipe
+  if (conv.reengajado_em != null) return false;    // já reengajado nesta parada
+  if (!conv.ultima_msg_at) return false;
+  const ultima = new Date(conv.ultima_msg_at).getTime();
+  return (agora.getTime() - ultima) > REENGAJAR_APOS_MS;
+}
+
 // Inicia o scheduler — verifica a cada minuto
 function startScheduler() {
   console.log('🔔 Follow-up scheduler iniciado (verifica a cada 60s)');
@@ -189,4 +202,4 @@ function startScheduler() {
   }, 60 * 1000);
 }
 
-module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt };
+module.exports = { scheduleFollowUps, cancelPendingFollowUps, processFollowUps, startScheduler, calcScheduledAt, deveReengajar };

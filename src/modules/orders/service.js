@@ -1,6 +1,7 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
 const { tipoPorProduto, parseDimensoes, selecionarMaterialId } = require('../../constants/produtos');
+const revendaService = require('../revenda/service');
 
 async function _resolverMaterialId(nome) {
   const termo = String(nome || '').trim();
@@ -148,12 +149,37 @@ async function criarOrder(dados, userId) {
       }
       let materialId = it.material_id;
       if (!materialId && it.material) materialId = await _resolverMaterialId(it.material);
+
+      // Auto-precificação (rascunho): casa o item a um SKU e usa o motor de preço da revenda.
+      let valorUnit = 0, valorTotal = 0, precoOrigem = 'manual', precoMemoria = null, revProdId = null;
+      try {
+        const prod = await revendaService.resolverProdutoRevenda({ produto: it.produto, material: it.material, tipo_producao: tipo });
+        if (prod && prod.estrategia !== 'manual') {
+          const calc = await revendaService.precificarItemRevenda({
+            revenda_produto_id: prod.id, quantidade: it.quantidade,
+            largura_cm: larg, altura_cm: alt, prazo_horas: null, acabamentos: [],
+          });
+          if (calc && Number(calc.valor_total) > 0) {
+            valorUnit = calc.valor_unitario; valorTotal = calc.valor_total;
+            precoOrigem = 'auto'; revProdId = prod.id;
+            precoMemoria = `${calc.estrategia} · ${prod.nome}${calc.memoria ? ` · ${calc.memoria}` : ''}`;
+          }
+        }
+      } catch (e) {
+        console.warn('[CHATBOT-PRECO] auto-precificação falhou:', e.message);
+      }
+
       await db.query(
-        `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao, largura_cm, altura_cm, material_id)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7, $8, $9, $10, $11)`,
-        [orcamentoId, codigo++, it.produto, it.especificacao || null, descricao, it.quantidade, it.tem_arte || false, tipo || null, larg != null ? larg : null, alt != null ? alt : null, materialId || null]
+        `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao, largura_cm, altura_cm, material_id, preco_origem, preco_memoria, revenda_produto_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [orcamentoId, codigo++, it.produto, it.especificacao || null, descricao, it.quantidade, valorUnit, valorTotal, it.tem_arte || false, tipo || null, larg != null ? larg : null, alt != null ? alt : null, materialId || null, precoOrigem, precoMemoria, revProdId]
       );
     }
+
+    await db.query(
+      `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id = $1) WHERE id = $1`,
+      [orcamentoId]
+    );
 
     await db.query(
       `UPDATE orders SET orcamento_id=$1, status='em_orcamento', updated_at=NOW() WHERE id=$2`,

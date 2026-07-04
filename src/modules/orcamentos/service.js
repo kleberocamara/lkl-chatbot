@@ -4,6 +4,7 @@ const c6bank = require('../../services/c6bank');
 const mercadopago = require('../../services/mercadopago');
 const { enviarOrcamentoCliente } = require('../../services/email');
 const whatsapp = require('../../services/whatsapp');
+const conversas = require('../../services/conversas');
 const fcm = require('../../services/fcm');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
 const osService = require('../os/service');
@@ -863,16 +864,43 @@ async function enviarArteItem(itemId, arquivo_url) {
   );
   const item = r.rows[0];
   if (!item) return { erro: ['Item não encontrado'] };
+
+  const nomeItem = item.produto || item.descricao || 'item';
+  const refPed = item.pedido_numero || '';
+
+  // Sem celular: não há como enviar; registra status enviada (comportamento anterior).
+  if (!item.cliente_celular) {
+    await db.query(
+      `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
+      [arquivo_url, itemId]
+    );
+    return { ok: true, item_id: itemId, status: 'enviada' };
+  }
+
+  const publicUrl = `${process.env.BASE_URL || 'https://app.graficalkl.com.br'}${arquivo_url}`;
+  const caption = `Olá! Segue a arte do *Pedido #${refPed}* (${nomeItem}) para sua aprovação.\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
+  const fallbackTexto = `Olá! Segue a arte do seu *Pedido #${refPed}* (${nomeItem}): ${publicUrl}\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
+
+  const envio = await conversas.enviarClienteImagem(item.cliente_celular, publicUrl, caption, {
+    mediaRef: arquivo_url,
+    legenda: `Arte Pedido #${refPed}`,
+    fallbackTexto,
+  });
+
+  if (envio.ok) {
+    await db.query(
+      `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
+      [arquivo_url, itemId]
+    );
+    return { ok: true, item_id: itemId, status: 'enviada' };
+  }
+
   await db.query(
-    `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
+    `UPDATE orcamento_itens SET arte_status='erro_envio', arte_arquivo_url=$1, arte_enviada_em=NULL WHERE id=$2`,
     [arquivo_url, itemId]
   );
-  if (item.cliente_celular) {
-    const publicUrl = `${process.env.BASE_URL || 'https://app.graficalkl.com.br'}${arquivo_url}`;
-    const msg = `Olá! Segue a arte do *Pedido #${item.pedido_numero || ''}* (${item.produto || item.descricao || 'item'}) para sua aprovação.\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
-    whatsapp.sendImage(item.cliente_celular, publicUrl, msg).catch(e => console.warn('[ARTE-WA]', e.message));
-  }
-  return { ok: true, item_id: itemId, status: 'enviada' };
+  console.warn('[ARTE] Falha total ao enviar arte do item', itemId);
+  return { erro: ['Falha ao enviar arte ao cliente'], item_id: itemId, status: 'erro_envio' };
 }
 
 async function responderArteItem(phone, mensagem) {

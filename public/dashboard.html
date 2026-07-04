@@ -1549,17 +1549,37 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
 
 async function salvarItemOrc(orcId, itemId) {
   const produto = document.getElementById('ei-produto').value || null;
+  if (!produto) { showToast('Selecione o produto/serviço'); return; }
+  const servicoSel = produto.startsWith('servico:');
   const revSel = produto && produto.startsWith('revenda:');
   const revenda_produto_id = revSel ? produto.slice(8) : null;
   const revenda_prazo_horas = revSel ? parseInt(document.getElementById('ei-rev-prazo')?.value, 10) : null;
   const revenda_acabamentos = revSel ? [...document.querySelectorAll('.ei-acab:checked')].map(c => ({ nome: c.value, preco: parseFloat(c.dataset.preco) })) : undefined;
-  const produtoNome = revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto;
+  const produtoNome = servicoSel ? produto.slice(8)
+    : (revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto);
   const especificacao = document.getElementById('ei-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ei-qtd').value);
   const valRaw = document.getElementById('ei-val').value;
   const valor_unitario = parseFloat(valRaw);
-  if (!produto) { showToast('Selecione o produto/serviço'); return; }
   if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
+
+  if (servicoSel) {
+    const vu = isNaN(valor_unitario) ? 0 : valor_unitario;
+    const body = {
+      produto: produtoNome, tipo_producao: 'SERVICO', especificacao, quantidade,
+      largura_cm: null, altura_cm: null, material_id: null, tem_arte: false,
+      valor_unitario: vu, valor_total: quantidade * vu,
+    };
+    const res = await api(`/api/v2/orcamentos/${orcId}/itens/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    if (res && !res.erro) {
+      closeModal(); showToast('✅ Item atualizado');
+      const panel = document.getElementById(`orc-items-${orcId}`);
+      if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+    } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0]||'')); }
+    return;
+  }
+
   const auto = (!valRaw || valor_unitario === 0);
   if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
   const body = { produto: produtoNome, tipo_producao: document.getElementById('ei-tipo').value || null, especificacao, quantidade,
@@ -1636,16 +1656,36 @@ async function abrirAdicionarItemOrc(orcId) {
 async function adicionarItemOrc(orcId) {
   const produto = document.getElementById('ni-produto').value;
   if (!produto) { showToast('Selecione o produto/serviço'); return; }
+  const servicoSel = produto.startsWith('servico:');
   const revSel = produto && produto.startsWith('revenda:');
   const revenda_produto_id = revSel ? produto.slice(8) : null;
   const revenda_prazo_horas = revSel ? parseInt(document.getElementById('ni-rev-prazo')?.value, 10) : null;
   const revenda_acabamentos = revSel ? [...document.querySelectorAll('.ni-acab:checked')].map(c => ({ nome: c.value, preco: parseFloat(c.dataset.preco) })) : undefined;
-  const produtoNome = revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto;
+  const produtoNome = servicoSel ? produto.slice(8)
+    : (revSel ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda') : produto);
   const especificacao = document.getElementById('ni-espec').value.trim() || null;
   const quantidade = parseFloat(document.getElementById('ni-qtd').value);
   const valRaw = document.getElementById('ni-val').value;
   const valor_unitario = parseFloat(valRaw);
   if (isNaN(quantidade)) { showToast('Preencha a quantidade'); return; }
+
+  if (servicoSel) {
+    const vu = isNaN(valor_unitario) ? 0 : valor_unitario;
+    const body = {
+      produto: produtoNome, tipo_producao: 'SERVICO', especificacao, quantidade,
+      largura_cm: null, altura_cm: null, material_id: null, tem_arte: false,
+      valor_unitario: vu, valor_total: quantidade * vu,
+    };
+    const res = await api(`/api/v2/orcamentos/${orcId}/itens`, { method: 'POST', body: JSON.stringify(body) });
+    if (res && !res.erro) {
+      closeModal(); showToast('✅ Item adicionado');
+      const panel = document.getElementById(`orc-items-${orcId}`);
+      if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
+        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+    } else { showToast('❌ Erro ao adicionar: ' + (res?.erro?.[0]||'')); }
+    return;
+  }
+
   // Valor vazio ou 0 → deixa o backend precificar pela regra do produto (preco_origem='auto')
   const auto = (!valRaw || valor_unitario === 0);
   if (!auto && isNaN(valor_unitario)) { showToast('Valor inválido'); return; }
@@ -3593,7 +3633,16 @@ function onItemProdutoChange(prefix) {
   const val = document.getElementById(prefix + '-produto').value;
   const box = document.getElementById(prefix + '-revenda');
   const cvEls = document.querySelectorAll(`#${prefix}-larg, #${prefix}-alt, #${prefix}-mat`);
-  if (val.startsWith('revenda:')) {
+  const arteEl = document.getElementById(prefix + '-arte');
+  const arteWrap = arteEl ? arteEl.closest('div') : null;
+  if (val.startsWith('servico:')) {
+    cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = 'none'; });
+    if (arteWrap) arteWrap.style.display = 'none';
+    if (arteEl) arteEl.value = 'false';
+    const tipoEl = document.getElementById(prefix + '-tipo'); if (tipoEl) tipoEl.value = 'SERVICO';
+    if (box) { box.style.display = ''; box.innerHTML = '<div style="border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;color:#888">Serviço — digite o valor.</div>'; }
+  } else if (val.startsWith('revenda:')) {
+    if (arteWrap) arteWrap.style.display = '';
     const id = val.slice(8);
     const p = (REVENDA_CATALOGO || []).find(x => String(x.id) === id);
     const est = p ? p.estrategia : 'revenda_matriz';
@@ -3602,6 +3651,7 @@ function onItemProdutoChange(prefix) {
     renderModoRevenda(prefix, id, p);
     if (box) box.style.display = '';
   } else {
+    if (arteWrap) arteWrap.style.display = '';
     if (box) { box.style.display = 'none'; box.innerHTML = ''; }
     cvEls.forEach(el => { const w = el.closest('div'); if (w) w.style.display = ''; });
     const tipoEl = document.getElementById(prefix + '-tipo'); if (tipoEl) tipoEl.value = tipoPorProduto(val) || '';
@@ -3854,6 +3904,8 @@ const PRODUTOS_LKL = [
   { produto: 'OUTROS/OFFSET',      tipo: 'OFFSET' },
 ];
 
+const SERVICOS_LKL = ['Entrega', 'Arte Final', 'Visita de Vistoria', 'Instalação'];
+
 function tipoPorProduto(nome) {
   return PRODUTOS_LKL.find(p => p.produto === nome)?.tipo || '';
 }
@@ -3882,10 +3934,12 @@ function selectProduto(id, onchange) {
   const opts = PRODUTOS_LKL.map(p => `<option value="${p.produto}">${p.produto}</option>`).join('');
   const rev = (REVENDA_CATALOGO || []).map(p => `<option value="revenda:${p.id}">🛰️ ${escHtml(p.nome)} [${escHtml(p.ref)}]</option>`).join('');
   const grupoRev = rev ? `<optgroup label="Revenda (Graficonauta)">${rev}</optgroup>` : '';
+  const serv = SERVICOS_LKL.map(s => `<option value="servico:${s}">🧰 ${escHtml(s)}</option>`).join('');
+  const grupoServ = `<optgroup label="Serviços">${serv}</optgroup>`;
   return `<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">PRODUTO / SERVIÇO *</label>
     <select id="${id}" onchange="${onchange}" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box">
-      <option value="">Selecione...</option>${opts}${grupoRev}
+      <option value="">Selecione...</option>${opts}${grupoServ}${grupoRev}
     </select>
   </div>`;
 }

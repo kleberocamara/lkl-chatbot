@@ -1399,7 +1399,7 @@ function renderOrcamentoCards(data) {
           <div style="font-size:12px;color:#888;margin-top:3px">${dt} ${o.status_pagamento ? '· Pgto: '+o.status_pagamento : ''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="font-size:16px;font-weight:700;color:#1a237e;white-space:nowrap">${val}</div>
+          <div id="orc-total-${o.id}" style="font-size:16px;font-weight:700;color:#1a237e;white-space:nowrap">${val}</div>
           ${orcAcoesBtns(o)}
         </div>
       </div>
@@ -1424,6 +1424,17 @@ async function toggleOrcItems(id) {
   if (!res || res.error) { panel.innerHTML = '<p style="padding:16px;color:#c00;font-size:13px">Erro ao carregar itens</p>'; return; }
   panel.dataset.loaded = '1';
   renderOrcItens(id, res.itens || []);
+}
+
+// Atualiza o badge de total no cabeçalho do card do orçamento (e o cache) após mudança de itens
+function atualizarTotalOrc(orcId, total) {
+  const el = document.getElementById(`orc-total-${orcId}`);
+  const val = (total != null && total !== '') ? `R$ ${parseFloat(total).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
+  if (el) el.textContent = val;
+  if (typeof orcamentosMainData !== 'undefined') {
+    const cached = orcamentosMainData.find(o => o.id === orcId);
+    if (cached) cached.total = total;
+  }
 }
 
 const STATUS_TRAVADO = ['aprovado', 'reprovado', 'cancelado', 'enviado'];
@@ -1581,7 +1592,7 @@ async function salvarItemOrc(orcId, itemId) {
       closeModal(); showToast('✅ Item atualizado');
       const panel = document.getElementById(`orc-items-${orcId}`);
       if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) { renderOrcItens(orcId, detail.itens || []); atualizarTotalOrc(orcId, detail.total); } }
     } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0]||'')); }
     return;
   }
@@ -1602,7 +1613,7 @@ async function salvarItemOrc(orcId, itemId) {
     closeModal(); showToast('✅ Item atualizado');
     const panel = document.getElementById(`orc-items-${orcId}`);
     if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) { renderOrcItens(orcId, detail.itens || []); atualizarTotalOrc(orcId, detail.total); } }
   } else { showToast('❌ Erro ao salvar: ' + (res?.erro?.[0]||'')); }
 }
 
@@ -1624,6 +1635,8 @@ async function excluirItemOrc(orcId, itemId, descricao) {
   if (res && !res.erro) {
     showToast('🗑️ Item excluído');
     document.getElementById(`orc-item-row-${itemId}`)?.remove();
+    const detail = await api(`/api/v2/orcamentos/${orcId}`);
+    if (detail) atualizarTotalOrc(orcId, detail.total);
   } else { showToast('❌ Erro ao excluir'); }
 }
 
@@ -1687,7 +1700,7 @@ async function adicionarItemOrc(orcId) {
       closeModal(); showToast('✅ Item adicionado');
       const panel = document.getElementById(`orc-items-${orcId}`);
       if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+        const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) { renderOrcItens(orcId, detail.itens || []); atualizarTotalOrc(orcId, detail.total); } }
     } else { showToast('❌ Erro ao adicionar: ' + (res?.erro?.[0]||'')); }
     return;
   }
@@ -1708,7 +1721,7 @@ async function adicionarItemOrc(orcId) {
     closeModal(); showToast('✅ Item adicionado');
     const panel = document.getElementById(`orc-items-${orcId}`);
     if (panel) { panel.dataset.loaded=''; panel.innerHTML = '<p style="padding:16px;color:#999;font-size:13px">Recarregando...</p>';
-      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) renderOrcItens(orcId, detail.itens || []); }
+      const detail = await api(`/api/v2/orcamentos/${orcId}`); if (detail) { renderOrcItens(orcId, detail.itens || []); atualizarTotalOrc(orcId, detail.total); } }
   } else { showToast('❌ Erro ao adicionar: ' + (res?.erro?.[0]||'')); }
 }
 

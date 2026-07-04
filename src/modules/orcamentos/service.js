@@ -885,6 +885,10 @@ async function enviarArteItem(itemId, arquivo_url) {
     mediaRef: arquivo_url,
     legenda: `Arte Pedido #${refPed}`,
     fallbackTexto,
+    buttons: [
+      { id: 'arte_aprovar', title: '✅ Aprovar' },
+      { id: 'arte_reprovar', title: '✏️ Reprovar' },
+    ],
   });
 
   if (envio.ok) {
@@ -903,7 +907,8 @@ async function enviarArteItem(itemId, arquivo_url) {
   return { erro: ['Falha ao enviar arte ao cliente'], item_id: itemId, status: 'erro_envio' };
 }
 
-async function responderArteItem(phone, mensagem) {
+// Acha a arte pendente (status 'enviada') do cliente pelo telefone (sufixo de 9 dígitos).
+async function _acharArtePendente(phone) {
   const celular = String(phone || '').replace(/\D/g, '');
   if (!celular) return null;
   const pend = await db.query(
@@ -916,24 +921,48 @@ async function responderArteItem(phone, mensagem) {
      ORDER BY oi.arte_enviada_em DESC LIMIT 1`,
     [`%${celular.slice(-9)}`, `%${celular}`]
   );
-  const item = pend.rows[0];
+  return pend.rows[0] || null;
+}
+
+// Aprova a arte de um item: marca 'aprovada', dispara OS de CV se for o caso. Retorna a mensagem ao cliente.
+async function _aprovarArteItem(item) {
+  const refPed = item.pedido_numero || '';
+  await db.query(`UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1`, [item.id]);
+  if (item.tipo_producao === 'COMUNICAÇÃO VISUAL') {
+    osService.criarOSComunicacaoVisual(item.orcamento_id).catch(e => console.warn('[OS-CV-ARTE]', e.message));
+  }
+  return `Arte aprovada! ✅ Seu *Pedido #${refPed}* seguirá para produção. Obrigado! 🖨️`;
+}
+
+async function responderArteItem(phone, mensagem) {
+  const item = await _acharArtePendente(phone);
   if (!item) return null;
   const texto = String(mensagem || '').trim().toLowerCase();
   const negado = /\bn[aã]o\b/.test(texto);
   const aprovado = !negado && (APROVACAO_ARTE_INC.some(kw => texto.includes(kw)) || APROVACAO_ARTE_EXATO.includes(texto));
   const refPed = item.pedido_numero || '';
   if (aprovado) {
-    await db.query(`UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1`, [item.id]);
-    if (item.tipo_producao === 'COMUNICAÇÃO VISUAL') {
-      osService.criarOSComunicacaoVisual(item.orcamento_id).catch(e => console.warn('[OS-CV-ARTE]', e.message));
-    }
-    return { aprovado: true, item_id: item.id, resposta: `Arte aprovada! ✅ Seu *Pedido #${refPed}* seguirá para produção. Obrigado! 🖨️` };
+    const resposta = await _aprovarArteItem(item);
+    return { aprovado: true, item_id: item.id, resposta };
   }
   await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [String(mensagem || '').trim(), item.id]);
   if (item.vendedor_id) {
     fcm.sendToUser(item.vendedor_id, { title: `Arte com ajustes — Pedido #${refPed}`, body: `${item.produto || 'Item'}: cliente pediu alterações`, data: { orcamento_id: item.orcamento_id } }).catch(() => {});
   }
   return { aprovado: false, item_id: item.id, resposta: `Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.` };
+}
+
+// Resposta via clique de botão interativo (roteia pelo id, não pelo texto).
+async function responderArteBotao(phone, buttonId) {
+  const item = await _acharArtePendente(phone);
+  if (!item) return null;
+  if (buttonId === 'arte_aprovar') {
+    const resposta = await _aprovarArteItem(item);
+    return { aprovado: true, item_id: item.id, resposta };
+  }
+  // arte_reprovar → mantém 'enviada'; pede a descrição do ajuste (Opção A).
+  // A próxima mensagem de texto do cliente cai no responderArteItem (texto ≠ aprovação → reprovada + comentário).
+  return { pediu_ajuste: true, item_id: item.id, resposta: `Certo! ✏️ Pode nos descrever o ajuste que deseja? Assim já mandamos a nova versão certinha.` };
 }
 
 async function listarArtesPendentes() {
@@ -951,4 +980,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, listarArtesPendentes };
+module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes };

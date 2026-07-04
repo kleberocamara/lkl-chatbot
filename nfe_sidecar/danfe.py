@@ -59,6 +59,15 @@ def _fmt_val(v):
         return v or '0,00'
 
 
+def _fmt_data(iso):
+    """Converte data ISO 'AAAA-MM-DD' (com ou sem hora) para 'DD/MM/AAAA'."""
+    s = (iso or '')[:10]
+    partes = s.split('-')
+    if len(partes) == 3 and all(partes):
+        return f'{partes[2]}/{partes[1]}/{partes[0]}'
+    return s
+
+
 def _fmt_chave(ch):
     return ' '.join((ch or '')[i:i+4] for i in range(0, 44, 4))
 
@@ -122,9 +131,10 @@ def gerar_danfe(xml_str, output_path):
     tp_nf  = _find(root, 'tpNF') or '1'
     nat_op = _find(root, 'natOp')
     protocolo = _find(root, 'nProt')
-    dh_rec    = (_find(root, 'dhRecbto') or '')[:19].replace('T', ' ')
-    dh_emi    = (_find(root, 'dhEmi') or '')[:10]
-    dh_sai    = (_find(root, 'dhSaiEnt') or '')[:10] or dh_emi
+    _rec_raw  = (_find(root, 'dhRecbto') or '')[:19]
+    dh_rec    = (f'{_fmt_data(_rec_raw)} {_rec_raw[11:19]}'.strip()) if _rec_raw else ''
+    dh_emi    = _fmt_data(_find(root, 'dhEmi'))
+    dh_sai    = _fmt_data(_find(root, 'dhSaiEnt')) or dh_emi
 
     emit = root.find(f'.//{{{NS}}}emit')
     emit_nome   = _find(emit, 'xNome')

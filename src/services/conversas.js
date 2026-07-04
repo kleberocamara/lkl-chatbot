@@ -1,4 +1,5 @@
 const db = require('../db');
+const whatsapp = require('./whatsapp');
 
 function soDigitos(cel) {
   return String(cel || '').replace(/\D/g, '');
@@ -82,8 +83,59 @@ async function registrarMensagemCliente(celular, conteudo, opts = {}) {
   return { conversationId: conversa.id, contactId: contato.id };
 }
 
+function sanitizarLegenda(txt) {
+  return String(txt || 'imagem').replace(/\|/g, '/').replace(/[\[\]]/g, '');
+}
+
+async function enviarClienteTexto(celular, texto, opts = {}) {
+  await whatsapp.sendMessage(celular, texto);
+  return registrarMensagemCliente(celular, texto, opts);
+}
+
+// Envia a imagem; se falhar, espera delayMs e tenta 1x mais. Retorna true/false.
+async function enviarImagemComRetry(celular, urlEnvio, caption, delayMs = 2000) {
+  try {
+    await whatsapp.sendImage(celular, urlEnvio, caption);
+    return true;
+  } catch (e) {
+    console.warn('[ARTE-WA]', e.response && e.response.data ? JSON.stringify(e.response.data) : e.message);
+    await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      await whatsapp.sendImage(celular, urlEnvio, caption);
+      return true;
+    } catch (e2) {
+      console.warn('[ARTE-WA] retry falhou:', e2.response && e2.response.data ? JSON.stringify(e2.response.data) : e2.message);
+      return false;
+    }
+  }
+}
+
+// Envio robusto de imagem ao cliente: tenta imagem (com retry); se falhar, fallback texto-com-link.
+// Registra no histórico em ambos os sucessos. opts: { mediaRef, legenda, fallbackTexto, delayMs, sentBy }
+async function enviarClienteImagem(celular, urlEnvio, caption, opts = {}) {
+  const ok = await enviarImagemComRetry(celular, urlEnvio, caption, opts.delayMs);
+  if (ok) {
+    const ref = opts.mediaRef || urlEnvio;
+    const content = `[imagem recebido: ${ref} | ${sanitizarLegenda(opts.legenda)}]`;
+    await registrarMensagemCliente(celular, content, opts);
+    return { ok: true, via: 'imagem' };
+  }
+  const texto = opts.fallbackTexto || `Segue o arquivo: ${urlEnvio}`;
+  try {
+    await whatsapp.sendMessage(celular, texto);
+  } catch (e) {
+    console.warn('[ARTE-WA] fallback texto falhou:', e.message);
+    return { ok: false, via: null };
+  }
+  await registrarMensagemCliente(celular, texto, opts);
+  return { ok: true, via: 'texto' };
+}
+
 module.exports = {
   soDigitos,
   acharContatoPorTelefone,
   registrarMensagemCliente,
+  enviarClienteTexto,
+  enviarImagemComRetry,
+  enviarClienteImagem,
 };

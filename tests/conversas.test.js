@@ -51,3 +51,75 @@ describe('registrarMensagemCliente', () => {
     expect(insContato[1][0]).toBe('988596449'); // só dígitos, últimos 9
   });
 });
+
+const whatsapp = require('../src/services/whatsapp');
+
+function mockRegistroOK() {
+  // acharContato → update → conversa ativa → insert message
+  db.query
+    .mockResolvedValueOnce({ rows: [{ id: 7, name: 'K' }] })
+    .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+    .mockResolvedValueOnce({ rows: [{ id: 30 }] })
+    .mockResolvedValueOnce({ rows: [] });
+}
+
+describe('enviarClienteTexto', () => {
+  test('envia por WhatsApp e registra o texto', async () => {
+    whatsapp.sendMessage.mockResolvedValueOnce();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteTexto('21988596449', 'valor R$ 10');
+    expect(whatsapp.sendMessage).toHaveBeenCalledWith('21988596449', 'valor R$ 10');
+    expect(db.query.mock.calls[3][1][2]).toBe('valor R$ 10'); // conteúdo registrado
+    expect(r.conversationId).toBe(30);
+  });
+});
+
+describe('enviarImagemComRetry', () => {
+  test('sucesso na 1ª tentativa → true, 1 chamada', async () => {
+    whatsapp.sendImage.mockResolvedValueOnce();
+    const ok = await conversas.enviarImagemComRetry('21988596449', 'http://x/a.png', 'cap', 0);
+    expect(ok).toBe(true);
+    expect(whatsapp.sendImage).toHaveBeenCalledTimes(1);
+  });
+  test('falha 1x, sucesso no retry → true, 2 chamadas', async () => {
+    whatsapp.sendImage.mockRejectedValueOnce(new Error('400')).mockResolvedValueOnce();
+    const ok = await conversas.enviarImagemComRetry('21988596449', 'http://x/a.png', 'cap', 0);
+    expect(ok).toBe(true);
+    expect(whatsapp.sendImage).toHaveBeenCalledTimes(2);
+  });
+  test('falha nas 2 → false', async () => {
+    whatsapp.sendImage.mockRejectedValue(new Error('400'));
+    const ok = await conversas.enviarImagemComRetry('21988596449', 'http://x/a.png', 'cap', 0);
+    expect(ok).toBe(false);
+    expect(whatsapp.sendImage).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('enviarClienteImagem', () => {
+  test('imagem OK → registra formato de mídia com mediaRef relativo', async () => {
+    whatsapp.sendImage.mockResolvedValueOnce();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'legenda WA',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte Pedido #12', delayMs: 0 });
+    expect(r).toEqual(expect.objectContaining({ ok: true, via: 'imagem' }));
+    expect(db.query.mock.calls[3][1][2]).toBe('[imagem recebido: /uploads/a.png | Arte Pedido #12]');
+  });
+  test('imagem falha 2x → fallback texto, registra o texto, via=texto', async () => {
+    whatsapp.sendImage.mockRejectedValue(new Error('400'));
+    whatsapp.sendMessage.mockResolvedValueOnce();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'cap',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte', fallbackTexto: 'Segue: https://app/uploads/a.png', delayMs: 0 });
+    expect(r).toEqual(expect.objectContaining({ ok: true, via: 'texto' }));
+    expect(whatsapp.sendMessage).toHaveBeenCalledWith('21988596449', 'Segue: https://app/uploads/a.png');
+    expect(db.query.mock.calls[3][1][2]).toBe('Segue: https://app/uploads/a.png');
+  });
+  test('imagem e texto falham → ok=false, não registra', async () => {
+    whatsapp.sendImage.mockRejectedValue(new Error('400'));
+    whatsapp.sendMessage.mockRejectedValue(new Error('500'));
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'cap',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte', fallbackTexto: 'Segue', delayMs: 0 });
+    expect(r.ok).toBe(false);
+    expect(db.query).not.toHaveBeenCalledWith(expect.stringMatching(/INSERT INTO messages/i), expect.anything());
+  });
+});

@@ -325,7 +325,7 @@ async function _dispararNotificacoesEnvio(orc) {
       `Para aprovar, responda *SIM*.\n` +
       `Para reprovar, responda *NÃO*.\n\n` +
       `Ou clique para aprovar: ${urlAprovar}`;
-    await whatsapp.sendMessage(orc.cliente_celular, msg);
+    await conversas.enviarClienteTexto(orc.cliente_celular, msg, { nome: orc.cliente_nome });
 
     // Registra pendência de confirmação WA
     await db.query(

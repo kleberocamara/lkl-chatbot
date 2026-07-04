@@ -4,6 +4,7 @@ const { tipoProducaoDoItemRevenda } = require('../../constants/produtos');
 const service = require('./service');
 const { gerarOrcamentoPDF } = require('../../services/pdf');
 const whatsapp = require('../../services/whatsapp');
+const conversas = require('../../services/conversas');
 const multer = require('multer');
 const path = require('path');
 const _arteStorage = multer.diskStorage({
@@ -360,13 +361,18 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
               `*Linha digitável:*\n${result.linhaDigitavel}\n\n` +
               (result.pdfUrl ? `PDF: ${result.pdfUrl}\n\n` : '') +
               `Em caso de dúvidas, entre em contato conosco. Obrigado! 😊`;
+      } else if (result.tipo === 'link_mp') {
+        msg = `Olá! Segue o link de pagamento referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +
+              `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n\n` +
+              `Pague com cartão, PIX ou boleto neste link:\n${result.checkoutUrl}\n\n` +
+              `Qualquer dúvida, é só chamar. Obrigado! 😊`;
       } else {
         msg = `Olá! Segue a cobrança PIX referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +
               `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n\n` +
               `*PIX Copia e Cola:*\n${result.pixCopiaECola}\n\n` +
               `Cole o código no app do seu banco para pagar. Obrigado! 😊`;
       }
-      whatsapp.sendMessage(orc.cliente_celular, msg).catch(e =>
+      conversas.enviarClienteTexto(orc.cliente_celular, msg, { nome: orc.cliente_nome }).catch(e =>
         console.warn('[WA-COBRAR] Falha:', e.message)
       );
     }).catch(() => {});

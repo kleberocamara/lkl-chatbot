@@ -4450,9 +4450,17 @@ function renderCobLista() {
     let acoes;
     if (o.status_pagamento === 'pago') acoes = '';
     else if (o.status_pagamento === 'aguardando_pagamento') {
-      const copiar = linha ? `<button class="btn btn-outline" onclick="copiarLinha('${linha}')" style="padding:6px 8px">Copiar</button>` : '';
+      let ref = '';
+      if (o.tipo_cobranca === 'link_mp' && o.mp_checkout_url) {
+        ref = `<a class="btn btn-outline" href="${o.mp_checkout_url}" target="_blank" rel="noopener" style="padding:6px 8px;text-decoration:none">Abrir link</a>`
+            + `<button class="btn btn-outline" onclick="copiarLinha('${o.mp_checkout_url}')" style="padding:6px 8px">Copiar link</button>`;
+      } else if (o.tipo_cobranca === 'pix' && o.pix_copia_cola) {
+        ref = `<button class="btn btn-outline" onclick="copiarLinha('${o.pix_copia_cola}')" style="padding:6px 8px">Copiar PIX</button>`;
+      } else if (linha) {
+        ref = `<button class="btn btn-outline" onclick="copiarLinha('${linha}')" style="padding:6px 8px">Copiar</button>`;
+      }
       const cancela = o.tipo_cobranca === 'pix' ? 'pix/cancelar' : o.tipo_cobranca === 'link_mp' ? 'link_mp/cancelar' : 'boleto/cancelar';
-      acoes = `${copiar}<button class="btn btn-outline" onclick="cancelarCob('${o.id}','${cancela}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`;
+      acoes = `${ref}<button class="btn btn-outline" onclick="cancelarCob('${o.id}','${cancela}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`;
     } else {
       acoes = `<button class="btn btn-outline" onclick="abrirGerarCob('${o.id}','boleto')" style="padding:6px 10px">Boleto</button>
                <button class="btn btn-outline" onclick="abrirGerarCob('${o.id}','pix')" style="padding:6px 10px">PIX</button>
@@ -4468,7 +4476,7 @@ function renderCobLista() {
     </div>`;
   }).join('');
 }
-function copiarLinha(linha) { navigator.clipboard?.writeText(linha); showToast('Linha digitável copiada'); }
+function copiarLinha(linha) { navigator.clipboard?.writeText(linha); showToast('Copiado!'); }
 async function cancelarCob(orcId, path) {
   if (!confirm('Cancelar esta cobrança?')) return;
   const res = await api('/api/v2/orcamentos/'+orcId+'/'+path, { method:'POST' });

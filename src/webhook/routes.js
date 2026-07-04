@@ -49,6 +49,14 @@ router.post('/', async (req, res) => {
             continue;
           }
 
+          if (msg.type === 'interactive') {
+            const reply = msg.interactive?.button_reply || msg.interactive?.list_reply;
+            if (reply) {
+              await handleInboundMessage(phone, profileName, reply.title || '(resposta)', msg.id, reply.id || null);
+            }
+            continue;
+          }
+
           if (msg.type !== 'text') continue;
 
           const text = msg.text?.body || '';

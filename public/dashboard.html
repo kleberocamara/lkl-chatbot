@@ -1530,6 +1530,11 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
         if (!opt) opt = [...sel.options].find(o => sing(o.value) === alvoSg);
         if (opt) sel.value = opt.value;
       }
+      // Serviço: casar pelo valor com prefixo servico: (o nome normalizado perde o prefixo)
+      if (sel && item.tipo_producao === 'SERVICO') {
+        const svcVal = 'servico:' + item.produto;
+        if ([...sel.options].some(o => o.value === svcVal)) sel.value = svcVal;
+      }
       // Tipo de produção: do item, ou derivado do produto selecionado
       if (tipoEl) tipoEl.value = item.tipo_producao || tipoPorProduto(sel ? sel.value : '') || '';
       // Comunicação Visual: usa o salvo; se vazio e for CV, tenta extrair da especificação
@@ -1543,6 +1548,7 @@ async function abrirEditarItemOrc(orcId, itemId, descricao, qtd, valorUnit, volt
       }
       setArteEi(!!item.tem_arte);
       await _popularMateriaisSelect('ei-mat', item.material_id);
+      if (sel && sel.value.startsWith('servico:')) onItemProdutoChange('ei');
     } else { await _popularMateriaisSelect('ei-mat', null); }
   } catch(e) { _popularMateriaisSelect('ei-mat', null); }
 }

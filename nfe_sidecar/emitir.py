@@ -1,5 +1,6 @@
 # nfe_sidecar/emitir.py
 import os
+import re
 import random
 import hashlib
 import datetime
@@ -51,10 +52,33 @@ def _extrair_cert_key(cert_path, cert_password):
 
     return cert_file.name, key_file.name, cert_pem, key_pem
 
+# Transliterações de caracteres tipográficos comuns para ASCII aceito pela SEFAZ.
+# A NF-e usa o tipo TString, cujo pattern só admite [!-ÿ] (0x21..0xFF); caracteres
+# acima de 0xFF (— … " ' etc.) causam Rejeição 225 (Falha no Schema XML).
+_TRANSLITERACOES = {
+    '—': '-', '–': '-', '‒': '-', '―': '-', '−': '-',  # travessões/dashes → hífen
+    '‘': "'", '’': "'", '‚': "'", '′': "'",                  # aspas simples → '
+    '“': '"', '”': '"', '„': '"', '″': '"',                  # aspas duplas → "
+    '…': '...',                                                             # reticências
+    ' ': ' ', ' ': ' ', ' ': ' ',                                # espaços especiais → espaço
+}
+
+def _sanitizar(text):
+    """Limpa texto para o pattern TString da NF-e ([!-ÿ], sem controle, sem borda em branco)."""
+    s = str(text)
+    for orig, subst in _TRANSLITERACOES.items():
+        s = s.replace(orig, subst)
+    # Remove qualquer caractere fora da faixa aceita (controle < 0x20 ou > 0xFF),
+    # preservando acentuados Latin-1 (á, ç, ã…). Tab/quebra viram espaço.
+    s = ''.join(' ' if c in '\t\n\r' else c for c in s)
+    s = ''.join(c for c in s if 0x20 <= ord(c) <= 0xFF)
+    # Colapsa espaços e remove borda (o pattern proíbe iniciar/terminar com espaço)
+    return re.sub(r'\s+', ' ', s).strip()
+
 def _texto(parent, tag, text, ns=NS):
     el = etree.SubElement(parent, f'{{{ns}}}{tag}')
     if text is not None:
-        el.text = str(text)
+        el.text = _sanitizar(text)
     return el
 
 def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):

@@ -1,5 +1,5 @@
 jest.mock('../src/db', () => ({ query: jest.fn() }));
-jest.mock('../src/services/whatsapp', () => ({ sendMessage: jest.fn(), sendImage: jest.fn() }));
+jest.mock('../src/services/whatsapp', () => ({ sendMessage: jest.fn(), sendImage: jest.fn(), sendInteractiveButtons: jest.fn() }));
 
 const db = require('../src/db');
 const conversas = require('../src/services/conversas');
@@ -121,5 +121,47 @@ describe('enviarClienteImagem', () => {
       { mediaRef: '/uploads/a.png', legenda: 'Arte', fallbackTexto: 'Segue', delayMs: 0 });
     expect(r.ok).toBe(false);
     expect(db.query).not.toHaveBeenCalledWith(expect.stringMatching(/INSERT INTO messages/i), expect.anything());
+  });
+});
+
+describe('enviarClienteImagem com botões', () => {
+  const botoes = [{ id: 'arte_aprovar', title: '✅ Aprovar' }, { id: 'arte_reprovar', title: '✏️ Reprovar' }];
+
+  test('imagem+botões OK → interativo com header de imagem, registra mídia, via=imagem', async () => {
+    whatsapp.sendInteractiveButtons.mockResolvedValueOnce();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'corpo',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte Pedido #12', buttons: botoes, delayMs: 0 });
+    expect(r).toEqual(expect.objectContaining({ ok: true, via: 'imagem' }));
+    const call = whatsapp.sendInteractiveButtons.mock.calls[0];
+    expect(call[0]).toBe('21988596449');
+    expect(call[1]).toEqual(expect.objectContaining({ headerImage: 'https://app/uploads/a.png', bodyText: 'corpo', buttons: botoes }));
+    expect(db.query.mock.calls[3][1][2]).toBe('[imagem recebido: /uploads/a.png | Arte Pedido #12]');
+  });
+
+  test('imagem+botões falha 2x → fallback texto+botões, registra o corpo, via=texto_botoes', async () => {
+    whatsapp.sendInteractiveButtons
+      .mockRejectedValueOnce(new Error('400')).mockRejectedValueOnce(new Error('400')) // imagem: 2 tentativas
+      .mockResolvedValueOnce();                                                          // texto+botões: ok
+    whatsapp.sendMessage.mockClear();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'corpo',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte', fallbackTexto: 'Segue: https://app/uploads/a.png', buttons: botoes, delayMs: 0 });
+    expect(r).toEqual(expect.objectContaining({ ok: true, via: 'texto_botoes' }));
+    // 3ª chamada de sendInteractiveButtons foi só-texto (sem headerImage)
+    const ultimaCall = whatsapp.sendInteractiveButtons.mock.calls[2][1];
+    expect(ultimaCall.headerImage).toBeUndefined();
+    expect(ultimaCall.bodyText).toBe('Segue: https://app/uploads/a.png');
+    expect(db.query.mock.calls[3][1][2]).toBe('Segue: https://app/uploads/a.png');
+  });
+
+  test('imagem+botões e texto+botões falham → texto puro, via=texto', async () => {
+    whatsapp.sendInteractiveButtons.mockRejectedValue(new Error('400')); // todas falham
+    whatsapp.sendMessage.mockResolvedValueOnce();
+    mockRegistroOK();
+    const r = await conversas.enviarClienteImagem('21988596449', 'https://app/uploads/a.png', 'corpo',
+      { mediaRef: '/uploads/a.png', legenda: 'Arte', fallbackTexto: 'Segue link', buttons: botoes, delayMs: 0 });
+    expect(r).toEqual(expect.objectContaining({ ok: true, via: 'texto' }));
+    expect(whatsapp.sendMessage).toHaveBeenCalledWith('21988596449', 'Segue link');
   });
 });

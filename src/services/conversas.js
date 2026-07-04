@@ -92,16 +92,16 @@ async function enviarClienteTexto(celular, texto, opts = {}) {
   return registrarMensagemCliente(celular, texto, opts);
 }
 
-// Envia a imagem; se falhar, espera delayMs e tenta 1x mais. Retorna true/false.
-async function enviarImagemComRetry(celular, urlEnvio, caption, delayMs = 2000) {
+// Executa fn; se falhar, espera delayMs e tenta 1x mais. Loga o corpo real do erro. Retorna true/false.
+async function _enviarComRetry(fn, delayMs = 2000) {
   try {
-    await whatsapp.sendImage(celular, urlEnvio, caption);
+    await fn();
     return true;
   } catch (e) {
     console.warn('[ARTE-WA]', e.response && e.response.data ? JSON.stringify(e.response.data) : e.message);
     await new Promise((r) => setTimeout(r, delayMs));
     try {
-      await whatsapp.sendImage(celular, urlEnvio, caption);
+      await fn();
       return true;
     } catch (e2) {
       console.warn('[ARTE-WA] retry falhou:', e2.response && e2.response.data ? JSON.stringify(e2.response.data) : e2.message);
@@ -110,24 +110,63 @@ async function enviarImagemComRetry(celular, urlEnvio, caption, delayMs = 2000) 
   }
 }
 
-// Envio robusto de imagem ao cliente: tenta imagem (com retry); se falhar, fallback texto-com-link.
-// Registra no histórico em ambos os sucessos. opts: { mediaRef, legenda, fallbackTexto, delayMs, sentBy }
+// Envia a imagem; se falhar, espera delayMs e tenta 1x mais. Retorna true/false.
+async function enviarImagemComRetry(celular, urlEnvio, caption, delayMs = 2000) {
+  return _enviarComRetry(() => whatsapp.sendImage(celular, urlEnvio, caption), delayMs);
+}
+
+// Envio robusto de imagem ao cliente. Com opts.buttons envia interativo (imagem+botões → texto+botões → texto puro).
+// Sem opts.buttons mantém o comportamento anterior (imagem → texto). Registra no histórico em qualquer sucesso.
+// opts: { mediaRef, legenda, fallbackTexto, buttons, delayMs, sentBy }
 async function enviarClienteImagem(celular, urlEnvio, caption, opts = {}) {
+  const temBotoes = Array.isArray(opts.buttons) && opts.buttons.length > 0;
+  const ref = opts.mediaRef || urlEnvio;
+  const conteudoMidia = `[imagem recebido: ${ref} | ${sanitizarLegenda(opts.legenda)}]`;
+  const textoFallback = opts.fallbackTexto || `Segue o arquivo: ${urlEnvio}`;
+
+  if (temBotoes) {
+    // 1) imagem + botões
+    const okImg = await _enviarComRetry(
+      () => whatsapp.sendInteractiveButtons(celular, { headerImage: urlEnvio, bodyText: caption, buttons: opts.buttons }),
+      opts.delayMs
+    );
+    if (okImg) {
+      await registrarMensagemCliente(celular, conteudoMidia, opts);
+      return { ok: true, via: 'imagem' };
+    }
+    // 2) texto + botões (link no corpo — mantém os botões)
+    const okTxt = await _enviarComRetry(
+      () => whatsapp.sendInteractiveButtons(celular, { bodyText: textoFallback, buttons: opts.buttons }),
+      opts.delayMs
+    );
+    if (okTxt) {
+      await registrarMensagemCliente(celular, textoFallback, opts);
+      return { ok: true, via: 'texto_botoes' };
+    }
+    // 3) texto puro (sem botões)
+    try {
+      await whatsapp.sendMessage(celular, textoFallback);
+    } catch (e) {
+      console.warn('[ARTE-WA] fallback texto falhou:', e.message);
+      return { ok: false, via: null };
+    }
+    await registrarMensagemCliente(celular, textoFallback, opts);
+    return { ok: true, via: 'texto' };
+  }
+
+  // Sem botões — comportamento anterior
   const ok = await enviarImagemComRetry(celular, urlEnvio, caption, opts.delayMs);
   if (ok) {
-    const ref = opts.mediaRef || urlEnvio;
-    const content = `[imagem recebido: ${ref} | ${sanitizarLegenda(opts.legenda)}]`;
-    await registrarMensagemCliente(celular, content, opts);
+    await registrarMensagemCliente(celular, conteudoMidia, opts);
     return { ok: true, via: 'imagem' };
   }
-  const texto = opts.fallbackTexto || `Segue o arquivo: ${urlEnvio}`;
   try {
-    await whatsapp.sendMessage(celular, texto);
+    await whatsapp.sendMessage(celular, textoFallback);
   } catch (e) {
     console.warn('[ARTE-WA] fallback texto falhou:', e.message);
     return { ok: false, via: null };
   }
-  await registrarMensagemCliente(celular, texto, opts);
+  await registrarMensagemCliente(celular, textoFallback, opts);
   return { ok: true, via: 'texto' };
 }
 

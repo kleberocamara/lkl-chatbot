@@ -1054,7 +1054,7 @@ const PROD_FLUXO = {
 };
 const PROD_FASE_LABEL = { corte:'Corte', impressao:'Impressão', acabamento:'Acabamento', entrega:'Entrega', entregue:'Entregue' };
 const PROD_ALL_PHASES = ['corte','impressao','acabamento','entrega'];
-const PROD_TIPO_LABEL = { offset:'Offset', comunicacao_visual:'CV' };
+const PROD_TIPO_LABEL = { offset:'Offset', comunicacao_visual:'CV', revenda:'Revenda' };
 let prodAllOS = [];
 let prodActiveTab = 'andamento';
 
@@ -1063,9 +1063,9 @@ function prodEsc(str) {
 }
 
 function prodProximaFase(tipo, status) {
+  if (status === 'entrega') return 'entregue';
   const fases = PROD_FLUXO[tipo];
   if (!fases) return null;
-  if (status === 'entrega') return 'entregue';
   const idx = fases.indexOf(status);
   if (idx === -1 || idx === fases.length - 1) return null;
   return fases[idx + 1];
@@ -1096,7 +1096,7 @@ function prodRender() {
 function prodRenderBoard() {
   const inProg = prodAllOS.filter(os =>
     ['corte','impressao','acabamento','entrega'].includes(os.status) &&
-    (os.tipo_servico === 'comunicacao_visual' || os.ficha_pronta)
+    (os.tipo_servico === 'comunicacao_visual' || os.ficha_pronta || os.status === 'entrega')
   );
   const container = document.getElementById('prod-board-content');
   if (!container) return;

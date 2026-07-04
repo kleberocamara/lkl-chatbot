@@ -1,5 +1,6 @@
 const db = require('../db');
 const whatsapp = require('./whatsapp');
+const { log } = require('./logger');
 
 function soDigitos(cel) {
   return String(cel || '').replace(/\D/g, '');
@@ -170,6 +171,45 @@ async function enviarClienteImagem(celular, urlEnvio, caption, opts = {}) {
   return { ok: true, via: 'texto' };
 }
 
+// Tira a conversa ativa do cliente de 'aguardando_humano' quando uma ação-chave é concluída.
+// Só age se a conversa estiver em 'aguardando_humano' (idempotente). Nunca lança — no-op seguro.
+// para: 'resolved' (arte/cobrança) ou 'orcamento_enviado' (envio de orçamento).
+// Retorna { conversationId, de, para } quando agiu; null quando foi no-op.
+async function sairDeAguardandoHumano(celular, { para, motivo } = {}) {
+  try {
+    const contato = await acharContatoPorTelefone(celular);
+    if (!contato) return null;
+
+    const r = await db.query(
+      `SELECT id, status FROM conversations
+       WHERE contact_id = $1 AND status IN ('active', 'aguardando_humano', 'orcamento_enviado')
+       ORDER BY started_at DESC LIMIT 1`,
+      [contato.id]
+    );
+    const conversa = r.rows[0];
+    if (!conversa || conversa.status !== 'aguardando_humano') return null;
+
+    const setResolvedAt = para === 'resolved' ? 'resolved_at = NOW(), ' : '';
+    await db.query(
+      `UPDATE conversations SET status = $2, ${setResolvedAt}alerta_humano_em = NULL, updated_at = NOW() WHERE id = $1`,
+      [conversa.id, para]
+    );
+
+    try {
+      await log('conversation_auto_resolved', `Conversa ${conversa.id} auto-resolvida (${motivo})`, {
+        conversationId: conversa.id, metadata: { motivo, para },
+      });
+    } catch (e) { /* log é secundário */ }
+
+    if (global.io) global.io.emit('conversation_updated', { id: conversa.id, status: para });
+
+    return { conversationId: conversa.id, de: 'aguardando_humano', para };
+  } catch (e) {
+    console.warn('[AUTO-RESOLVE] Falha ao sair de aguardando_humano:', e.message);
+    return null;
+  }
+}
+
 module.exports = {
   soDigitos,
   acharContatoPorTelefone,
@@ -177,4 +217,5 @@ module.exports = {
   enviarClienteTexto,
   enviarImagemComRetry,
   enviarClienteImagem,
+  sairDeAguardandoHumano,
 };

@@ -326,6 +326,8 @@ async function _dispararNotificacoesEnvio(orc) {
       `Para reprovar, responda *NÃO*.\n\n` +
       `Ou clique para aprovar: ${urlAprovar}`;
     await conversas.enviarClienteTexto(orc.cliente_celular, msg, { nome: orc.cliente_nome });
+    conversas.sairDeAguardandoHumano(orc.cliente_celular, { para: 'orcamento_enviado', motivo: 'orcamento_enviado' })
+      .catch(e => console.warn('[AUTO-RESOLVE] orçamento:', e.message));
 
     // Registra pendência de confirmação WA
     await db.query(
@@ -896,6 +898,8 @@ async function enviarArteItem(itemId, arquivo_url) {
       `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
       [arquivo_url, itemId]
     );
+    conversas.sairDeAguardandoHumano(item.cliente_celular, { para: 'resolved', motivo: 'arte_enviada' })
+      .catch(e => console.warn('[AUTO-RESOLVE] arte:', e.message));
     return { ok: true, item_id: itemId, status: 'enviada' };
   }
 

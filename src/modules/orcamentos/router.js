@@ -375,6 +375,8 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
       conversas.enviarClienteTexto(orc.cliente_celular, msg, { nome: orc.cliente_nome }).catch(e =>
         console.warn('[WA-COBRAR] Falha:', e.message)
       );
+      conversas.sairDeAguardandoHumano(orc.cliente_celular, { para: 'resolved', motivo: 'cobranca_enviada' })
+        .catch(e => console.warn('[AUTO-RESOLVE] cobrança:', e.message));
     }).catch(() => {});
 
     res.json(result);

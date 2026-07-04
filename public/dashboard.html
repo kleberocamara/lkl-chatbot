@@ -3276,7 +3276,7 @@ async function loadMessages(id) {
                   <button onclick="openMedia('${fileRef}','${tipo}')" style="background:rgba(255,255,255,.25);border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;color:inherit">Ver / Baixar</button>
                 </div>`;
               }
-              return escHtml(txt);
+              return escHtmlLinks(txt);
             })()}
             <div class="msg-time">${carimbo} ${autor}</div>
           </div>
@@ -3353,6 +3353,14 @@ async function resolveConv(convId) {
 
 function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// Escapa HTML e transforma URLs (http/https) em links clicáveis.
+function escHtmlLinks(str) {
+  const esc = str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const linked = esc.replace(/https?:\/\/[^\s<]+/g, u =>
+    `<a href="${u}" target="_blank" rel="noopener" style="color:#8ab4ff;text-decoration:underline;word-break:break-all">${u}</a>`);
+  return linked.replace(/\n/g,'<br>');
 }
 
 // ── CONFIGURAÇÕES ─────────────────────────────────────────────────────────────

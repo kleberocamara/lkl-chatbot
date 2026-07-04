@@ -106,4 +106,32 @@ async function sendImage(to, imageUrl, caption) {
   });
 }
 
-module.exports = { sendMessage, sendImage, sendTemplate, markAsRead, getMediaUrl, downloadMedia };
+// Envia mensagem interativa com botões de resposta (até 3).
+// opts: { headerImage?, headerText?, bodyText, buttons: [{ id, title }] }
+async function sendInteractiveButtons(to, { headerImage, headerText, bodyText, buttons }) {
+  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const interactive = {
+    type: 'button',
+    body: { text: bodyText },
+    action: {
+      buttons: (buttons || []).map(b => ({ type: 'reply', reply: { id: b.id, title: b.title } })),
+    },
+  };
+  if (headerImage) interactive.header = { type: 'image', image: { link: headerImage } };
+  else if (headerText) interactive.header = { type: 'text', text: headerText };
+
+  await axios.post(url, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'interactive',
+    interactive,
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+module.exports = { sendMessage, sendImage, sendInteractiveButtons, sendTemplate, markAsRead, getMediaUrl, downloadMedia };

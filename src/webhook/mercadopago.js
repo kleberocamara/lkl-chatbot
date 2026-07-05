@@ -62,11 +62,6 @@ async function handleMercadoPagoWebhook(req, res) {
         `UPDATE ordens_servico SET pago=true, updated_at=NOW() WHERE orcamento_id=$1`,
         [orcId]
       );
-      // Sync pedido → pago (espelha o caminho do C6 em orcamentos/service.js)
-      await client.query(
-        `UPDATE orders SET status='pago', updated_at=NOW() WHERE orcamento_id=$1 AND status NOT IN ('cancelado')`,
-        [orcId]
-      );
       await client.query('COMMIT');
       console.log(`[MP-WEBHOOK] Orçamento ${numeroOrc} marcado como pago (payment ${paymentId})`);
     } catch (e) {

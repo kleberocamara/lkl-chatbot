@@ -23,6 +23,7 @@ async function statusOSsDoOrcamento(orcamentoId) {
   );
   let changed = 0;
   for (const o of orders.rows) {
+    if (o.status === 'cancelado' || o.status === 'reprovado') continue;
     const statuses = await statusOSsDoOrcamento(o.orcamento_id);
     let alvo = pedidoStatusDaOS(statuses);
     if (!alvo) {

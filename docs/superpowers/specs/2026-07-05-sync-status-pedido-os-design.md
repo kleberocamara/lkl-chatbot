@@ -62,12 +62,39 @@ Ambas puras → testes unitários.
 
 ### Componente 2 — Helper de sincronização
 
+**Vínculo OS↔pedido é de dois caminhos** (descoberto no código):
+- OS de **comunicação visual** (`os/service.js` criação auto): `ordens_servico.orcamento_id` preenchido → ligação direta.
+- OS **offset** (criação manual): `orcamento_id` **NULL**; liga só via `os_itens → orcamento_itens.orcamento_id`, e pode **agrupar itens de vários orçamentos** → uma OS pode afetar **vários pedidos**.
+
+Por isso o helper é keyed pelo **osId que mudou** e resolve os orçamentos afetados pelos dois caminhos:
+
 Em `src/modules/os/service.js`:
-- `sincronizarPedidoDaOS(orcamentoId)`:
-  1. `SELECT status FROM ordens_servico WHERE orcamento_id=$1 AND status != 'cancelado'`.
-  2. `alvo = pedidoStatusDaOS(statuses)`; se `null`, retorna.
-  3. `SELECT id, status FROM orders WHERE orcamento_id=$1`.
-  4. Se `podeAvancarPedido(order.status, alvo)`: `UPDATE orders SET status=$alvo, updated_at=NOW()` + `global.io.emit('order_status_update', { orderId, status: alvo })`.
+- `orcamentosAfetadosPorOS(osId)` → array de `orcamento_id`:
+  ```sql
+  SELECT orcamento_id FROM (
+    SELECT orcamento_id FROM ordens_servico WHERE id=$1 AND orcamento_id IS NOT NULL
+    UNION
+    SELECT oi.orcamento_id FROM os_itens oit
+      JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id
+      WHERE oit.os_id=$1
+  ) t WHERE orcamento_id IS NOT NULL
+  ```
+- `statusOSsDoOrcamento(orcamentoId)` → array de status de todas as OS não canceladas do orçamento, pelos **dois caminhos**:
+  ```sql
+  SELECT DISTINCT os.id, os.status FROM ordens_servico os
+  WHERE os.status != 'cancelado' AND (
+    os.orcamento_id = $1
+    OR os.id IN (SELECT oit.os_id FROM os_itens oit
+                 JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id
+                 WHERE oi.orcamento_id = $1)
+  )
+  ```
+- `sincronizarPedidoPorOS(osId)`:
+  1. `orcs = orcamentosAfetadosPorOS(osId)`.
+  2. Para cada `orcId` em `orcs`:
+     a. `statuses = statusOSsDoOrcamento(orcId)`; `alvo = pedidoStatusDaOS(statuses)`; se `null`, pula.
+     b. `SELECT id, status FROM orders WHERE orcamento_id=orcId`; se não há pedido, pula.
+     c. Se `podeAvancarPedido(order.status, alvo)`: `UPDATE orders SET status=$alvo, updated_at=NOW()` + `global.io.emit('order_status_update', { orderId, status: alvo })`.
 - Chamado **fire-and-forget** (`.catch(warn)`) ao final de: `avancarFase`, `atualizarStatus`, `entregar`/`marcarEntregue`. **Sem FCM** (essas funções já disparam push da OS).
 
 ### Componente 3 — Webhook MP (reverter escrita em orders)
@@ -81,15 +108,15 @@ Em `src/webhook/mercadopago.js`: remover o `UPDATE orders SET status='pago' ...`
 
 ### Componente 5 — Migração de dados (one-time, sem coluna nova)
 
-Script/SQL rodado uma vez no VPS:
-- Pedidos **com** OS não cancelada: `orders.status = pedidoStatusDaOS(...)` (recalcula do estado atual).
+Script Node rodado uma vez no VPS (`scripts/backfill-status-pedido.js`), reusando as funções do Componente 1/2 para não duplicar lógica:
+- Para cada pedido com `orcamento_id`: `statuses = statusOSsDoOrcamento(orcamento_id)` (dois caminhos); se houver OS, `orders.status = pedidoStatusDaOS(statuses)` quando não-nulo (sem a guarda "só avança" — é recálculo do zero).
 - Pedidos **sem** OS hoje em `pago`/`aguardando_pagamento`: `orders.status = 'aprovado'` (tira o pagamento do campo; badge assume).
 - Efeito colateral: pedido 31 volta a `entregue` por regra, não na mão.
 
 ## Fluxo de dados
 
 1. Operador/motorista avança uma OS (corte→…→entregue).
-2. A função de OS grava a fase, dispara os efeitos atuais (FCM, histórico), e chama `sincronizarPedidoDaOS(orcamentoId)`.
+2. A função de OS grava a fase, dispara os efeitos atuais (FCM, histórico), e chama `sincronizarPedidoPorOS(osId)`.
 3. O helper recalcula o alvo de produção do pedido e, se avança, atualiza `orders.status` + emite socket.
 4. A aba Pedidos, ao vivo (socket) ou no reload, compõe `Produção / Pagamento`.
 5. Pagamento muda por via própria (webhook MP / C6) atualizando `status_pagamento` — o badge acompanha, independente da produção.

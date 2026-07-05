@@ -283,6 +283,7 @@ async function listar({ page = 1, limit = 50, status, cliente_id, origin_channel
               u.name   AS vendedor_nome,
               orc.numero AS orcamento_numero,
               orc.status AS orcamento_status,
+              orc.status_pagamento AS pagamento_status,
               (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total,
               (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itens_count
        FROM orders o

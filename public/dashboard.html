@@ -3988,6 +3988,16 @@ const STATUS_OPTIONS = PEDIDO_STATUS; // compatibilidade
 function statusLabel(s) { return PEDIDO_STATUS.find(x => x.value === s)?.label || s; }
 function statusColor(s) { return PEDIDO_STATUS.find(x => x.value === s)?.color || '#999'; }
 
+function pedidoStatusBadges(o) {
+  const prod = `<span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span>`;
+  const pg = o.pagamento_status;
+  if (pg !== 'pago' && pg !== 'aguardando_pagamento') return prod;
+  const pgLabel = pg === 'pago' ? 'Pago' : 'Aguard. pagamento';
+  const pgColor = pg === 'pago' ? '#16a34a' : '#f97316';
+  const pgBadge = `<span style="background:${pgColor};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-left:4px">${pgLabel}</span>`;
+  return `${prod}${pgBadge}`;
+}
+
 function _orcBadge(o) {
   if (!o.orcamento_numero) return '<span style="color:#ccc;font-size:11px">—</span>';
   const cor = { em_orcamento:'#f59e0b', concluido:'#0ea5e9', enviado:'#6366f1', aprovado:'#10b981', reprovado:'#ef4444', cancelado:'#9ca3af' }[o.orcamento_status] || '#64748b';
@@ -4030,7 +4040,7 @@ function renderOrderRows(data) {
       : td(o.produto);
     return `<tr style="background:${bg}">
       <td style="${C}font-weight:700;color:#1a237e">#${o.numero_os||'—'}</td>
-      <td style="${C}"><span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span></td>
+      <td style="${C}">${pedidoStatusBadges(o)}</td>
       ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${produtoCel}${td(o.quantidade)}
       <td style="padding:10px;border-bottom:1px solid #f0f0f0;max-width:240px">${_obsPreview(o.observacoes)}</td>
       <td style="${C}text-align:center"><button onclick="editarPedido('${o.id}')" title="Editar contato/observações" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px">✏️</button></td>

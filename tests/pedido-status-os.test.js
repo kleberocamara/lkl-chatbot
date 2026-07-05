@@ -58,4 +58,10 @@ describe('podeAvancarPedido', () => {
   test('reprovado nunca avança', () => {
     expect(podeAvancarPedido('reprovado', 'entregue')).toBe(false);
   });
+  test('novo → novo → false (no-op pré-produção)', () => {
+    expect(podeAvancarPedido('novo', 'novo')).toBe(false);
+  });
+  test('pago → pago → false (no-op pré-produção)', () => {
+    expect(podeAvancarPedido('pago', 'pago')).toBe(false);
+  });
 });

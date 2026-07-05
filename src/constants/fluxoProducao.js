@@ -39,6 +39,7 @@ function pedidoStatusDaOS(statuses) {
 // Guarda "só avança": produção nunca regride; pré-produção/pagamento sempre
 // podem avançar; cancelado/reprovado nunca são tocados.
 function podeAvancarPedido(atual, alvo) {
+  if (atual === alvo) return false;
   if (atual === 'cancelado' || atual === 'reprovado') return false;
   if (PRE_PRODUCAO.has(atual)) return true;
   return (RANK_PRODUCAO[alvo] || 0) > (RANK_PRODUCAO[atual] || 0);

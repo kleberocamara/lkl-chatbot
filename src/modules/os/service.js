@@ -1,7 +1,7 @@
 const db = require('../../db');
 const fcm = require('../../services/fcm');
 const whatsapp = require('../../services/whatsapp');
-const { proximaFase } = require('../../constants/fluxoProducao');
+const { proximaFase, pedidoStatusDaOS, podeAvancarPedido } = require('../../constants/fluxoProducao');
 
 const STATUS_VALIDOS = ['corte', 'impressao', 'acabamento', 'entrega', 'entregue', 'cancelado'];
 
@@ -172,6 +172,8 @@ async function avancarFase(osId, userId) {
   }
 
   if (global.io) global.io.emit('os_status', { os_id: osId, status: proximo });
+
+  sincronizarPedidoPorOS(osId).catch(e => console.warn('[SYNC-PEDIDO avancarFase]', e.message));
 
   return { os: updatedOs };
 }
@@ -368,6 +370,8 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
     [id, os.status, novoStatus, responsavel_id || null]
   ).catch(e => console.warn('[OS-HIST atualizarStatus]', e.message));
 
+  sincronizarPedidoPorOS(id).catch(e => console.warn('[SYNC-PEDIDO atualizarStatus]', e.message));
+
   return { os: updatedOs };
 }
 
@@ -417,6 +421,8 @@ async function entregar(id, { nome_recebedor, foto_url, userId }) {
       data: { os_id: id, orcamento_id: os.orcamento_id, status: 'entregue' },
     }).catch(() => {});
   }
+
+  sincronizarPedidoPorOS(id).catch(e => console.warn('[SYNC-PEDIDO entregar]', e.message));
 
   return { os };
 }
@@ -642,6 +648,53 @@ async function estornarRequisicao(osId, { userId } = {}) {
     return { erro: [e.message] };
   } finally {
     client.release();
+  }
+}
+
+// Resolve os orçamentos afetados por uma OS pelos dois caminhos de vínculo:
+// direto (ordens_servico.orcamento_id) e via itens (os_itens → orcamento_itens).
+async function orcamentosAfetadosPorOS(osId) {
+  const r = await db.query(
+    `SELECT orcamento_id FROM (
+       SELECT orcamento_id FROM ordens_servico WHERE id=$1 AND orcamento_id IS NOT NULL
+       UNION
+       SELECT oi.orcamento_id FROM os_itens oit
+         JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id
+         WHERE oit.os_id=$1
+     ) t WHERE orcamento_id IS NOT NULL`,
+    [osId]
+  );
+  return r.rows.map(x => x.orcamento_id);
+}
+
+// Status de todas as OS não canceladas de um orçamento (dois caminhos).
+async function statusOSsDoOrcamento(orcamentoId) {
+  const r = await db.query(
+    `SELECT DISTINCT os.id, os.status FROM ordens_servico os
+     WHERE os.status != 'cancelado' AND (
+       os.orcamento_id = $1
+       OR os.id IN (SELECT oit.os_id FROM os_itens oit
+                    JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id
+                    WHERE oi.orcamento_id = $1)
+     )`,
+    [orcamentoId]
+  );
+  return r.rows.map(x => x.status);
+}
+
+// Sincroniza o(s) pedido(s) afetado(s) por uma OS que mudou de fase.
+async function sincronizarPedidoPorOS(osId) {
+  const orcs = await orcamentosAfetadosPorOS(osId);
+  for (const orcId of orcs) {
+    const statuses = await statusOSsDoOrcamento(orcId);
+    const alvo = pedidoStatusDaOS(statuses);
+    if (!alvo) continue;
+    const oR = await db.query('SELECT id, status FROM orders WHERE orcamento_id=$1', [orcId]);
+    const order = oR.rows[0];
+    if (!order) continue;
+    if (!podeAvancarPedido(order.status, alvo)) continue;
+    await db.query('UPDATE orders SET status=$1, updated_at=NOW() WHERE id=$2', [alvo, order.id]);
+    if (global.io) global.io.emit('order_status_update', { orderId: order.id, status: alvo });
   }
 }
 

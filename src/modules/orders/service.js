@@ -195,6 +195,17 @@ async function criarOrder(dados, userId) {
       );
     }
 
+    // Serviços automáticos (só chatbot): Arte Final por item sem arte + Entrega.
+    if (dados.origin_channel === 'chatbot') {
+      for (const s of linhasServicoAuto(itens, dados.entrega)) {
+        await db.query(
+          `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao, largura_cm, altura_cm, material_id, preco_origem, preco_memoria, revenda_produto_id)
+           VALUES ($1, $2, $3, NULL, $3, $4, $5, $6, false, 'SERVICO', NULL, NULL, NULL, 'auto', 'Serviço fixo', NULL)`,
+          [orcamentoId, codigo++, s.produto, s.quantidade, s.valor_unitario, s.valor_total]
+        );
+      }
+    }
+
     await db.query(
       `UPDATE orcamentos SET total = (SELECT COALESCE(SUM(valor_total),0) FROM orcamento_itens WHERE orcamento_id = $1) WHERE id = $1`,
       [orcamentoId]

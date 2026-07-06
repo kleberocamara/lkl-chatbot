@@ -15,39 +15,93 @@ const _uploadArte = multer({ storage: _arteStorage, limits: { fileSize: 15 * 102
 
 const router = express.Router();
 
-// GET /resposta?token=xxx&r=aprovado|reprovado — rota PÚBLICA (link do e-mail)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function _fmtBRL(v) {
+  return `R$ ${parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+}
+function _paginaSimples(titulo, cor) {
+  return `<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="font-family:Arial;text-align:center;padding:60px;background:#f5f5f5">
+      <div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+        <h2 style="color:${cor || '#1a237e'}">${titulo}</h2>
+        <p style="color:#555">Gráfica LKL — obrigado!</p>
+      </div>
+    </body></html>`;
+}
+
+// GET /resposta?token=xxx — PÚBLICA, SOMENTE LEITURA: mostra a página de confirmação.
+// Ignora qualquer &r= (links legados) — nunca muta estado no GET.
 router.get('/resposta', async (req, res) => {
-  const { token, r } = req.query;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const { token } = req.query;
+  if (!token || !UUID_RE.test(token)) return res.status(400).send('Link inválido.');
+
+  let orc;
+  try {
+    orc = await service.buscarResumoPorToken(token);
+  } catch (e) {
+    console.error('[ORC-RESPOSTA-GET]', e.message);
+    return res.status(500).send(_paginaSimples('⚠️ Não foi possível carregar o orçamento agora.', '#c62828'));
+  }
+  if (!orc) return res.send(_paginaSimples('⚠️ Link inválido ou expirado.', '#c62828'));
+
+  if (orc.status !== 'enviado') {
+    return res.send(_paginaSimples(`Este orçamento já foi <b>${_escHtml(orc.status)}</b>.`, '#1a237e'));
+  }
+
+  const refPedido = orc.pedido_numero || orc.numero;
+  const itensRows = (orc.itens || []).map(it => `
+    <tr>
+      <td style="padding:8px 6px;border-bottom:1px solid #eee">${_escHtml(it.descricao || it.produto || 'item')}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid #eee;text-align:center">${_escHtml(it.quantidade)}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid #eee;text-align:right">${_fmtBRL(it.valor_total)}</td>
+    </tr>`).join('');
+
+  res.send(`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="font-family:Arial;background:#f5f5f5;margin:0;padding:24px">
+      <div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+        <h2 style="color:#1a237e;margin:0 0 4px">Gráfica LKL</h2>
+        <p style="color:#555;margin:0 0 20px">Pedido #${_escHtml(refPedido)} — total <b>${_fmtBRL(orc.total)}</b></p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead><tr>
+            <th style="text-align:left;padding:6px;border-bottom:2px solid #eee">Item</th>
+            <th style="text-align:center;padding:6px;border-bottom:2px solid #eee">Qtd</th>
+            <th style="text-align:right;padding:6px;border-bottom:2px solid #eee">Valor</th>
+          </tr></thead>
+          <tbody>${itensRows}</tbody>
+        </table>
+        <form method="POST" action="/api/v2/orcamentos/resposta" style="margin-top:24px;display:flex;gap:12px">
+          <input type="hidden" name="token" value="${_escHtml(token)}">
+          <button type="submit" name="r" value="aprovado" style="flex:1;background:#2e7d32;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">✅ Aprovar</button>
+          <button type="submit" name="r" value="reprovado" style="flex:1;background:#c62828;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">❌ Reprovar</button>
+        </form>
+      </div>
+    </body></html>`);
+});
+
+// POST /resposta — PÚBLICA: executa a aprovação/reprovação (só via ação deliberada).
+router.post('/resposta', async (req, res) => {
+  const { token, r } = req.body || {};
   if (!token || !UUID_RE.test(token) || !['aprovado', 'reprovado'].includes(r)) {
-    return res.status(400).send('Link inválido.');
+    return res.status(400).send('Requisição inválida.');
   }
   let result;
   try {
     result = await service.processarRespostaToken(token, r);
   } catch (e) {
-    console.error('[ORC-RESPOSTA]', e.message);
-    return res.status(500).send(`<html><body style="font-family:Arial;text-align:center;padding:60px">
-      <h2>⚠️ Não foi possível processar sua resposta agora</h2>
-      <p>Tente novamente em instantes ou fale com a Gráfica LKL.</p>
-    </body></html>`);
+    console.error('[ORC-RESPOSTA-POST]', e.message);
+    return res.status(500).send(_paginaSimples('⚠️ Não foi possível processar sua resposta agora.', '#c62828'));
   }
-  if (result.erro) {
-    return res.send(`<html><body style="font-family:Arial;text-align:center;padding:60px">
-      <h2>⚠️ ${result.erro[0]}</h2>
-      <p>Entre em contato com a Gráfica LKL se precisar de ajuda.</p>
-    </body></html>`);
-  }
+  if (result.erro) return res.send(_paginaSimples(`⚠️ ${_escHtml(result.erro[0])}`, '#c62828'));
+
   const msg = r === 'aprovado'
     ? '✅ Orçamento aprovado! Nossa equipe entrará em contato em breve.'
     : '❌ Orçamento reprovado. Entre em contato conosco se desejar renegociar.';
-  res.send(`<html><body style="font-family:Arial;text-align:center;padding:60px;background:#f5f5f5">
-    <div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
-      <img src="https://app.graficalkl.com.br/logo.png" alt="Gráfica LKL" style="height:60px;margin-bottom:24px" onerror="this.style.display='none'">
-      <h2 style="color:${r === 'aprovado' ? '#2e7d32' : '#c62828'}">${msg}</h2>
-      <p style="color:#555">Obrigado por utilizar a Gráfica LKL!</p>
-    </div>
-  </body></html>`);
+  res.send(_paginaSimples(msg, r === 'aprovado' ? '#2e7d32' : '#c62828'));
 });
 
 // POST / — create orçamento (any authenticated user)

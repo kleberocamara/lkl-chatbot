@@ -19,9 +19,9 @@ router.use('/revenda', requireAuthApi, require('./revenda/router'));
 router.use('/revenda-compras', requireAuthApi, require('./revenda-compras/router'));
 router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));
-// GET /orcamentos/resposta é público (link de aprovação/reprovação por e-mail); demais rotas exigem auth
+// /orcamentos/resposta é público (link de aprovação: GET mostra a página, POST executa); demais rotas exigem auth
 router.use('/orcamentos',
-  (req, res, next) => (req.method === 'GET' && req.path === '/resposta') ? next() : requireAuthApi(req, res, next),
+  (req, res, next) => (req.path === '/resposta' && ['GET', 'POST'].includes(req.method)) ? next() : requireAuthApi(req, res, next),
   require('./orcamentos/router'));
 router.use('/os', requireAuthApi, require('./os/router'));
 router.use('/especificacoes', requireAuthApi, require('./especificacoes/router'));

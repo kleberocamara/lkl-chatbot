@@ -200,8 +200,8 @@ async function criarOrder(dados, userId) {
       for (const s of linhasServicoAuto(itens, dados.entrega)) {
         await db.query(
           `INSERT INTO orcamento_itens (orcamento_id, codigo, produto, especificacao, descricao, quantidade, valor_unitario, valor_total, tem_arte, tipo_producao, largura_cm, altura_cm, material_id, preco_origem, preco_memoria, revenda_produto_id)
-           VALUES ($1, $2, $3, NULL, $3, $4, $5, $6, false, 'SERVICO', NULL, NULL, NULL, 'auto', 'Serviço fixo', NULL)`,
-          [orcamentoId, codigo++, s.produto, s.quantidade, s.valor_unitario, s.valor_total]
+           VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, false, 'SERVICO', NULL, NULL, NULL, 'auto', 'Serviço fixo', NULL)`,
+          [orcamentoId, codigo++, s.produto, s.produto, s.quantidade, s.valor_unitario, s.valor_total]
         );
       }
     }

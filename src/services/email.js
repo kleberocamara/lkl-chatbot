@@ -68,8 +68,9 @@ async function notifyAnalyst({ contact, conversation, orderDetails }) {
 
 async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, numeroPedido, total, validade_dias, prazo_entrega, itens, token, pdfBuffer }) {
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
-  const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${token}&r=aprovado`;
-  const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${token}&r=reprovado`;
+  const urlConfirmar = `${baseUrl}/api/v2/orcamentos/resposta?token=${token}`;
+  const urlAprovar  = urlConfirmar;
+  const urlReprovar = urlConfirmar;
 
   const itensHtml = (itens || []).map(it => `
     <tr>

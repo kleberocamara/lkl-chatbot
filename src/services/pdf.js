@@ -177,8 +177,9 @@ function gerarOrcamentoPDF(orc) {
     // ── APROVAÇÃO ONLINE ───────────────────────────────────────────────────
     if (orc.token_aprovacao) {
       const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
-      const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=aprovado`;
-      const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=reprovado`;
+      const urlConfirmar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}`;
+      const urlAprovar  = urlConfirmar;
+      const urlReprovar = urlConfirmar;
 
       y += 18;
       if (y + 60 > 800) { doc.addPage({ size: 'A4', margin: 0 }); y = 40; }

@@ -302,8 +302,7 @@ async function reenviar(id) {
 
 async function _dispararNotificacoesEnvio(orc) {
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
-  const urlAprovar  = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=aprovado`;
-  const urlReprovar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}&r=reprovado`;
+  const urlConfirmar = `${baseUrl}/api/v2/orcamentos/resposta?token=${orc.token_aprovacao}`;
 
   const totalFmt = `R$ ${parseFloat(orc.total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
 
@@ -317,14 +316,18 @@ async function _dispararNotificacoesEnvio(orc) {
 
   // WhatsApp
   if (orc.cliente_celular) {
+    const itensLista = (orc.itens || [])
+      .map(it => `• ${it.descricao || it.produto || 'item'} — ${it.quantidade}un — R$ ${parseFloat(it.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`)
+      .join('\n');
     const msg =
       `Olá, ${orc.cliente_nome || 'cliente'}! 🖨\n\n` +
       `A Gráfica LKL preparou seu *Pedido #${orc.pedido_numero || orc.numero}* no valor de *${totalFmt}*.\n\n` +
+      (itensLista ? `*Itens:*\n${itensLista}\n\n` : '') +
       `Prazo de entrega: ${orc.prazo_entrega || 'a combinar'}\n` +
       `Validade: ${orc.validade_dias || 30} dias\n\n` +
       `Para aprovar, responda *SIM*.\n` +
       `Para reprovar, responda *NÃO*.\n\n` +
-      `Ou clique para aprovar: ${urlAprovar}`;
+      `Ou clique para ver e responder ao orçamento: ${urlConfirmar}`;
     await conversas.enviarClienteTexto(orc.cliente_celular, msg, { nome: orc.cliente_nome });
     conversas.sairDeAguardandoHumano(orc.cliente_celular, { para: 'orcamento_enviado', motivo: 'orcamento_enviado' })
       .catch(e => console.warn('[AUTO-RESOLVE] orçamento:', e.message));

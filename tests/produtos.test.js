@@ -12,6 +12,8 @@ describe('matchProduto', () => {
 describe('tipoPorProduto', () => {
   test('Banner -> COMUNICAÇÃO VISUAL', () => { expect(tipoPorProduto('Banner')).toBe('COMUNICAÇÃO VISUAL'); });
   test('Cartaz -> OFFSET', () => { expect(tipoPorProduto('Cartaz')).toBe('OFFSET'); });
+  test('Capa de Carnê (com acento) -> OFFSET', () => { expect(tipoPorProduto('Capa de Carnê')).toBe('OFFSET'); });
+  test('capa de carne (sem acento) -> OFFSET', () => { expect(tipoPorProduto('capa de carne')).toBe('OFFSET'); });
   test('desconhecido -> null', () => { expect(tipoPorProduto('xyz')).toBeNull(); });
 });
 

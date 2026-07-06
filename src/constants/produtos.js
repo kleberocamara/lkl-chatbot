@@ -3,6 +3,7 @@ const PRODUTOS = [
   { produto: 'ADESIVOS',           tipo: 'COMUNICAÇÃO VISUAL' },
   { produto: 'BANNERS',            tipo: 'COMUNICAÇÃO VISUAL' },
   { produto: 'BLOCK LETTER',       tipo: 'COMUNICAÇÃO VISUAL' },
+  { produto: 'CAPA DE CARNE',      tipo: 'OFFSET' },
   { produto: 'CARTAZ',             tipo: 'OFFSET' },
   { produto: 'CARTOES DE VISITA',  tipo: 'OFFSET' },
   { produto: 'CATÁLOGO',           tipo: 'OFFSET' },

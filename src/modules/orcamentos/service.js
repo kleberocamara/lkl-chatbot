@@ -355,6 +355,14 @@ async function _dispararNotificacoesEnvio(orc) {
   }
 }
 
+async function buscarResumoPorToken(token) {
+  const { rows } = await db.query(
+    'SELECT id FROM orcamentos WHERE token_aprovacao=$1', [token]
+  );
+  if (!rows[0]) return null;
+  return buscarPorId(rows[0].id);
+}
+
 // Resposta via link de e-mail (token)
 async function processarRespostaToken(token, resposta) {
   const { rows } = await db.query(
@@ -984,4 +992,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes };
+module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes };

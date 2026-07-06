@@ -348,6 +348,7 @@ async function processMessage(conversationId, userMessage) {
           cliente_id: clienteId,
           email: args.email || null,
           itens: itensDados,
+          entrega: args.entrega === 'entrega',
           observacoes: [
             args.entrega === 'entrega' ? `Entrega: ${args.endereco_entrega || ''}` : 'Retirada na loja',
             args.observacoes || '',

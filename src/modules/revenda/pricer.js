@@ -46,14 +46,15 @@ function calcularRevenda(ctx, opts) {
 function calcularInternoM2(ctx, item) {
   const larg = Number(item.largura_cm), alt = Number(item.altura_cm);
   if (!(larg > 0) || !(alt > 0)) return null;
-  const b = engine.escolherBobina(larg, ctx.espaco_corte_cm, ctx.bobinas);
+  const b = engine.escolherBobinaComRotacao(larg, alt, ctx.espaco_corte_cm, ctx.bobinas);
   if (!b) return null;
   const qtd = Number(item.quantidade) > 0 ? Number(item.quantidade) : 1;
-  const area = (b.largura_util_cm / 100) * (alt / 100);
+  const comprimento = b.comprimento_cm;
+  const area = (b.largura_util_cm / 100) * (comprimento / 100);
   const pm2 = Number(ctx.preco_m2) || 0;
   const vu = round2(area * pm2);
   const vt = round2(vu * qtd);
-  const memoria = `Bobina ${b.largura_cm / 100}m (${b.n} por largura) → ${round2(b.largura_util_cm / 100)}m × ${alt / 100}m = ${round2(area)}m² × R$ ${pm2}/m² = R$ ${vu}/un × ${qtd} = R$ ${vt}`;
+  const memoria = `Bobina ${b.largura_cm / 100}m (${b.n} por largura) → ${round2(b.largura_util_cm / 100)}m × ${comprimento / 100}m = ${round2(area)}m² × R$ ${pm2}/m² = R$ ${vu}/un × ${qtd} = R$ ${vt}`;
   return { valor_unitario: vu, valor_total: vt, memoria, bobina_cm: b.largura_cm };
 }
 

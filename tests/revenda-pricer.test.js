@@ -64,11 +64,11 @@ describe('calcularInternoM2', () => {
     expect(r.bobina_cm).toBe(106);
     expect(r.valor_total).toBeCloseTo(63.60, 2);
   });
-  test('lona 2,00m x 1,00m → bobina 220 → 2,20×1,00 × 30 = 66,00', () => {
+  test('lona 2,00m x 1,00m → gira e casa 3× na bobina 320 (menor desperdício que 220 direto)', () => {
     const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
       { largura_cm: 200, altura_cm: 100, quantidade: 1 });
-    expect(r.bobina_cm).toBe(220);
-    expect(r.valor_total).toBeCloseTo(66.00, 2);
+    expect(r.bobina_cm).toBe(320);
+    expect(r.valor_total).toBeCloseTo(64.00, 2);
   });
   test('arte 0,50m cabe 3× na bobina 150 (util 0,50m) × qtd 3 = 45,00', () => {
     const r = calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 },
@@ -79,8 +79,20 @@ describe('calcularInternoM2', () => {
   test('dimensão ausente → null', () => {
     expect(calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 }, { quantidade: 1 })).toBeNull();
   });
-  test('arte mais larga que todas as bobinas → null', () => {
+  test('arte mais larga que todas as bobinas em qualquer orientação → null', () => {
     expect(calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 },
-      { largura_cm: 200, altura_cm: 100, quantidade: 1 })).toBeNull();
+      { largura_cm: 200, altura_cm: 180, quantidade: 1 })).toBeNull();
+  });
+  test('só cabe girada (200x100 vira 100x200) → mesmo resultado do 100x200 direto', () => {
+    const r = calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 200, altura_cm: 100, quantidade: 1 });
+    expect(r.bobina_cm).toBe(106);
+    expect(r.valor_total).toBeCloseTo(63.60, 2);
+  });
+  test('pedido 33: banner 6,78m x 2,30m → gira, bobina 3,20m, R$650,88', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 678, altura_cm: 230, quantidade: 1 });
+    expect(r.bobina_cm).toBe(320);
+    expect(r.valor_total).toBeCloseTo(650.88, 2);
   });
 });

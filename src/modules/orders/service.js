@@ -26,6 +26,9 @@ function _parseDate(val) {
 
 const CANAIS_VALIDOS = ['whatsapp', 'balcao', 'telefone', 'site', 'vendedor', 'chatbot'];
 
+const SERVICO_ARTE_VALOR = 30;
+const SERVICO_ENTREGA_VALOR = 15;
+
 const STATUS_VALIDOS = [
   'novo', 'em_orcamento', 'aguardando_aprovacao', 'aprovado',
   'em_producao', 'concluido', 'entregue',
@@ -46,6 +49,22 @@ const FCM_LABELS = {
   aguardando_pagamento: 'Aguardando pagamento 💰',
   pago:             'Pagamento confirmado ✅',
 };
+
+// Linhas de serviço automáticas para orçamento do chatbot:
+// Arte Final (R$30 por item sem arte) e Entrega (R$15 quando entrega).
+function linhasServicoAuto(itens, entrega) {
+  const linhas = [];
+  const semArte = (itens || []).filter(it => !it.tem_arte).length;
+  if (semArte > 0) {
+    linhas.push({ produto: 'Arte Final', quantidade: semArte,
+      valor_unitario: SERVICO_ARTE_VALOR, valor_total: SERVICO_ARTE_VALOR * semArte });
+  }
+  if (entrega) {
+    linhas.push({ produto: 'Entrega', quantidade: 1,
+      valor_unitario: SERVICO_ENTREGA_VALOR, valor_total: SERVICO_ENTREGA_VALOR });
+  }
+  return linhas;
+}
 
 // Normaliza os itens recebidos: aceita array `itens` ou cai no produto único (legado/chatbot)
 function _normalizarItens(dados) {
@@ -338,4 +357,4 @@ async function atualizarPedido(id, dados) {
   return { order };
 }
 
-module.exports = { criarOrder, buscarPorId, atualizarStatus, atualizarPedido, vincularOrcamento, listar, STATUS_VALIDOS, STATUS_VENDEDOR };
+module.exports = { criarOrder, buscarPorId, atualizarStatus, atualizarPedido, vincularOrcamento, listar, linhasServicoAuto, STATUS_VALIDOS, STATUS_VENDEDOR };

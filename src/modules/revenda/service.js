@@ -75,13 +75,13 @@ function pontuarSku(textoPedido, nomeSku) {
 const _semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 // Casa {produto, material, tipo_producao} ao SKU mais provável do catálogo (ou null).
-async function resolverProdutoRevenda({ produto, material, tipo_producao, largura_cm, altura_cm, impressao }) {
+async function resolverProdutoRevenda({ produto, material, tipo_producao, largura_cm, altura_cm, impressao, especificacao }) {
   // Família folheto/flyer/folder: casa por gramatura+tamanho+impressão.
   if (/FOLDER|FOLHETO|FLYER/.test(_semAcento(produto)) && Number(largura_cm) > 0 && Number(altura_cm) > 0) {
     const f = await resolverFolheto({ material, largura_cm, altura_cm, impressao });
     if (f) return f;
   }
-  const texto = `${produto || ''} ${material || ''}`.trim();
+  const texto = `${produto || ''} ${material || ''} ${especificacao || ''}`.trim();
   if (!texto) return null;
   const alvoTipo = _semAcento(tipo_producao); // 'COMUNICACAO VISUAL' | 'OFFSET' | ...
   const filtrarTipo = (alvoTipo === 'COMUNICACAO VISUAL' || alvoTipo === 'OFFSET');

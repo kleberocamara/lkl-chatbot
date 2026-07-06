@@ -51,6 +51,37 @@ describe('escolherBobina', () => {
   });
 });
 
+const { escolherBobinaComRotacao } = require('../src/modules/precificacao/engine');
+
+describe('escolherBobinaComRotacao', () => {
+  test('cabe normal (sem precisar girar) → usa largura como está', () => {
+    const b = escolherBobinaComRotacao(100, 200, 0, [{ largura_cm: 106 }, { largura_cm: 127 }, { largura_cm: 150 }]);
+    expect(b.largura_cm).toBe(106);
+    expect(b.comprimento_cm).toBe(200);
+  });
+
+  test('só cabe girada → usa altura contra a bobina, largura vira comprimento', () => {
+    const b = escolherBobinaComRotacao(200, 100, 0, [{ largura_cm: 106 }, { largura_cm: 127 }, { largura_cm: 150 }]);
+    expect(b.largura_cm).toBe(106);
+    expect(b.comprimento_cm).toBe(200);
+  });
+
+  test('cenário real do pedido 33: 678x230 contra bobinas de lona → bobina 320, comprimento 678', () => {
+    const b = escolherBobinaComRotacao(678, 230, 0, [{ largura_cm: 160 }, { largura_cm: 220 }, { largura_cm: 320 }]);
+    expect(b.largura_cm).toBe(320);
+    expect(b.comprimento_cm).toBe(678);
+  });
+
+  test('nenhuma orientação cabe → null', () => {
+    expect(escolherBobinaComRotacao(200, 180, 0, [{ largura_cm: 150 }])).toBeNull();
+  });
+
+  test('ambas orientações cabem com mesmo desperdício → prefere a normal', () => {
+    const b = escolherBobinaComRotacao(100, 100, 0, [{ largura_cm: 106 }]);
+    expect(b.comprimento_cm).toBe(100);
+  });
+});
+
 describe('calcularItem — m2_bobina', () => {
   test('cobra largura imputada × altura', () => {
     const r = calcularItem({ metodo_calculo: 'm2_bobina', preco_base: 25, espaco_corte_cm: 0 },

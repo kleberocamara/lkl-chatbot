@@ -23,6 +23,22 @@ function escolherBobina(larguraArteCm, g, bobinas) {
   return melhor;
 }
 
+// Tenta as duas orientações (normal e girada) e escolhe a de menor desperdício
+// entre as que couberem. Empate → prefere a orientação original (normal).
+// Retorna { largura_cm, n, largura_util_cm, comprimento_cm } ou null.
+function escolherBobinaComRotacao(largura_cm, altura_cm, g, bobinas) {
+  const normal = escolherBobina(Number(largura_cm), g, bobinas);
+  const girada = escolherBobina(Number(altura_cm), g, bobinas);
+  if (normal && girada) {
+    return girada.largura_util_cm < normal.largura_util_cm
+      ? { ...girada, comprimento_cm: Number(largura_cm) }
+      : { ...normal, comprimento_cm: Number(altura_cm) };
+  }
+  if (normal) return { ...normal, comprimento_cm: Number(altura_cm) };
+  if (girada) return { ...girada, comprimento_cm: Number(largura_cm) };
+  return null;
+}
+
 function calcularItem(regra, item, ctx = {}) {
   const metodo = regra && regra.metodo_calculo;
   const qtd = qtdOf(item);
@@ -78,4 +94,4 @@ function calcularItem(regra, item, ctx = {}) {
   return null;
 }
 
-module.exports = { calcularItem, escolherBobina, round2 };
+module.exports = { calcularItem, escolherBobina, escolherBobinaComRotacao, round2 };

@@ -119,3 +119,93 @@ describe('criarParcelado', () => {
     expect(linhasInseridas[0][8]).toBe(hoje);
   });
 });
+
+describe('converterEmParcelado', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  test('conta não encontrada → erro', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+    const r = await service.converterEmParcelado(999, { parcelas: [{ vencimento: '2026-08-01', valor: 50 }, { vencimento: '2026-09-01', valor: 50 }] });
+    expect(r.erro).toEqual(expect.arrayContaining([expect.stringContaining('não encontrada')]));
+    expect(db.pool.connect).not.toHaveBeenCalled();
+  });
+
+  test('conta já paga → erro, sem apagar nada', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 5, status: 'pago', c6_group_id: null }] });
+    const r = await service.converterEmParcelado(5, { parcelas: [{ vencimento: '2026-08-01', valor: 50 }, { vencimento: '2026-09-01', valor: 50 }] });
+    expect(r.erro).toEqual(expect.arrayContaining([expect.stringContaining('não é possível parcelar')]));
+    expect(db.pool.connect).not.toHaveBeenCalled();
+  });
+
+  test('conta em lote C6 (c6_group_id preenchido) → erro, sem apagar nada', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 6, status: 'agendado', c6_group_id: 'grupo-123' }] });
+    const r = await service.converterEmParcelado(6, { parcelas: [{ vencimento: '2026-08-01', valor: 50 }, { vencimento: '2026-09-01', valor: 50 }] });
+    expect(r.erro).toEqual(expect.arrayContaining([expect.stringContaining('não é possível parcelar')]));
+    expect(db.pool.connect).not.toHaveBeenCalled();
+  });
+
+  test('menos de 2 parcelas → erro, sem apagar nada', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 7, status: 'pendente', c6_group_id: null }] });
+    const r = await service.converterEmParcelado(7, { parcelas: [{ vencimento: '2026-08-01', valor: 50 }] });
+    expect(r.erro).toBeDefined();
+    expect(db.pool.connect).not.toHaveBeenCalled();
+  });
+
+  test('conta elegível → apaga a original e cria N novas na mesma transação', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 8, status: 'pendente', c6_group_id: null, descricao: 'Nota Evolution',
+        fornecedor: 'Evolution', fornecedor_id: null, tipo_despesa_id: 2, tipo: 'boleto',
+        competencia: '2026-05-27', observacao: null,
+      }],
+    });
+    const queries = [];
+    const client = mockClient((sql, params) => {
+      queries.push(sql.split('\n')[0].trim());
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('DELETE FROM contas_pagar')) return Promise.resolve({ rowCount: 1 });
+      if (sql.startsWith('INSERT INTO contas_pagar')) return Promise.resolve({ rows: [{ id: queries.length }] });
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.converterEmParcelado(8, {
+      parcelas: [
+        { vencimento: '2026-06-24', valor: 350 },
+        { vencimento: '2026-07-01', valor: 350 },
+      ],
+    });
+
+    expect(r.criadas).toHaveLength(2);
+    const deleteIndex = queries.findIndex(q => q.startsWith('DELETE'));
+    const insertIndexes = queries.map((q, i) => q.startsWith('INSERT') ? i : -1).filter(i => i !== -1);
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(insertIndexes.every(i => i > deleteIndex)).toBe(true);
+  });
+
+  test('falha na criação das novas parcelas → rollback (DELETE não é commitado)', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{
+        id: 9, status: 'pendente', c6_group_id: null, descricao: 'Nota X',
+        fornecedor: null, fornecedor_id: null, tipo_despesa_id: 2, tipo: 'boleto',
+        competencia: '2026-05-27', observacao: null,
+      }],
+    });
+    const client = mockClient((sql) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('DELETE FROM contas_pagar')) return Promise.resolve({ rowCount: 1 });
+      if (sql.startsWith('INSERT INTO contas_pagar')) return Promise.reject(new Error('falha simulada de insercao'));
+      if (sql.startsWith('ROLLBACK')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    await expect(service.converterEmParcelado(9, {
+      parcelas: [{ vencimento: '2026-06-24', valor: 175 }, { vencimento: '2026-07-01', valor: 175 }],
+    })).rejects.toThrow('falha simulada de insercao');
+
+    expect(client.query.mock.calls.some(c => c[0].startsWith('ROLLBACK'))).toBe(true);
+    expect(client.query.mock.calls.some(c => c[0].startsWith('COMMIT'))).toBe(false);
+  });
+});

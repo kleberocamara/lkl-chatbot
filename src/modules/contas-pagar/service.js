@@ -216,6 +216,61 @@ async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despe
   }
 }
 
+async function converterEmParcelado(id, { descricao, fornecedor, fornecedor_id, tipo_despesa_id, competencia, tipo, observacao, parcelas }) {
+  const conta = await buscarPorId(id);
+  if (!conta) return { erro: ['Conta não encontrada'] };
+  if (conta.status === 'pago' || conta.c6_group_id) {
+    return { erro: ['Conta já paga ou processada em lote C6 — não é possível parcelar'] };
+  }
+  if (!Array.isArray(parcelas) || parcelas.length < 2) {
+    return { erro: ['parcelas (mínimo 2 itens) são obrigatórias'] };
+  }
+  for (let i = 0; i < parcelas.length; i++) {
+    const p = parcelas[i];
+    if (!p.vencimento || !p.valor) {
+      return { erro: [`parcela ${i + 1}: vencimento e valor são obrigatórios`] };
+    }
+  }
+
+  const descricaoFinal = descricao || conta.descricao;
+  const fornecedorFinal = fornecedor !== undefined ? fornecedor : conta.fornecedor;
+  const fornecedorIdFinal = fornecedor_id !== undefined ? fornecedor_id : conta.fornecedor_id;
+  const tipoDespesaIdFinal = tipo_despesa_id || conta.tipo_despesa_id;
+  const tipoFinal = tipo || conta.tipo;
+  const competenciaFinal = competencia || format(new Date(conta.competencia), 'yyyy-MM-dd');
+  const observacaoFinal = observacao !== undefined ? observacao : conta.observacao;
+  const parcelaGrupoId = crypto.randomUUID();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM contas_pagar WHERE id = $1', [id]);
+    const criadas = [];
+    for (let i = 0; i < parcelas.length; i++) {
+      const p = parcelas[i];
+      const r = await client.query(
+        `INSERT INTO contas_pagar
+           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel,
+            competencia, parcela_grupo_id, parcela_numero, parcela_total, tipo_entrada, status, observacao)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual','pendente',$13)
+         RETURNING *`,
+        [`${descricaoFinal} (${i + 1}/${parcelas.length})`, fornecedorFinal || null, fornecedorIdFinal || null,
+         tipoDespesaIdFinal, p.valor, p.vencimento, tipoFinal || 'boleto', p.linha_digitavel || null,
+         competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, observacaoFinal || null]
+      );
+      criadas.push(r.rows[0]);
+    }
+    await client.query('COMMIT');
+    if (fornecedorIdFinal) await gravarMemoriaFornecedor(fornecedorIdFinal, tipoDespesaIdFinal);
+    return { criadas };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── DDA ──────────────────────────────────────────────────────────────────
 
 async function sincronizarDDA() {
@@ -546,7 +601,7 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
 module.exports = {
   listar, buscarPorId, kpis,
   criar, editar, cancelar, pagarManual,
-  criarRecorrente, criarParcelado,
+  criarRecorrente, criarParcelado, converterEmParcelado,
   sincronizarDDA,
   listarLotes, criarLoteC6, consultarLoteC6, removerItemLoteC6, submeterLoteC6,
   reconciliar,

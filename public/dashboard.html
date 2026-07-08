@@ -2183,10 +2183,13 @@ async function loadContasPagar() {
   const statusBg = { pendente:'#fff9c4|#f57f17', pendente_classificacao:'#fff3cd|#856404', pago:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', vencido:'#fce4ec|#c62828', agendado:'#e3f2fd|#1565c0' };
   const statusLabel = s => s === 'pendente_classificacao' ? 'Classificar' : s;
   el.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
-    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th></tr></thead>
+    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody>${data.map(c => {
       const [bg,col] = (statusBg[c.status]||'#f5f5f5|#555').split('|');
       const dt = c.vencimento ? new Date(String(c.vencimento).substring(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+      const podeEditar = ['pendente','pendente_classificacao'].includes(c.status);
+      const podePagar = !['pago','cancelado'].includes(c.status);
+      const podeCancelar = ['pendente','pendente_classificacao','vencido'].includes(c.status);
       return `<tr>
         <td style="font-weight:600">${dt}</td>
         <td>${c.descricao||'—'}</td>
@@ -2194,8 +2197,29 @@ async function loadContasPagar() {
         <td style="color:#888;font-size:12px">${c.tipo_despesa_nome||'—'}</td>
         <td style="font-weight:600">${fmt(c.valor)}</td>
         <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${statusLabel(c.status)}</span></td>
+        <td style="white-space:nowrap">
+          ${podeEditar ? `<a href="/pwa/financeiro.html" target="_blank" class="btn btn-outline" style="padding:4px 8px;font-size:11px" title="Abrir no painel financeiro para editar">✏️</a>` : ''}
+          ${podePagar ? `<button class="btn btn-outline" style="padding:4px 8px;font-size:11px;margin-left:4px" onclick="cpPagar(${c.id})">Pagar</button>` : ''}
+          ${podeCancelar ? `<button class="btn btn-outline" style="padding:4px 8px;font-size:11px;margin-left:4px;color:#c62828;border-color:#c62828" onclick="cpCancelar(${c.id})">✕</button>` : ''}
+        </td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
+}
+
+async function cpPagar(id) {
+  if (!confirm('Marcar esta conta como paga manualmente?')) return;
+  const res = await api(`/api/v2/contas-pagar/${id}/pagar`, { method: 'PATCH' });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error)); return; }
+  showToast('✅ Conta marcada como paga');
+  loadContasPagar();
+}
+
+async function cpCancelar(id) {
+  if (!confirm('Cancelar esta conta?')) return;
+  const res = await api(`/api/v2/contas-pagar/${id}`, { method: 'DELETE' });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error)); return; }
+  showToast('✅ Conta cancelada');
+  loadContasPagar();
 }
 
 async function loadHistoricoLotes() {

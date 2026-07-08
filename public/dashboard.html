@@ -2681,8 +2681,8 @@ async function cpSalvarConta() {
       const r = await api(`/api/v2/contas-pagar/${cpEditandoId}/parcelar`, { method: 'POST', body: JSON.stringify(bodyParcelar) });
       if (r && !r.error && !r.erro) {
         showToast(`✅ Conta convertida em ${r.criadas?.length || 0} parcelas`); cpFecharModal(); loadContasPagar();
-      } else if (r?.erro) {
-        showToast(`❌ ${r.erro[0]}`);
+      } else if (r?.error) {
+        showToast(`❌ ${r.error}`);
       }
       return;
     }
@@ -2699,8 +2699,8 @@ async function cpSalvarConta() {
     const r = await api('/api/v2/contas-pagar/parcelado', { method: 'POST', body: JSON.stringify(bodyParcelado) });
     if (r && !r.error && !r.erro) {
       showToast(`✅ ${r.criadas?.length || 0} parcelas criadas`); cpFecharModal(); loadContasPagar();
-    } else if (r?.erro) {
-      showToast(`❌ ${r.erro[0]}`);
+    } else if (r?.error) {
+      showToast(`❌ ${r.error}`);
     }
     return;
   }

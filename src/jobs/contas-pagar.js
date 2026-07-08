@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const service = require('../modules/contas-pagar/service');
 const whatsapp = require('../services/whatsapp');
+const contasPagarWhatsapp = require('../modules/contas-pagar/whatsapp');
 
 function log(msg) { console.log(`[CRON-CONTAS-PAGAR] ${new Date().toISOString()} ${msg}`); }
 
@@ -57,6 +58,14 @@ cron.schedule('0 9 25 * *', async () => {
     const r = await service.gerarRecorrentesProximoMes();
     log(`generate_recurrent: ${r.geradas} contas geradas para o próximo mês`);
   } catch (err) { log(`ERRO generate_recurrent: ${err.message}`); }
+}, { timezone: 'America/Sao_Paulo' });
+
+// A cada 30 min — limpar pendências de confirmação de despesa via WhatsApp expiradas
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const r = await contasPagarWhatsapp.limparPendentesExpirados();
+    if (r.removidos) log(`limpar_pendentes_wa: ${r.removidos} pendências expiradas removidas`);
+  } catch (err) { log(`ERRO limpar_pendentes_wa: ${err.message}`); }
 }, { timezone: 'America/Sao_Paulo' });
 
 log('Cron jobs de contas a pagar inicializados');

@@ -62,20 +62,23 @@ async function kpis() {
 
 // ─── ESCRITA ──────────────────────────────────────────────────────────────
 
-async function criar({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao }) {
+async function criar({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao, competencia }) {
   if (!descricao || !tipo_despesa_id || !valor || !vencimento) {
     return { erro: ['descricao, tipo_despesa_id, valor e vencimento são obrigatórios'] };
   }
+  const colunas = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo',
+                    'linha_digitavel','pix_content','tipo_entrada','recorrente','recorrencia_dia',
+                    'recorrencia_valor_fixo','observacao'];
+  const valores = [descricao, fornecedor || null, fornecedor_id || null, tipo_despesa_id, valor, vencimento,
+                    tipo || 'outro', linha_digitavel || null, pix_content || null,
+                    tipo_entrada || 'manual', recorrente || false, recorrencia_dia || null,
+                    recorrencia_valor_fixo !== false, observacao || null];
+  if (competencia) { colunas.push('competencia'); valores.push(competencia); }
+
+  const placeholders = valores.map((_, i) => `$${i + 1}`).join(',');
   const r = await query(
-    `INSERT INTO contas_pagar
-       (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content,
-        tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-     RETURNING *`,
-    [descricao, fornecedor || null, fornecedor_id || null, tipo_despesa_id, valor, vencimento,
-     tipo || 'outro', linha_digitavel || null, pix_content || null,
-     tipo_entrada || 'manual', recorrente || false, recorrencia_dia || null,
-     recorrencia_valor_fixo !== false, observacao || null]
+    `INSERT INTO contas_pagar (${colunas.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+    valores
   );
   if (fornecedor_id) await gravarMemoriaFornecedor(fornecedor_id, tipo_despesa_id);
   return r.rows[0];

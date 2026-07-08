@@ -96,3 +96,33 @@ describe('sincronizarDDA', () => {
     expect(r).toEqual({ total: 1, importados: 0, ignorados: 1 });
   });
 });
+
+describe('criar', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  test('sem competencia informada → INSERT não inclui a coluna competencia', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 1 }] });
+
+    await service.criar({
+      descricao: 'Conta Light', tipo_despesa_id: 3, valor: 200, vencimento: '2026-08-10',
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).not.toContain('competencia');
+    expect(params).toHaveLength(14);
+  });
+
+  test('com competencia informada → INSERT inclui a coluna e o valor', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 2 }] });
+
+    await service.criar({
+      descricao: 'Conta Evolution', tipo_despesa_id: 2, valor: 350, vencimento: '2026-06-24',
+      competencia: '2026-05-27',
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('competencia');
+    expect(params).toContain('2026-05-27');
+    expect(params).toHaveLength(15);
+  });
+});

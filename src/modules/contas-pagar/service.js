@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { query, pool } = require('../../db');
 const c6bank = require('../../services/c6bank');
 const { format, subDays } = require('date-fns');
@@ -89,7 +90,7 @@ async function editar(id, campos) {
 
   const permitidos = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo',
                       'linha_digitavel','pix_content','recorrente','recorrencia_dia',
-                      'recorrencia_valor_fixo','observacao'];
+                      'recorrencia_valor_fixo','observacao','competencia'];
   const sets = [];
   const params = [];
   for (const [k, v] of Object.entries(campos)) {
@@ -155,6 +156,50 @@ async function criarRecorrente({ descricao, fornecedor, fornecedor_id, tipo_desp
          format(data, 'yyyy-MM-dd'), tipo || 'outro',
          linha_digitavel || null, pix_content || null,
          recorrencia_dia, recorrencia_valor_fixo !== false, observacao || null]
+      );
+      criadas.push(r.rows[0]);
+    }
+    await client.query('COMMIT');
+    if (fornecedor_id) await gravarMemoriaFornecedor(fornecedor_id, tipo_despesa_id);
+    return { criadas };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor_total, parcelas, primeiro_vencimento, tipo, observacao }) {
+  if (!descricao || !tipo_despesa_id || !valor_total || !parcelas || !primeiro_vencimento) {
+    return { erro: ['descricao, tipo_despesa_id, valor_total, parcelas e primeiro_vencimento são obrigatórios'] };
+  }
+  if (parcelas < 2) {
+    return { erro: ['parcelas deve ser no mínimo 2 (compra à vista não precisa de parcelamento)'] };
+  }
+
+  const parcelaGrupoId = crypto.randomUUID();
+  const competencia = format(new Date(`${primeiro_vencimento}T00:00:00`), 'yyyy-MM-dd');
+  const valorParcela = Math.floor((valor_total / parcelas) * 100) / 100;
+  const ajusteUltima = Math.round((valor_total - valorParcela * (parcelas - 1)) * 100) / 100;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const criadas = [];
+    for (let i = 0; i < parcelas; i++) {
+      const data = new Date(`${primeiro_vencimento}T00:00:00`);
+      data.setMonth(data.getMonth() + i);
+      const valorInst = i === parcelas - 1 ? ajusteUltima : valorParcela;
+      const r = await client.query(
+        `INSERT INTO contas_pagar
+           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
+            competencia, parcela_grupo_id, parcela_numero, parcela_total, tipo_entrada, status, observacao)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'manual','pendente',$12)
+         RETURNING *`,
+        [`${descricao} (${i + 1}/${parcelas})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id,
+         valorInst, format(data, 'yyyy-MM-dd'), tipo || 'boleto',
+         competencia, parcelaGrupoId, i + 1, parcelas, observacao || null]
       );
       criadas.push(r.rows[0]);
     }
@@ -499,7 +544,7 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
 module.exports = {
   listar, buscarPorId, kpis,
   criar, editar, cancelar, pagarManual,
-  criarRecorrente,
+  criarRecorrente, criarParcelado,
   sincronizarDDA,
   listarLotes, criarLoteC6, consultarLoteC6, removerItemLoteC6, submeterLoteC6,
   reconciliar,

@@ -11,12 +11,26 @@ router.get('/kpis', admin, async (req, res) => {
   catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+// Tipos de despesa (taxonomia)
+router.get('/tipos-despesa', admin, async (req, res) => {
+  try { res.json(await service.listarTiposDespesa()); }
+  catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Sugestão de classificação automática
+router.get('/sugerir-tipo', admin, async (req, res) => {
+  try {
+    const { fornecedor_id, fornecedor, descricao } = req.query;
+    res.json(await service.sugerirTipoDespesa({ fornecedor_id, fornecedor, descricao }));
+  } catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 // Listar
 router.get('/', admin, async (req, res) => {
   try {
-    const { status, tipo_despesa, vencimento_de, vencimento_ate, dias } = req.query;
+    const { status, tipo_despesa_id, vencimento_de, vencimento_ate, dias } = req.query;
     res.json(await service.listar({
-      status, tipo_despesa, vencimento_de, vencimento_ate,
+      status, tipo_despesa_id, vencimento_de, vencimento_ate,
       dias: dias !== undefined ? parseInt(dias) : undefined,
     }));
   } catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }

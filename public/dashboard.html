@@ -2840,7 +2840,7 @@ async function loadFornecedoresMain(page = _fornPag) {
   _fornPag = page;
   const el = document.getElementById('list-forn-main');
   const q = document.getElementById('busca-forn-main')?.value || '';
-  const data = await api(`/api/v2/fornecedores?q=${encodeURIComponent(q)}&page=${page}&limit=20`);
+  const data = await api(`/api/v2/fornecedores?busca=${encodeURIComponent(q)}&page=${page}&limit=20`);
   if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
   const fornecedores = data.fornecedores || [];
   if (!fornecedores.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum fornecedor</p>'; document.getElementById('pag-forn').innerHTML=''; return; }

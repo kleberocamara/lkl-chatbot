@@ -22,9 +22,11 @@ async function dre({ inicio, fim } = {}) {
   const receita = Number(recR.rows[0].receita);
 
   const despR = await db.query(
-    `SELECT tipo_despesa AS categoria, COALESCE(SUM(valor),0) AS valor
-     FROM contas_pagar WHERE status = 'pago' AND pago_em::date BETWEEN $1 AND $2
-     GROUP BY tipo_despesa ORDER BY valor DESC`,
+    `SELECT td.categoria_dre AS categoria, COALESCE(SUM(cp.valor),0) AS valor
+     FROM contas_pagar cp
+     JOIN tipos_despesa td ON td.id = cp.tipo_despesa_id
+     WHERE cp.status = 'pago' AND cp.pago_em::date BETWEEN $1 AND $2
+     GROUP BY td.categoria_dre ORDER BY valor DESC`,
     [inicio, fim]);
   const despesas = despR.rows.map(r => ({ categoria: r.categoria, valor: Number(r.valor) }));
   const total_despesas = despesas.reduce((s, d) => s + d.valor, 0);

@@ -59,12 +59,13 @@ async function criarCompra({ item_ids, pedido_graficonauta, previsao_entrega, ob
     for (const it of val.rows) {
       await client.query('INSERT INTO revenda_compra_itens (compra_id, orcamento_item_id) VALUES ($1,$2)', [compraId, it.id]);
     }
+    const tipoDespesaR = await client.query(`SELECT id FROM tipos_despesa WHERE codigo = '05'`);
     const contaR = await client.query(
       `INSERT INTO contas_pagar
-         (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, tipo_entrada, observacao)
+         (descricao, fornecedor, tipo_despesa_id, valor, vencimento, tipo, tipo_entrada, observacao)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [`Compra revenda #${numero} — pedido Graficonauta ${pedido_graficonauta || 's/nº'}`,
-       'Graficonauta', 'SERVICO_TERCEIRIZADO', valor_compra, vencimento,
+       'Graficonauta', tipoDespesaR.rows[0].id, valor_compra, vencimento,
        'boleto', 'manual', `Gerada automaticamente da compra revenda #${numero}`]
     );
     await client.query('UPDATE revenda_compras SET conta_pagar_id=$1 WHERE id=$2', [contaR.rows[0].id, compraId]);

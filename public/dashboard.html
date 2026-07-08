@@ -721,19 +721,17 @@
           </select>
         </div>
       </div>
-      <div style="margin-bottom:16px">
+      <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <label style="font-size:13px;font-weight:600;color:#555"><input type="checkbox" id="cp-f-parcelado" onchange="cpToggleParcelado()"> Parcelar (compra em N vezes)</label>
+        <button type="button" id="cp-btn-parcelar-existente" style="display:none" class="btn btn-outline" onclick="cpIniciarConversaoParcelado()">Parcelar esta conta</button>
       </div>
-      <div id="cp-grupo-parcelado" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div>
+      <div id="cp-grupo-parcelado" style="display:none;margin-bottom:16px">
+        <div style="max-width:200px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Número de parcelas</label>
-          <input type="number" id="cp-f-parcelas" min="2" max="48" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <input type="number" id="cp-f-parcelas" min="2" max="48" oninput="cpGerarLinhasParcelas()" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
         </div>
-        <div>
-          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">1ª parcela vence em</label>
-          <input type="date" id="cp-f-primeiro-vencimento" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-        </div>
-        <div style="grid-column:1/-1;font-size:12px;color:#888">O campo "Valor (R$)" acima é o valor TOTAL da compra — as parcelas são calculadas automaticamente.</div>
+        <div style="font-size:12px;color:#888;margin-top:6px">O campo "Valor (R$)" acima é usado como sugestão de valor total (dividido igualmente) — cada parcela abaixo é totalmente editável.</div>
+        <div id="cp-parcelas-linhas" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
       </div>
       <div style="margin-bottom:16px">
         <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Observação</label>
@@ -2525,6 +2523,7 @@ let cpEditandoId = null;
 
 function cpAbrirModalNova() {
   cpEditandoId = null;
+  cpConvertendoParcelado = false;
   document.getElementById('cp-modal-titulo').textContent = 'Nova Conta a Pagar';
   ['cp-f-descricao','cp-f-fornecedor','cp-f-fornecedor-id','cp-f-linha-digitavel','cp-f-pix-content','cp-f-observacao','cp-f-parcelas','cp-f-data-entrega'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cp-f-tipo-despesa').value = '';
@@ -2535,6 +2534,8 @@ function cpAbrirModalNova() {
   document.getElementById('cp-grupo-recorrente').style.display = 'none';
   document.getElementById('cp-f-parcelado').checked = false;
   document.getElementById('cp-grupo-parcelado').style.display = 'none';
+  document.getElementById('cp-parcelas-linhas').innerHTML = '';
+  document.getElementById('cp-btn-parcelar-existente').style.display = 'none';
   document.getElementById('cp-grupo-linha-digitavel').style.display = 'block';
   document.getElementById('cp-grupo-pix').style.display = 'none';
   document.getElementById('cp-modal').style.display = 'flex';
@@ -2547,6 +2548,7 @@ async function cpAbrirModalEditar(id) {
   const conta = c.find(x => x.id === id);
   if (!conta) { showToast('❌ Conta não encontrada'); return; }
   cpEditandoId = id;
+  cpConvertendoParcelado = false;
   document.getElementById('cp-modal-titulo').textContent = 'Editar Conta';
   document.getElementById('cp-f-descricao').value = conta.descricao || '';
   document.getElementById('cp-f-fornecedor').value = conta.fornecedor || '';
@@ -2561,12 +2563,17 @@ async function cpAbrirModalEditar(id) {
   document.getElementById('cp-f-observacao').value = conta.observacao || '';
   document.getElementById('cp-f-recorrente').checked = false;
   document.getElementById('cp-grupo-recorrente').style.display = 'none';
+  document.getElementById('cp-f-parcelado').checked = false;
+  document.getElementById('cp-grupo-parcelado').style.display = 'none';
+  document.getElementById('cp-parcelas-linhas').innerHTML = '';
   document.getElementById('cp-grupo-linha-digitavel').style.display = conta.tipo === 'boleto' ? 'block' : 'none';
   document.getElementById('cp-grupo-pix').style.display = conta.tipo === 'pix' ? 'block' : 'none';
+  document.getElementById('cp-btn-parcelar-existente').style.display =
+    (!conta.parcela_grupo_id && conta.status !== 'pago' && !conta.c6_group_id) ? 'inline-block' : 'none';
   document.getElementById('cp-modal').style.display = 'flex';
 }
 
-function cpFecharModal() { document.getElementById('cp-modal').style.display = 'none'; cpEditandoId = null; }
+function cpFecharModal() { document.getElementById('cp-modal').style.display = 'none'; cpEditandoId = null; cpConvertendoParcelado = false; }
 function cpToggleRecorrente() {
   const on = document.getElementById('cp-f-recorrente').checked;
   document.getElementById('cp-grupo-recorrente').style.display = on ? 'grid' : 'none';
@@ -2577,16 +2584,75 @@ function cpToggleRecorrente() {
 }
 function cpToggleParcelado() {
   const on = document.getElementById('cp-f-parcelado').checked;
-  document.getElementById('cp-grupo-parcelado').style.display = on ? 'grid' : 'none';
+  document.getElementById('cp-grupo-parcelado').style.display = on ? 'block' : 'none';
   if (on) {
     document.getElementById('cp-f-recorrente').checked = false;
     document.getElementById('cp-grupo-recorrente').style.display = 'none';
+    document.getElementById('cp-grupo-linha-digitavel').style.display = 'none';
+    cpGerarLinhasParcelas();
+  } else {
+    document.getElementById('cp-parcelas-linhas').innerHTML = '';
+    document.getElementById('cp-f-parcelas').value = '';
+    if (document.getElementById('cp-f-tipo').value === 'boleto') {
+      document.getElementById('cp-grupo-linha-digitavel').style.display = 'block';
+    }
   }
+}
+
+function cpGerarLinhasParcelas() {
+  const n = parseInt(document.getElementById('cp-f-parcelas').value) || 0;
+  const container = document.getElementById('cp-parcelas-linhas');
+  if (n < 2) { container.innerHTML = ''; return; }
+  const valorTotal = parseFloat(document.getElementById('cp-f-valor').value) || 0;
+  const dataBase = document.getElementById('cp-f-data-entrega').value
+    || document.getElementById('cp-f-vencimento').value
+    || new Date().toISOString().substring(0, 10);
+  const valorBase = Math.floor((valorTotal / n) * 100) / 100;
+  const ajusteUltima = Math.round((valorTotal - valorBase * (n - 1)) * 100) / 100;
+
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    const data = new Date(`${dataBase}T00:00:00`);
+    data.setMonth(data.getMonth() + i);
+    const venc = data.toISOString().substring(0, 10);
+    const valor = (i === n - 1 ? ajusteUltima : valorBase).toFixed(2);
+    html += `
+      <div class="cp-parcela-row" style="border:1px solid var(--border);border-radius:8px;padding:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">${i + 1}ª parcela — Vencimento</label>
+          <input type="date" id="cp-parcela-${i}-vencimento" value="${venc}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">Valor (R$)</label>
+          <input type="number" step="0.01" id="cp-parcela-${i}-valor" value="${valor}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">Linha Digitável</label>
+          <input type="text" id="cp-parcela-${i}-linha-digitavel" placeholder="44 dígitos do boleto" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+      </div>`;
+  }
+  container.innerHTML = html;
 }
 document.getElementById('cp-f-tipo').addEventListener('change', function() {
   document.getElementById('cp-grupo-linha-digitavel').style.display = this.value === 'boleto' ? 'block' : 'none';
   document.getElementById('cp-grupo-pix').style.display = this.value === 'pix' ? 'block' : 'none';
 });
+
+function cpLerLinhasParcelas() {
+  const n = parseInt(document.getElementById('cp-f-parcelas').value) || 0;
+  const parcelas = [];
+  for (let i = 0; i < n; i++) {
+    parcelas.push({
+      vencimento: document.getElementById(`cp-parcela-${i}-vencimento`).value,
+      valor: parseFloat(document.getElementById(`cp-parcela-${i}-valor`).value),
+      linha_digitavel: document.getElementById(`cp-parcela-${i}-linha-digitavel`).value.replace(/\D/g,'') || null,
+    });
+  }
+  return parcelas;
+}
+
+let cpConvertendoParcelado = false;
 
 async function cpSalvarConta() {
   const recorrente = document.getElementById('cp-f-recorrente').checked;
@@ -2606,6 +2672,20 @@ async function cpSalvarConta() {
     competencia,
   };
   if (cpEditandoId) {
+    if (cpConvertendoParcelado) {
+      const bodyParcelar = {
+        descricao: body.descricao, fornecedor: body.fornecedor, fornecedor_id: body.fornecedor_id,
+        tipo_despesa_id: body.tipo_despesa_id, competencia,
+        tipo: body.tipo, observacao: body.observacao, parcelas: cpLerLinhasParcelas(),
+      };
+      const r = await api(`/api/v2/contas-pagar/${cpEditandoId}/parcelar`, { method: 'POST', body: JSON.stringify(bodyParcelar) });
+      if (r && !r.error && !r.erro) {
+        showToast(`✅ Conta convertida em ${r.criadas?.length || 0} parcelas`); cpFecharModal(); loadContasPagar();
+      } else if (r?.erro) {
+        showToast(`❌ ${r.erro[0]}`);
+      }
+      return;
+    }
     const r = await api(`/api/v2/contas-pagar/${cpEditandoId}`, { method: 'PATCH', body: JSON.stringify(body) });
     if (r && !r.error && !r.erro) { showToast('✅ Conta atualizada'); cpFecharModal(); loadContasPagar(); }
     return;
@@ -2613,14 +2693,14 @@ async function cpSalvarConta() {
   if (parcelado) {
     const bodyParcelado = {
       descricao: body.descricao, fornecedor: body.fornecedor, fornecedor_id: body.fornecedor_id,
-      tipo_despesa_id: body.tipo_despesa_id, valor_total: body.valor,
-      parcelas: parseInt(document.getElementById('cp-f-parcelas').value),
-      primeiro_vencimento: document.getElementById('cp-f-primeiro-vencimento').value,
-      tipo: body.tipo, observacao: body.observacao,
+      tipo_despesa_id: body.tipo_despesa_id, competencia,
+      tipo: body.tipo, observacao: body.observacao, parcelas: cpLerLinhasParcelas(),
     };
     const r = await api('/api/v2/contas-pagar/parcelado', { method: 'POST', body: JSON.stringify(bodyParcelado) });
     if (r && !r.error && !r.erro) {
       showToast(`✅ ${r.criadas?.length || 0} parcelas criadas`); cpFecharModal(); loadContasPagar();
+    } else if (r?.erro) {
+      showToast(`❌ ${r.erro[0]}`);
     }
     return;
   }

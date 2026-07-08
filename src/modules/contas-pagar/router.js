@@ -63,6 +63,15 @@ router.post('/parcelado', admin, async (req, res) => {
   } catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+// Converter conta existente em parcelado
+router.post('/:id/parcelar', admin, async (req, res) => {
+  try {
+    const result = await service.converterEmParcelado(req.params.id, req.body);
+    if (result.erro) return res.status(400).json({ erro: result.erro });
+    res.status(201).json(result);
+  } catch (err) { console.error('[CONTAS-PAGAR]', err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 // Sincronizar DDA
 router.get('/dda/sync', admin, async (req, res) => {
   try { res.json(await service.sincronizarDDA()); }

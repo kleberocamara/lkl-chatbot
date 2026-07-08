@@ -15,17 +15,34 @@ async function dre({ inicio, fim } = {}) {
   if (!DATE_RE.test(inicio) || !DATE_RE.test(fim)) return { erro: ['Datas inválidas (use YYYY-MM-DD)'] };
   if (fim < inicio) return { erro: ['Data final menor que a inicial'] };
 
+  // Receita por competência: um orçamento só conta no mês em que TODAS as suas
+  // OSs foram entregues (última entrega define o mês), não quando o cliente pagou.
   const recR = await db.query(
-    `SELECT COALESCE(SUM(total),0) AS receita
-     FROM orcamentos WHERE status_pagamento = 'pago' AND pago_em::date BETWEEN $1 AND $2`,
+    `WITH entregas AS (
+       SELECT os.orcamento_id,
+              COUNT(*) AS total_os,
+              COUNT(*) FILTER (WHERE os.status = 'entregue') AS os_entregues,
+              MAX(h.em) AS ultima_entrega
+       FROM ordens_servico os
+       LEFT JOIN LATERAL (
+         SELECT em FROM os_historico h WHERE h.os_id = os.id AND h.para_status = 'entregue' ORDER BY h.em DESC LIMIT 1
+       ) h ON true
+       GROUP BY os.orcamento_id
+     )
+     SELECT COALESCE(SUM(o.total),0) AS receita
+     FROM orcamentos o
+     JOIN entregas e ON e.orcamento_id = o.id
+     WHERE e.total_os = e.os_entregues AND e.ultima_entrega::date BETWEEN $1 AND $2`,
     [inicio, fim]);
   const receita = Number(recR.rows[0].receita);
 
+  // Despesa por competência: conta assim que lançada/incorrida, esteja paga ou não.
+  // Só exclui canceladas (nunca aconteceram de verdade).
   const despR = await db.query(
     `SELECT td.categoria_dre AS categoria, COALESCE(SUM(cp.valor),0) AS valor
      FROM contas_pagar cp
      JOIN tipos_despesa td ON td.id = cp.tipo_despesa_id
-     WHERE cp.status = 'pago' AND cp.pago_em::date BETWEEN $1 AND $2
+     WHERE cp.status != 'cancelado' AND cp.competencia BETWEEN $1 AND $2
      GROUP BY td.categoria_dre ORDER BY valor DESC`,
     [inicio, fim]);
   const despesas = despR.rows.map(r => ({ categoria: r.categoria, valor: Number(r.valor) }));
@@ -142,7 +159,7 @@ async function gerarInsight() {
   const user =
 `Dados financeiros da Gráfica LKL (mês ${periodo}):
 
-DRE (regime de caixa):
+DRE (regime de competência):
 - Receita recebida: ${_brl(d.receita)}
 - Despesas pagas: ${_brl(d.total_despesas)}
 ${desp}

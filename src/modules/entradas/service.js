@@ -1,5 +1,7 @@
 const db = require('../../db');
 const { XMLParser } = require('fast-xml-parser');
+const { format, addDays } = require('date-fns');
+const contasPagarService = require('../contas-pagar/service');
 
 // Parsing puro do XML de uma NF-e de compra → estrutura normalizada
 function parseNfeCompra(xml) {
@@ -112,6 +114,27 @@ async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, i
       }
     }
     await client.query('COMMIT');
+
+    if (fornecedor_id && valor_total) {
+      try {
+        const fornecedorR = await db.query('SELECT nome FROM fornecedores WHERE id=$1', [fornecedor_id]);
+        const vencimentoProvisorio = emitida_em
+          ? format(addDays(new Date(`${emitida_em}T00:00:00`), 30), 'yyyy-MM-dd')
+          : format(addDays(new Date(), 30), 'yyyy-MM-dd');
+        const conta = await contasPagarService.criarOuReconciliarContaPagar({
+          fornecedorId: fornecedor_id,
+          fornecedorNome: fornecedorR.rows[0]?.nome || null,
+          descricao: `NF ${nnf || 's/nº'} — entrada de estoque`,
+          valor: valor_total,
+          vencimento: vencimentoProvisorio,
+          tipoEntrada: 'entrada_estoque',
+        });
+        await db.query('UPDATE entradas_estoque SET conta_pagar_id=$1 WHERE id=$2', [conta.id, entrada.id]);
+      } catch (e) {
+        console.error('[ENTRADAS] Erro ao gerar conta a pagar da NF:', e.message);
+      }
+    }
+
     return { entrada };
   } catch (e) {
     await client.query('ROLLBACK');

@@ -671,6 +671,11 @@
           <input type="hidden" id="cp-f-fornecedor-id">
         </div>
       </div>
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Data de Entrega</label>
+        <input type="date" id="cp-f-data-entrega" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        <div style="font-size:12px;color:#888;margin-top:4px">Data em que a mercadoria/serviço foi entregue — define o mês da despesa no DRE. Se vazio, usa a data de hoje.</div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
         <div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Tipo de Despesa *</label>
@@ -2521,7 +2526,7 @@ let cpEditandoId = null;
 function cpAbrirModalNova() {
   cpEditandoId = null;
   document.getElementById('cp-modal-titulo').textContent = 'Nova Conta a Pagar';
-  ['cp-f-descricao','cp-f-fornecedor','cp-f-fornecedor-id','cp-f-linha-digitavel','cp-f-pix-content','cp-f-observacao','cp-f-parcelas','cp-f-primeiro-vencimento'].forEach(id => document.getElementById(id).value = '');
+  ['cp-f-descricao','cp-f-fornecedor','cp-f-fornecedor-id','cp-f-linha-digitavel','cp-f-pix-content','cp-f-observacao','cp-f-parcelas','cp-f-data-entrega'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cp-f-tipo-despesa').value = '';
   document.getElementById('cp-f-valor').value = '';
   document.getElementById('cp-f-vencimento').value = '';
@@ -2549,6 +2554,7 @@ async function cpAbrirModalEditar(id) {
   document.getElementById('cp-f-tipo-despesa').value = conta.tipo_despesa_id || '';
   document.getElementById('cp-f-valor').value = conta.valor || '';
   document.getElementById('cp-f-vencimento').value = String(conta.vencimento).substring(0, 10);
+  document.getElementById('cp-f-data-entrega').value = conta.competencia ? String(conta.competencia).substring(0, 10) : '';
   document.getElementById('cp-f-tipo').value = conta.tipo || 'boleto';
   document.getElementById('cp-f-linha-digitavel').value = conta.linha_digitavel || '';
   document.getElementById('cp-f-pix-content').value = conta.pix_content || '';
@@ -2585,6 +2591,7 @@ document.getElementById('cp-f-tipo').addEventListener('change', function() {
 async function cpSalvarConta() {
   const recorrente = document.getElementById('cp-f-recorrente').checked;
   const parcelado = document.getElementById('cp-f-parcelado').checked;
+  const competencia = document.getElementById('cp-f-data-entrega').value || null;
   const body = {
     descricao: document.getElementById('cp-f-descricao').value.trim(),
     fornecedor: document.getElementById('cp-f-fornecedor').value.trim() || null,
@@ -2596,6 +2603,7 @@ async function cpSalvarConta() {
     linha_digitavel: document.getElementById('cp-f-linha-digitavel').value.replace(/\D/g,'') || null,
     pix_content: document.getElementById('cp-f-pix-content').value.trim() || null,
     observacao: document.getElementById('cp-f-observacao').value.trim() || null,
+    competencia,
   };
   if (cpEditandoId) {
     const r = await api(`/api/v2/contas-pagar/${cpEditandoId}`, { method: 'PATCH', body: JSON.stringify(body) });

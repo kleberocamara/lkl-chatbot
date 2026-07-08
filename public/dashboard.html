@@ -2180,18 +2180,20 @@ async function loadContasPagar() {
   if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
   if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhuma conta a pagar</p>'; return; }
   const fmt = v => v ? `R$ ${parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
-  const statusBg = { pendente:'#fff9c4|#f57f17', pago:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', vencido:'#fce4ec|#c62828' };
+  const statusBg = { pendente:'#fff9c4|#f57f17', pendente_classificacao:'#fff3cd|#856404', pago:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', vencido:'#fce4ec|#c62828', agendado:'#e3f2fd|#1565c0' };
+  const statusLabel = s => s === 'pendente_classificacao' ? 'Classificar' : s;
   el.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
-    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Valor</th><th>Status</th></tr></thead>
+    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th></tr></thead>
     <tbody>${data.map(c => {
       const [bg,col] = (statusBg[c.status]||'#f5f5f5|#555').split('|');
-      const dt = c.data_vencimento ? new Date(c.data_vencimento).toLocaleDateString('pt-BR') : '—';
+      const dt = c.vencimento ? new Date(c.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
       return `<tr>
         <td style="font-weight:600">${dt}</td>
         <td>${c.descricao||'—'}</td>
-        <td style="color:#888;font-size:12px">${c.fornecedor_nome||'—'}</td>
+        <td style="color:#888;font-size:12px">${c.fornecedor||'—'}</td>
+        <td style="color:#888;font-size:12px">${c.tipo_despesa_nome||'—'}</td>
         <td style="font-weight:600">${fmt(c.valor)}</td>
-        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${c.status}</span></td>
+        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${statusLabel(c.status)}</span></td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
 }

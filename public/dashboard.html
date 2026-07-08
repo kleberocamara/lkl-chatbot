@@ -2634,6 +2634,19 @@ function cpGerarLinhasParcelas() {
   }
   container.innerHTML = html;
 }
+
+function cpIniciarConversaoParcelado() {
+  cpConvertendoParcelado = true;
+  document.getElementById('cp-f-parcelado').checked = true;
+  document.getElementById('cp-grupo-parcelado').style.display = 'block';
+  document.getElementById('cp-grupo-linha-digitavel').style.display = 'none';
+  document.getElementById('cp-grupo-pix').style.display = 'none';
+  document.getElementById('cp-f-recorrente').checked = false;
+  document.getElementById('cp-grupo-recorrente').style.display = 'none';
+  document.getElementById('cp-f-parcelas').value = 2;
+  cpGerarLinhasParcelas();
+  document.getElementById('cp-btn-parcelar-existente').style.display = 'none';
+}
 document.getElementById('cp-f-tipo').addEventListener('change', function() {
   document.getElementById('cp-grupo-linha-digitavel').style.display = this.value === 'boleto' ? 'block' : 'none';
   document.getElementById('cp-grupo-pix').style.display = this.value === 'pix' ? 'block' : 'none';

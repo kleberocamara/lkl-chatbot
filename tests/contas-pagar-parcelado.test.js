@@ -14,50 +14,30 @@ describe('criarParcelado', () => {
   afterEach(() => jest.clearAllMocks());
 
   test('campos obrigatórios faltando → erro, sem abrir transação', async () => {
-    const r = await service.criarParcelado({ descricao: 'Compra tintas', tipo_despesa_id: 2, valor_total: 900 });
+    const r = await service.criarParcelado({ descricao: 'Compra tintas', tipo_despesa_id: 2 });
     expect(r.erro).toEqual(expect.arrayContaining([expect.stringContaining('obrigat')]));
     expect(db.pool.connect).not.toHaveBeenCalled();
   });
 
-  test('parcelas < 2 → erro', async () => {
+  test('menos de 2 parcelas → erro', async () => {
     const r = await service.criarParcelado({
-      descricao: 'Compra tintas', tipo_despesa_id: 2, valor_total: 900, parcelas: 1, primeiro_vencimento: '2026-08-10',
+      descricao: 'Compra tintas', tipo_despesa_id: 2,
+      parcelas: [{ vencimento: '2026-08-10', valor: 900 }],
     });
     expect(r.erro).toBeDefined();
+    expect(db.pool.connect).not.toHaveBeenCalled();
   });
 
-  test('3 parcelas de R$300 → 3 linhas, mesma competência e parcela_grupo_id, vencimentos mensais', async () => {
-    const linhasInseridas = [];
-    const client = mockClient((sql, params) => {
-      if (sql.startsWith('BEGIN')) return Promise.resolve();
-      if (sql.startsWith('INSERT INTO contas_pagar')) {
-        linhasInseridas.push(params);
-        return Promise.resolve({ rows: [{ id: linhasInseridas.length, valor: params[4], vencimento: params[5] }] });
-      }
-      if (sql.startsWith('COMMIT')) return Promise.resolve();
-      throw new Error('query inesperada: ' + sql);
-    });
-    db.pool.connect.mockResolvedValueOnce(client);
-
+  test('parcela sem vencimento ou valor → erro', async () => {
     const r = await service.criarParcelado({
-      descricao: 'Compra de tintas e solventes', fornecedor: 'Evolution', fornecedor_id: null,
-      tipo_despesa_id: 2, valor_total: 900, parcelas: 3, primeiro_vencimento: '2026-08-10', tipo: 'boleto',
+      descricao: 'Compra tintas', tipo_despesa_id: 2,
+      parcelas: [{ vencimento: '2026-08-10', valor: 350 }, { valor: 350 }],
     });
-
-    expect(r.criadas).toHaveLength(3);
-    expect(linhasInseridas).toHaveLength(3);
-    const somaParcelas = linhasInseridas.reduce((s, p) => s + p[4], 0);
-    expect(somaParcelas).toBeCloseTo(900, 2);
-    const grupoIds = linhasInseridas.map(p => p[8]);
-    expect(new Set(grupoIds).size).toBe(1); // mesmo parcela_grupo_id
-    const competencias = linhasInseridas.map(p => p[7]);
-    expect(new Set(competencias).size).toBe(1); // mesma competência
-    expect(linhasInseridas[0][5]).toBe('2026-08-10');
-    expect(linhasInseridas[1][5]).toBe('2026-09-10');
-    expect(linhasInseridas[2][5]).toBe('2026-10-10');
+    expect(r.erro).toEqual(expect.arrayContaining([expect.stringContaining('parcela 2')]));
+    expect(db.pool.connect).not.toHaveBeenCalled();
   });
 
-  test('valor não divisível igualmente → ajuste de centavos fica na última parcela, soma bate exato', async () => {
+  test('2 parcelas com prazos irregulares (nota Evolution: 28 e 35 dias) → grava exatamente como veio', async () => {
     const linhasInseridas = [];
     const client = mockClient((sql, params) => {
       if (sql.startsWith('BEGIN')) return Promise.resolve();
@@ -70,11 +50,72 @@ describe('criarParcelado', () => {
     });
     db.pool.connect.mockResolvedValueOnce(client);
 
-    await service.criarParcelado({
-      descricao: 'Compra X', tipo_despesa_id: 1, valor_total: 100, parcelas: 3, primeiro_vencimento: '2026-08-01',
+    const r = await service.criarParcelado({
+      descricao: 'Pedido 26/0471/05/1', fornecedor: 'Evolution Engeplotter', fornecedor_id: null,
+      tipo_despesa_id: 2, competencia: '2026-05-27', tipo: 'boleto',
+      parcelas: [
+        { vencimento: '2026-06-24', valor: 350, linha_digitavel: '00190000090123456789012345678901234567890123' },
+        { vencimento: '2026-07-01', valor: 350, linha_digitavel: '00190000090123456789012345678901234567890124' },
+      ],
     });
 
-    const soma = linhasInseridas.reduce((s, p) => s + p[4], 0);
-    expect(Math.round(soma * 100) / 100).toBe(100);
+    expect(r.criadas).toHaveLength(2);
+    expect(linhasInseridas).toHaveLength(2);
+    // [4]=valor [5]=vencimento [7]=linha_digitavel [8]=competencia [9]=parcela_grupo_id
+    expect(linhasInseridas[0][5]).toBe('2026-06-24');
+    expect(linhasInseridas[0][4]).toBe(350);
+    expect(linhasInseridas[0][7]).toBe('00190000090123456789012345678901234567890123');
+    expect(linhasInseridas[1][5]).toBe('2026-07-01');
+    expect(linhasInseridas[1][7]).toBe('00190000090123456789012345678901234567890124');
+    const grupoIds = linhasInseridas.map(p => p[9]);
+    expect(new Set(grupoIds).size).toBe(1);
+    const competencias = linhasInseridas.map(p => p[8]);
+    expect(competencias.every(c => c === '2026-05-27')).toBe(true);
+  });
+
+  test('linha_digitavel ausente em uma parcela → grava null, não é obrigatória', async () => {
+    const linhasInseridas = [];
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        linhasInseridas.push(params);
+        return Promise.resolve({ rows: [{ id: linhasInseridas.length }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarParcelado({
+      descricao: 'Compra X', tipo_despesa_id: 1,
+      parcelas: [{ vencimento: '2026-08-01', valor: 50 }, { vencimento: '2026-09-01', valor: 50 }],
+    });
+
+    expect(r.criadas).toHaveLength(2);
+    expect(linhasInseridas[0][7]).toBeNull();
+  });
+
+  test('sem competencia informada → usa CURRENT_DATE (data de hoje) como fallback', async () => {
+    const linhasInseridas = [];
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        linhasInseridas.push(params);
+        return Promise.resolve({ rows: [{ id: linhasInseridas.length }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const { format } = require('date-fns');
+    const hoje = format(new Date(), 'yyyy-MM-dd');
+
+    await service.criarParcelado({
+      descricao: 'Compra X', tipo_despesa_id: 1,
+      parcelas: [{ vencimento: '2026-08-01', valor: 50 }, { vencimento: '2026-09-01', valor: 50 }],
+    });
+
+    expect(linhasInseridas[0][8]).toBe(hoje);
   });
 });

@@ -173,36 +173,35 @@ async function criarRecorrente({ descricao, fornecedor, fornecedor_id, tipo_desp
   }
 }
 
-async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor_total, parcelas, primeiro_vencimento, tipo, observacao }) {
-  if (!descricao || !tipo_despesa_id || !valor_total || !parcelas || !primeiro_vencimento) {
-    return { erro: ['descricao, tipo_despesa_id, valor_total, parcelas e primeiro_vencimento são obrigatórios'] };
+async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, competencia, tipo, observacao, parcelas }) {
+  if (!descricao || !tipo_despesa_id || !Array.isArray(parcelas) || parcelas.length < 2) {
+    return { erro: ['descricao, tipo_despesa_id e parcelas (mínimo 2 itens) são obrigatórios'] };
   }
-  if (parcelas < 2) {
-    return { erro: ['parcelas deve ser no mínimo 2 (compra à vista não precisa de parcelamento)'] };
+  for (let i = 0; i < parcelas.length; i++) {
+    const p = parcelas[i];
+    if (!p.vencimento || !p.valor) {
+      return { erro: [`parcela ${i + 1}: vencimento e valor são obrigatórios`] };
+    }
   }
 
   const parcelaGrupoId = crypto.randomUUID();
-  const competencia = format(new Date(`${primeiro_vencimento}T00:00:00`), 'yyyy-MM-dd');
-  const valorParcela = Math.floor((valor_total / parcelas) * 100) / 100;
-  const ajusteUltima = Math.round((valor_total - valorParcela * (parcelas - 1)) * 100) / 100;
+  const competenciaFinal = competencia || format(new Date(), 'yyyy-MM-dd');
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const criadas = [];
-    for (let i = 0; i < parcelas; i++) {
-      const data = new Date(`${primeiro_vencimento}T00:00:00`);
-      data.setMonth(data.getMonth() + i);
-      const valorInst = i === parcelas - 1 ? ajusteUltima : valorParcela;
+    for (let i = 0; i < parcelas.length; i++) {
+      const p = parcelas[i];
       const r = await client.query(
         `INSERT INTO contas_pagar
-           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
+           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel,
             competencia, parcela_grupo_id, parcela_numero, parcela_total, tipo_entrada, status, observacao)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'manual','pendente',$12)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual','pendente',$13)
          RETURNING *`,
-        [`${descricao} (${i + 1}/${parcelas})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id,
-         valorInst, format(data, 'yyyy-MM-dd'), tipo || 'boleto',
-         competencia, parcelaGrupoId, i + 1, parcelas, observacao || null]
+        [`${descricao} (${i + 1}/${parcelas.length})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id,
+         p.valor, p.vencimento, tipo || 'boleto', p.linha_digitavel || null,
+         competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, observacao || null]
       );
       criadas.push(r.rows[0]);
     }

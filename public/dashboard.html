@@ -141,6 +141,9 @@
   .btn-primary:hover { background: var(--primary-light); }
   .btn-success { background: var(--green); color: white; }
   .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .chip-cp.active { background: var(--primary); color: white; border-color: var(--primary); }
+  .step-cp.done { color: #16a34a; border-bottom-color: #16a34a !important; }
+  .step-cp.active { color: var(--primary); border-bottom-color: var(--primary) !important; }
   .messages-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 70%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; }
   .msg-inbound { background: white; border-bottom-left-radius: 4px; align-self: flex-start; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
@@ -558,9 +561,170 @@
       <button class="btn btn-outline" id="btn-cp-lote" onclick="showSubPage('cp-lote')">💳 Lote C6</button>
       <button class="btn btn-outline" id="btn-cp-historico" onclick="showSubPage('cp-historico')">🕓 Histórico</button>
     </div>
-    <div id="cp-lista"><div style="text-align:center;padding:40px;color:#999">Carregando contas...</div></div>
-    <div id="cp-lote" style="display:none"></div>
+    <div id="cp-lista">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px">
+        <div style="background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">A Pagar (30 dias)</div>
+          <div style="font-size:22px;font-weight:700" id="cp-kpi-30d">—</div>
+        </div>
+        <div style="background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Vencendo Hoje</div>
+          <div style="font-size:22px;font-weight:700;color:#dc2626" id="cp-kpi-hoje">—</div>
+        </div>
+        <div style="background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Vencidos</div>
+          <div style="font-size:22px;font-weight:700;color:#dc2626" id="cp-kpi-vencidos">—</div>
+        </div>
+        <div style="background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pago este Mês</div>
+          <div style="font-size:22px;font-weight:700" id="cp-kpi-mes">—</div>
+        </div>
+      </div>
+
+      <div id="cp-chips-prazo" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="chip-cp active" data-dias="" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Todos</div>
+        <div class="chip-cp" data-status="vencido" onclick="cpFiltrarStatus(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Vencidos</div>
+        <div class="chip-cp" data-dias="0" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Hoje</div>
+        <div class="chip-cp" data-dias="1" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Amanhã</div>
+        <div class="chip-cp" data-dias="7" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">7 dias</div>
+        <div class="chip-cp" data-dias="15" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">15 dias</div>
+        <div class="chip-cp" data-dias="30" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">30 dias</div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="cpAbrirModalNova()">+ Nova Conta</button>
+        <button class="btn btn-outline" onclick="cpSincronizarDDA()">🔄 Sincronizar DDA</button>
+        <button class="btn btn-outline" onclick="cpReconciliar()">⚡ Reconciliar</button>
+      </div>
+
+      <div style="overflow-x:auto"><table class="data-table">
+        <thead><tr>
+          <th><input type="checkbox" id="cp-check-all" onchange="cpToggleTodos(this)"></th>
+          <th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th><th>Origem</th><th>Ações</th>
+        </tr></thead>
+        <tbody id="cp-tabela-contas"></tbody>
+      </table></div>
+      <div id="cp-rodape-selecao" style="display:none;margin-top:16px;padding:12px 16px;background:white;border-radius:8px;align-items:center;gap:16px">
+        <span id="cp-label-selecionados">0 selecionadas — R$ 0,00</span>
+        <button class="btn btn-primary" style="margin-left:12px" onclick="cpAdicionarAoLote()">Adicionar ao Lote C6</button>
+      </div>
+    </div>
+
+    <div id="cp-lote" style="display:none">
+      <div style="display:flex;gap:0;margin-bottom:20px">
+        <div id="cp-step-1" class="step-cp active" style="flex:1;padding:10px;text-align:center;font-size:12px;font-weight:600;color:#888;border-bottom:3px solid var(--border)">1. Selecionar</div>
+        <div id="cp-step-2" class="step-cp" style="flex:1;padding:10px;text-align:center;font-size:12px;font-weight:600;color:#888;border-bottom:3px solid var(--border)">2. Validar no C6</div>
+        <div id="cp-step-3" class="step-cp" style="flex:1;padding:10px;text-align:center;font-size:12px;font-weight:600;color:#888;border-bottom:3px solid var(--border)">3. Revisar</div>
+        <div id="cp-step-4" class="step-cp" style="flex:1;padding:10px;text-align:center;font-size:12px;font-weight:600;color:#888;border-bottom:3px solid var(--border)">4. Aprovar no C6</div>
+      </div>
+      <div id="cp-instrucao-lote" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#0369a1;display:none">
+        <span id="cp-instrucao-texto"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+        <div>
+          <div style="margin-bottom:12px">
+            <input type="text" id="cp-lote-busca" placeholder="Buscar por descrição..." style="padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px" oninput="cpFiltrarLote()">
+          </div>
+          <div style="overflow-x:auto"><table class="data-table">
+            <thead><tr>
+              <th><input type="checkbox" id="cp-check-lote-all" onchange="cpToggleTodosLote(this)"></th>
+              <th>Vencimento</th><th>Descrição</th><th>Valor</th><th>Tipo</th><th>Status C6</th>
+            </tr></thead>
+            <tbody id="cp-tabela-lote"></tbody>
+          </table></div>
+        </div>
+        <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);position:sticky;top:20px">
+          <h3 style="font-size:15px;margin-bottom:14px">🛒 Lote de Pagamento</h3>
+          <div id="cp-carrinho-itens"><p style="color:#888;font-size:13px">Nenhuma conta selecionada</p></div>
+          <div id="cp-carrinho-total" style="display:none;justify-content:space-between;font-weight:700;font-size:16px;padding-top:12px;margin-top:4px;border-top:1px solid #f0f0f0">
+            <span>Total</span><span id="cp-total-lote">R$ 0,00</span>
+          </div>
+          <div style="margin-top:16px">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Seu nome (responsável)</label>
+            <input type="text" id="cp-uploader-name" placeholder="Ex: Maria Admin" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px">
+            <button class="btn btn-primary" style="width:100%" id="cp-btn-montar-lote" onclick="cpMontarLote()" disabled>Montar Lote C6</button>
+            <button class="btn btn-success" style="width:100%;margin-top:8px;display:none" id="cp-btn-submeter-lote" onclick="cpSubmeterLote()">✅ Aprovar no C6 Bank</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;display:none;border-color:#dc2626;color:#dc2626" id="cp-btn-cancelar-lote" onclick="cpCancelarLote()">✕ Cancelar este Lote</button>
+          </div>
+          <div id="cp-lote-status" style="margin-top:16px;font-size:13px;display:none">
+            <strong>group_id:</strong> <span id="cp-lote-group-id" style="font-family:monospace;font-size:11px;word-break:break-all"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="cp-historico" style="display:none"></div>
+  </div>
+
+  <!-- MODAL NOVA/EDITAR CONTA A PAGAR -->
+  <div id="cp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cpFecharModal()">
+    <div style="background:white;border-radius:14px;padding:28px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto">
+      <h2 id="cp-modal-titulo" style="font-size:18px;margin-bottom:20px">Nova Conta a Pagar</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Descrição *</label>
+          <input type="text" id="cp-f-descricao" placeholder="Ex: Conta Light Janeiro" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Fornecedor/Credor</label>
+          <input type="text" id="cp-f-fornecedor" placeholder="Ex: Light S.A." onblur="cpOnFornecedorBlur()" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <input type="hidden" id="cp-f-fornecedor-id">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Tipo de Despesa *</label>
+          <select id="cp-f-tipo-despesa" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px"><option value="">Selecione...</option></select>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Valor (R$) *</label>
+          <input type="number" id="cp-f-valor" step="0.01" min="0.01" placeholder="0,00" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Vencimento *</label>
+          <input type="date" id="cp-f-vencimento" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Tipo de Pagamento</label>
+          <select id="cp-f-tipo" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="boleto">Boleto</option><option value="pix">PIX</option><option value="outro">Outro</option>
+          </select>
+        </div>
+      </div>
+      <div id="cp-grupo-linha-digitavel" style="margin-bottom:16px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Linha Digitável</label>
+        <input type="text" id="cp-f-linha-digitavel" placeholder="44 dígitos do boleto" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+      </div>
+      <div id="cp-grupo-pix" style="display:none;margin-bottom:16px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Chave PIX ou BR Code</label>
+        <input type="text" id="cp-f-pix-content" placeholder="CPF, CNPJ, e-mail, telefone ou brcode" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:600;color:#555"><input type="checkbox" id="cp-f-recorrente" onchange="cpToggleRecorrente()"> Conta Recorrente</label>
+      </div>
+      <div id="cp-grupo-recorrente" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Dia do vencimento (1–28)</label>
+          <input type="number" id="cp-f-recorrencia-dia" min="1" max="28" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Tipo de valor</label>
+          <select id="cp-f-recorrencia-valor-fixo" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="true">Fixo (aluguel, assinatura)</option><option value="false">Variável (água, luz)</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#555">Observação</label>
+        <textarea id="cp-f-observacao" rows="2" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+        <button class="btn btn-outline" onclick="cpFecharModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="cpSalvarConta()">Salvar Conta</button>
+      </div>
+    </div>
   </div>
 
   <!-- COBRANÇAS / BOLETOS / PIX -->
@@ -983,6 +1147,7 @@ function showSubPage(id) {
     document.getElementById(s).style.display = s === id ? '' : 'none';
   });
   if (id === 'cp-lista')     loadContasPagar();
+  if (id === 'cp-lote')      cpCarregarLote();
   if (id === 'cp-historico') loadHistoricoLotes();
 }
 
@@ -2174,36 +2339,140 @@ async function enviarArteItemUI(orcId, itemId, input) {
 }
 
 // ── CONTAS A PAGAR ─────────────────────────────────────────────────────────────
+let cpContasSelecionadas = new Set();
+let cpLoteItens = [];
+let cpCurrentGroupId = null;
+let cpFiltroAtivo = { dias: undefined, status: undefined };
+let cpTiposDespesa = [];
+
+async function cpCarregarTiposDespesa() {
+  const tipos = await api('/api/v2/contas-pagar/tipos-despesa');
+  if (!tipos || tipos.error) return;
+  cpTiposDespesa = tipos;
+  const select = document.getElementById('cp-f-tipo-despesa');
+  select.innerHTML = '<option value="">Selecione...</option>' +
+    tipos.map(t => `<option value="${t.id}">${t.codigo} — ${t.nome}</option>`).join('');
+}
+
+async function cpOnFornecedorBlur() {
+  const nome = document.getElementById('cp-f-fornecedor').value.trim();
+  document.getElementById('cp-f-fornecedor-id').value = '';
+  if (!nome) return;
+  const r = await api(`/api/v2/fornecedores?busca=${encodeURIComponent(nome)}&limit=1`);
+  const fornecedorId = r?.fornecedores?.[0]?.id || null;
+  if (fornecedorId) document.getElementById('cp-f-fornecedor-id').value = fornecedorId;
+  const sugestao = await api(`/api/v2/contas-pagar/sugerir-tipo?${fornecedorId ? 'fornecedor_id=' + fornecedorId : ''}&fornecedor=${encodeURIComponent(nome)}`);
+  if (sugestao?.tipo_despesa_id && !document.getElementById('cp-f-tipo-despesa').value) {
+    document.getElementById('cp-f-tipo-despesa').value = sugestao.tipo_despesa_id;
+  }
+}
+
+async function cpCarregarKPIs() {
+  const d = await api('/api/v2/contas-pagar/kpis');
+  if (!d || d.error) return;
+  const fmt = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  document.getElementById('cp-kpi-30d').textContent = fmt(d.total_30d);
+  document.getElementById('cp-kpi-hoje').textContent = fmt(d.vencendo_hoje);
+  document.getElementById('cp-kpi-vencidos').textContent = fmt(d.vencidos);
+  document.getElementById('cp-kpi-mes').textContent = fmt(d.pago_mes);
+}
+
 async function loadContasPagar() {
-  const el = document.getElementById('cp-lista');
-  const data = await api('/api/v2/contas-pagar?limit=50');
-  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
-  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhuma conta a pagar</p>'; return; }
-  const fmt = v => v ? `R$ ${parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—';
-  const statusBg = { pendente:'#fff9c4|#f57f17', pendente_classificacao:'#fff3cd|#856404', pago:'#e8f5e9|#2e7d32', cancelado:'#fce4ec|#c62828', vencido:'#fce4ec|#c62828', agendado:'#e3f2fd|#1565c0' };
-  const statusLabel = s => s === 'pendente_classificacao' ? 'Classificar' : s;
-  el.innerHTML = `<div style="overflow-x:auto"><table class="data-table">
-    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
-    <tbody>${data.map(c => {
-      const [bg,col] = (statusBg[c.status]||'#f5f5f5|#555').split('|');
-      const dt = c.vencimento ? new Date(String(c.vencimento).substring(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-      const podeEditar = ['pendente','pendente_classificacao'].includes(c.status);
-      const podePagar = !['pago','cancelado'].includes(c.status);
-      const podeCancelar = ['pendente','pendente_classificacao','vencido'].includes(c.status);
-      return `<tr>
-        <td style="font-weight:600">${dt}</td>
-        <td>${c.descricao||'—'}</td>
-        <td style="color:#888;font-size:12px">${c.fornecedor||'—'}</td>
-        <td style="color:#888;font-size:12px">${c.tipo_despesa_nome||'—'}</td>
-        <td style="font-weight:600">${fmt(c.valor)}</td>
-        <td><span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">${statusLabel(c.status)}</span></td>
-        <td style="white-space:nowrap">
-          ${podeEditar ? `<a href="/pwa/financeiro.html" target="_blank" class="btn btn-outline" style="padding:4px 8px;font-size:11px" title="Abrir no painel financeiro para editar">✏️</a>` : ''}
-          ${podePagar ? `<button class="btn btn-outline" style="padding:4px 8px;font-size:11px;margin-left:4px" onclick="cpPagar(${c.id})">Pagar</button>` : ''}
-          ${podeCancelar ? `<button class="btn btn-outline" style="padding:4px 8px;font-size:11px;margin-left:4px;color:#c62828;border-color:#c62828" onclick="cpCancelar(${c.id})">✕</button>` : ''}
-        </td>
-      </tr>`;
-    }).join('')}</tbody></table></div>`;
+  cpCarregarKPIs();
+  cpCarregarTiposDespesa();
+  const params = new URLSearchParams();
+  if (cpFiltroAtivo.dias !== undefined) params.set('dias', cpFiltroAtivo.dias);
+  if (cpFiltroAtivo.status) params.set('status', cpFiltroAtivo.status);
+  const contas = await api('/api/v2/contas-pagar?' + params);
+  if (!contas || contas.error) return;
+  cpRenderTabela(contas);
+}
+
+function cpBadgeVencimento(venc) {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const d = new Date(String(venc).substring(0, 10) + 'T00:00:00');
+  const diff = Math.ceil((d - hoje) / 86400000);
+  const badge = (bg, col, txt) => `<span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">${txt}</span>`;
+  if (diff < 0) return badge('#fee2e2','#dc2626',`Vencido ${Math.abs(diff)}d`);
+  if (diff === 0) return badge('#fee2e2','#dc2626','Hoje');
+  if (diff === 1) return badge('#ffedd5','#ea580c','Amanhã');
+  if (diff <= 3) return badge('#ffedd5','#ea580c',`${diff}d`);
+  if (diff <= 7) return badge('#fef9c3','#ca8a04',`${diff}d`);
+  return badge('#dcfce7','#16a34a', d.toLocaleDateString('pt-BR'));
+}
+
+function cpBadgeStatus(s) {
+  const m = { pendente:'#f1f5f9|#64748b', pendente_classificacao:'#fef9c3|#ca8a04', agendado:'#dbeafe|#1d4ed8', pago:'#dcfce7|#16a34a', vencido:'#fee2e2|#dc2626', cancelado:'#f1f5f9|#64748b' };
+  const [bg,col] = (m[s] || '#f1f5f9|#64748b').split('|');
+  const label = s === 'pendente_classificacao' ? 'Classificar' : s;
+  return `<span style="background:${bg};color:${col};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">${label}</span>`;
+}
+
+function cpBadgeOrigem(t) {
+  const m = { manual: '✏️', dda: '🏦', importacao_oc: '📦', whatsapp_ocr: '📷', entrada_estoque: '📥' };
+  return m[t] || '—';
+}
+
+function cpRenderTabela(contas) {
+  const tbody = document.getElementById('cp-tabela-contas');
+  const fmt = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  if (!contas.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#888;padding:32px">Nenhuma conta encontrada</td></tr>'; return; }
+  tbody.innerHTML = contas.map(c => `
+    <tr>
+      <td><input type="checkbox" class="cp-check-conta" value="${c.id}" onchange="cpToggleSelecao(this)" ${cpContasSelecionadas.has(c.id) ? 'checked' : ''}></td>
+      <td>${cpBadgeVencimento(c.vencimento)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.descricao}">${c.descricao}</td>
+      <td>${c.fornecedor || '—'}</td>
+      <td style="font-size:11px">${c.tipo_despesa_nome || '—'}</td>
+      <td style="font-weight:600">${fmt(c.valor)}</td>
+      <td>${cpBadgeStatus(c.status)}</td>
+      <td>${cpBadgeOrigem(c.tipo_entrada)}</td>
+      <td style="white-space:nowrap">
+        ${['pendente','pendente_classificacao'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="cpAbrirModalEditar(${c.id})">✏️</button>` : ''}
+        ${!['pago','cancelado'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="cpPagar(${c.id})">Pagar</button>` : ''}
+        ${['pendente','pendente_classificacao','vencido'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-left:4px;color:#dc2626;border-color:#dc2626" onclick="cpCancelar(${c.id})">✕</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+function cpFiltrarDias(el) {
+  document.querySelectorAll('#cp-chips-prazo .chip-cp').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const dias = el.dataset.dias;
+  cpFiltroAtivo = { dias: dias !== '' ? parseInt(dias) : undefined, status: undefined };
+  loadContasPagar();
+}
+function cpFiltrarStatus(el) {
+  document.querySelectorAll('#cp-chips-prazo .chip-cp').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  cpFiltroAtivo = { status: el.dataset.status, dias: undefined };
+  loadContasPagar();
+}
+
+function cpToggleSelecao(cb) {
+  const id = parseInt(cb.value);
+  if (cb.checked) cpContasSelecionadas.add(id); else cpContasSelecionadas.delete(id);
+  cpAtualizarRodape();
+}
+function cpToggleTodos(cb) {
+  document.querySelectorAll('.cp-check-conta').forEach(c => {
+    c.checked = cb.checked;
+    const id = parseInt(c.value);
+    if (cb.checked) cpContasSelecionadas.add(id); else cpContasSelecionadas.delete(id);
+  });
+  cpAtualizarRodape();
+}
+function cpAtualizarRodape() {
+  const rod = document.getElementById('cp-rodape-selecao');
+  const lbl = document.getElementById('cp-label-selecionados');
+  const n = cpContasSelecionadas.size;
+  rod.style.display = n ? 'flex' : 'none';
+  lbl.textContent = `${n} selecionada${n>1?'s':''} — selecione e monte o lote`;
+}
+function cpAdicionarAoLote() {
+  if (!cpContasSelecionadas.size) return;
+  showSubPage('cp-lote');
+  showToast('✅ Selecione as mesmas contas no Lote C6 para agendar.');
 }
 
 async function cpPagar(id) {
@@ -2220,6 +2489,224 @@ async function cpCancelar(id) {
   if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error)); return; }
   showToast('✅ Conta cancelada');
   loadContasPagar();
+}
+
+async function cpSincronizarDDA() {
+  showToast('🔄 Sincronizando DDA...');
+  const r = await api('/api/v2/contas-pagar/dda/sync');
+  if (r && !r.error) { showToast(`✅ DDA: ${r.importados} boletos importados`); loadContasPagar(); }
+}
+async function cpReconciliar() {
+  showToast('⚡ Reconciliando com extrato C6...');
+  const r = await api('/api/v2/contas-pagar/reconciliar', { method: 'POST' });
+  if (r && !r.error) { showToast(`✅ ${r.atualizadas} contas marcadas como pagas`); loadContasPagar(); }
+}
+
+let cpEditandoId = null;
+
+function cpAbrirModalNova() {
+  cpEditandoId = null;
+  document.getElementById('cp-modal-titulo').textContent = 'Nova Conta a Pagar';
+  ['cp-f-descricao','cp-f-fornecedor','cp-f-fornecedor-id','cp-f-linha-digitavel','cp-f-pix-content','cp-f-observacao'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cp-f-tipo-despesa').value = '';
+  document.getElementById('cp-f-valor').value = '';
+  document.getElementById('cp-f-vencimento').value = '';
+  document.getElementById('cp-f-tipo').value = 'boleto';
+  document.getElementById('cp-f-recorrente').checked = false;
+  document.getElementById('cp-grupo-recorrente').style.display = 'none';
+  document.getElementById('cp-grupo-linha-digitavel').style.display = 'block';
+  document.getElementById('cp-grupo-pix').style.display = 'none';
+  document.getElementById('cp-modal').style.display = 'flex';
+}
+
+async function cpAbrirModalEditar(id) {
+  const pendentes = await api('/api/v2/contas-pagar?status=pendente');
+  const pendentesClassificar = await api('/api/v2/contas-pagar?status=pendente_classificacao');
+  const c = [...(Array.isArray(pendentes) ? pendentes : []), ...(Array.isArray(pendentesClassificar) ? pendentesClassificar : [])];
+  const conta = c.find(x => x.id === id);
+  if (!conta) { showToast('❌ Conta não encontrada'); return; }
+  cpEditandoId = id;
+  document.getElementById('cp-modal-titulo').textContent = 'Editar Conta';
+  document.getElementById('cp-f-descricao').value = conta.descricao || '';
+  document.getElementById('cp-f-fornecedor').value = conta.fornecedor || '';
+  document.getElementById('cp-f-fornecedor-id').value = conta.fornecedor_id || '';
+  document.getElementById('cp-f-tipo-despesa').value = conta.tipo_despesa_id || '';
+  document.getElementById('cp-f-valor').value = conta.valor || '';
+  document.getElementById('cp-f-vencimento').value = String(conta.vencimento).substring(0, 10);
+  document.getElementById('cp-f-tipo').value = conta.tipo || 'boleto';
+  document.getElementById('cp-f-linha-digitavel').value = conta.linha_digitavel || '';
+  document.getElementById('cp-f-pix-content').value = conta.pix_content || '';
+  document.getElementById('cp-f-observacao').value = conta.observacao || '';
+  document.getElementById('cp-f-recorrente').checked = false;
+  document.getElementById('cp-grupo-recorrente').style.display = 'none';
+  document.getElementById('cp-grupo-linha-digitavel').style.display = conta.tipo === 'boleto' ? 'block' : 'none';
+  document.getElementById('cp-grupo-pix').style.display = conta.tipo === 'pix' ? 'block' : 'none';
+  document.getElementById('cp-modal').style.display = 'flex';
+}
+
+function cpFecharModal() { document.getElementById('cp-modal').style.display = 'none'; cpEditandoId = null; }
+function cpToggleRecorrente() {
+  const on = document.getElementById('cp-f-recorrente').checked;
+  document.getElementById('cp-grupo-recorrente').style.display = on ? 'grid' : 'none';
+}
+document.getElementById('cp-f-tipo').addEventListener('change', function() {
+  document.getElementById('cp-grupo-linha-digitavel').style.display = this.value === 'boleto' ? 'block' : 'none';
+  document.getElementById('cp-grupo-pix').style.display = this.value === 'pix' ? 'block' : 'none';
+});
+
+async function cpSalvarConta() {
+  const recorrente = document.getElementById('cp-f-recorrente').checked;
+  const body = {
+    descricao: document.getElementById('cp-f-descricao').value.trim(),
+    fornecedor: document.getElementById('cp-f-fornecedor').value.trim() || null,
+    fornecedor_id: document.getElementById('cp-f-fornecedor-id').value || null,
+    tipo_despesa_id: parseInt(document.getElementById('cp-f-tipo-despesa').value) || null,
+    valor: parseFloat(document.getElementById('cp-f-valor').value),
+    vencimento: document.getElementById('cp-f-vencimento').value,
+    tipo: document.getElementById('cp-f-tipo').value,
+    linha_digitavel: document.getElementById('cp-f-linha-digitavel').value.replace(/\D/g,'') || null,
+    pix_content: document.getElementById('cp-f-pix-content').value.trim() || null,
+    observacao: document.getElementById('cp-f-observacao').value.trim() || null,
+  };
+  if (cpEditandoId) {
+    const r = await api(`/api/v2/contas-pagar/${cpEditandoId}`, { method: 'PATCH', body: JSON.stringify(body) });
+    if (r && !r.error && !r.erro) { showToast('✅ Conta atualizada'); cpFecharModal(); loadContasPagar(); }
+    return;
+  }
+  Object.assign(body, {
+    recorrente,
+    recorrencia_dia: recorrente ? parseInt(document.getElementById('cp-f-recorrencia-dia').value) : null,
+    recorrencia_valor_fixo: recorrente ? document.getElementById('cp-f-recorrencia-valor-fixo').value !== 'false' : true,
+  });
+  const endpoint = recorrente ? '/api/v2/contas-pagar/recorrente' : '/api/v2/contas-pagar';
+  const r = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+  if (r && !r.error && !r.erro) {
+    const msg = recorrente ? `✅ ${r.criadas?.length || 0} contas recorrentes criadas` : '✅ Conta criada';
+    showToast(msg); cpFecharModal(); loadContasPagar();
+  }
+}
+
+async function cpCarregarLote() {
+  const contas = await api('/api/v2/contas-pagar?status=pendente');
+  if (!contas || contas.error) return;
+  cpLoteItens = contas.filter(c => c.linha_digitavel || c.pix_content);
+  cpRenderTabelaLote(cpLoteItens);
+  loadHistoricoLotes();
+}
+
+function cpRenderTabelaLote(contas) {
+  const tbody = document.getElementById('cp-tabela-lote');
+  const fmt = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  if (!contas.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:32px">Nenhuma conta com linha digitável ou chave PIX pendente</td></tr>'; return; }
+  tbody.innerHTML = contas.map(c => `
+    <tr>
+      <td><input type="checkbox" class="cp-check-lote" value="${c.id}" data-valor="${c.valor}" data-descricao="${c.descricao}" onchange="cpAtualizarCarrinho()"></td>
+      <td>${cpBadgeVencimento(c.vencimento)}</td>
+      <td>${c.descricao}</td>
+      <td style="font-weight:600">${fmt(c.valor)}</td>
+      <td>${c.tipo.toUpperCase()}</td>
+      <td>${c.c6_status ? `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:12px;font-size:10px">${c.c6_status}</span>` : '—'}</td>
+    </tr>`).join('');
+}
+
+function cpFiltrarLote() {
+  const q = document.getElementById('cp-lote-busca').value.toLowerCase();
+  cpRenderTabelaLote(cpLoteItens.filter(c => c.descricao.toLowerCase().includes(q)));
+}
+function cpToggleTodosLote(cb) { document.querySelectorAll('.cp-check-lote').forEach(c => { c.checked = cb.checked; }); cpAtualizarCarrinho(); }
+
+function cpAtualizarCarrinho() {
+  const checks = [...document.querySelectorAll('.cp-check-lote:checked')];
+  const itensDiv = document.getElementById('cp-carrinho-itens');
+  const totalDiv = document.getElementById('cp-carrinho-total');
+  const btnMontar = document.getElementById('cp-btn-montar-lote');
+  const fmt = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  if (!checks.length) {
+    itensDiv.innerHTML = '<p style="color:#888;font-size:13px">Nenhuma conta selecionada</p>';
+    totalDiv.style.display = 'none'; btnMontar.disabled = true; return;
+  }
+  let total = 0;
+  itensDiv.innerHTML = checks.map(c => {
+    total += parseFloat(c.dataset.valor);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px"><span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.dataset.descricao}</span><span style="font-weight:600">${fmt(c.dataset.valor)}</span></div>`;
+  }).join('');
+  document.getElementById('cp-total-lote').textContent = fmt(total);
+  totalDiv.style.display = 'flex'; btnMontar.disabled = false;
+}
+
+async function cpMontarLote() {
+  const ids = [...document.querySelectorAll('.cp-check-lote:checked')].map(c => parseInt(c.value));
+  const uploaderName = document.getElementById('cp-uploader-name').value.trim();
+  if (!uploaderName) { showToast('❌ Informe seu nome como responsável'); return; }
+  if (!ids.length) { showToast('❌ Selecione ao menos uma conta'); return; }
+  if (!confirm(`Montar lote com ${ids.length} conta(s) e validar no C6?`)) return;
+  showToast('⏳ Validando no C6 Bank...');
+  const r = await api('/api/v2/contas-pagar/lote', { method: 'POST', body: JSON.stringify({ ids, uploaderName }) });
+  if (!r || r.error || r.erro) return;
+  cpCurrentGroupId = r.groupId;
+  document.getElementById('cp-lote-group-id').textContent = r.groupId;
+  document.getElementById('cp-lote-status').style.display = 'block';
+  document.getElementById('cp-btn-submeter-lote').style.display = 'block';
+  document.getElementById('cp-btn-cancelar-lote').style.display = 'block';
+  cpSetStep(3);
+  showToast(`✅ Lote validado: ${r.quantidade} item(s). Revise e envie para aprovação.`);
+  await loadHistoricoLotes();
+}
+
+async function cpSubmeterLote() {
+  if (!cpCurrentGroupId) { showToast('❌ Nenhum lote ativo'); return; }
+  const uploaderName = document.getElementById('cp-uploader-name').value.trim();
+  if (!confirm('Enviar este lote para aprovação no C6 Bank? O pagamento só será realizado após aprovação manual no web banking.')) return;
+  const r = await api(`/api/v2/contas-pagar/lote/${cpCurrentGroupId}/submeter`, { method: 'POST', body: JSON.stringify({ uploaderName }) });
+  if (r && !r.error && !r.erro) {
+    document.getElementById('cp-btn-submeter-lote').style.display = 'none';
+    document.getElementById('cp-btn-cancelar-lote').style.display = 'none';
+    cpSetStep(4);
+    showToast('✅ Lote enviado! Acesse o web banking do C6 Bank para aprovar os pagamentos.');
+    await loadHistoricoLotes();
+  }
+}
+
+const CP_INSTRUCOES = {
+  1: '',
+  2: '⏳ Aguarde — enviando boletos para validação no C6 Bank...',
+  3: '✅ Lote validado pelo C6 Bank. Revise os itens e clique em <strong>Aprovar no C6 Bank</strong> para enviar à fila de aprovação. Você também pode cancelar o lote se quiser recomeçar.',
+  4: '🏦 Lote enviado! Agora entre no <strong>web banking ou app do C6 Bank</strong> e aprove o lote de pagamentos. Apenas após a aprovação humana os pagamentos serão realizados.',
+};
+
+function cpSetStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const s = document.getElementById(`cp-step-${i}`);
+    s.classList.toggle('done', i < n);
+    s.classList.toggle('active', i === n);
+  }
+  const instr = document.getElementById('cp-instrucao-lote');
+  const texto = CP_INSTRUCOES[n] || '';
+  if (texto) {
+    document.getElementById('cp-instrucao-texto').innerHTML = texto;
+    instr.style.display = 'block';
+  } else {
+    instr.style.display = 'none';
+  }
+}
+
+async function cpCancelarLote() {
+  if (!cpCurrentGroupId) return;
+  if (!confirm('Cancelar este lote? As contas voltarão para status pendente e você poderá criar um novo lote.')) return;
+  const items = await api(`/api/v2/contas-pagar/lote/${cpCurrentGroupId}`);
+  if (!items) return;
+  showToast('⏳ Removendo itens do lote...');
+  for (const item of (items.items || [])) {
+    await api(`/api/v2/contas-pagar/lote/${cpCurrentGroupId}/item/${item.id}`, { method: 'DELETE' });
+  }
+  cpCurrentGroupId = null;
+  document.getElementById('cp-lote-status').style.display = 'none';
+  document.getElementById('cp-btn-submeter-lote').style.display = 'none';
+  document.getElementById('cp-btn-cancelar-lote').style.display = 'none';
+  document.getElementById('cp-btn-montar-lote').disabled = false;
+  cpSetStep(1);
+  showToast('✅ Lote cancelado. Contas voltaram para pendente.');
+  await cpCarregarLote();
 }
 
 async function loadHistoricoLotes() {

@@ -55,7 +55,9 @@ INSERT INTO tipos_despesa (codigo, nome, categoria_dre, natureza) VALUES
 ('38','OUTRAS DESPESAS','OUTROS','NÃO OPERACIONAL');
 
 -- Novo status 'pendente_classificacao' precisa existir antes do CHECK que o referencia.
--- Nome real da constraint confirmado com: psql "$DATABASE_URL" -c "\d contas_pagar"
+-- ATENÇÃO: nome da constraint assumido a partir de sql/migrations/012_contas_pagar.sql
+-- (CHECK inline, sem nome explícito -> Postgres nomeia como contas_pagar_status_check).
+-- Confirme antes de aplicar: psql "$DATABASE_URL" -c "\d contas_pagar" | grep -i check
 ALTER TABLE contas_pagar DROP CONSTRAINT contas_pagar_status_check;
 ALTER TABLE contas_pagar ADD CONSTRAINT contas_pagar_status_check
   CHECK (status IN ('pendente','pendente_classificacao','agendado','pago','vencido','cancelado'));

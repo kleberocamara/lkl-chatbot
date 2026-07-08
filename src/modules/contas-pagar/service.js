@@ -446,7 +446,10 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
         params.push(vencimento);
         cond += ` AND vencimento BETWEEN $3::date - INTERVAL '10 days' AND $3::date + INTERVAL '10 days'`;
       }
-      const r = await client.query(`SELECT * FROM contas_pagar WHERE ${cond}`, params);
+      // FOR UPDATE trava as linhas candidatas até o commit — evita que duas chamadas
+      // concorrentes (ex: entrada de estoque + WhatsApp ao mesmo tempo) dupliquem a
+      // mesma dívida por não enxergarem uma à outra antes de decidir criar/mesclar.
+      const r = await client.query(`SELECT * FROM contas_pagar WHERE ${cond} FOR UPDATE`, params);
       if (r.rows.length === 1) match = r.rows[0];
     }
 

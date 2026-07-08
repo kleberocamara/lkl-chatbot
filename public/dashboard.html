@@ -2186,7 +2186,7 @@ async function loadContasPagar() {
     <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Tipo de Despesa</th><th>Valor</th><th>Status</th></tr></thead>
     <tbody>${data.map(c => {
       const [bg,col] = (statusBg[c.status]||'#f5f5f5|#555').split('|');
-      const dt = c.vencimento ? new Date(c.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+      const dt = c.vencimento ? new Date(String(c.vencimento).substring(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
       return `<tr>
         <td style="font-weight:600">${dt}</td>
         <td>${c.descricao||'—'}</td>

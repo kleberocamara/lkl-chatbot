@@ -396,6 +396,13 @@ async function processMessage(conversationId, userMessage) {
     }
   } else {
     cleanResponse = assistantMessage.content || '';
+    if (/\[FALAR_HUMANO\]\s*/i.test(cleanResponse)) {
+      cleanResponse = cleanResponse.replace(/\[FALAR_HUMANO\]\s*/i, '').trim();
+      await db.query(
+        `UPDATE conversations SET status = 'aguardando_humano', updated_at = NOW() WHERE id = $1`,
+        [conversationId]
+      );
+    }
   }
 
   await saveContext(conversationId, history);

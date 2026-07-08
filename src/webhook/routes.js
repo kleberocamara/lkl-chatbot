@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { handleInboundMessage, handleInboundMedia } = require('./handler');
-const { markAsRead, sendMessage } = require('../services/whatsapp');
+const { markAsRead, sendMessage, downloadMedia } = require('../services/whatsapp');
 const { handleC6Webhook } = require('./c6bank');
 const { handleMercadoPagoWebhook } = require('./mercadopago');
 const orcamentoService = require('../modules/orcamentos/service');
+const contasPagarWhatsapp = require('../modules/contas-pagar/whatsapp');
 
 // Verificação do webhook (Meta exige isso na configuração)
 router.get('/', (req, res) => {
@@ -43,6 +44,17 @@ router.post('/', async (req, res) => {
 
           const MEDIA_TYPES = ['image', 'document', 'video', 'audio', 'sticker'];
 
+          if (MEDIA_TYPES.includes(msg.type) && contasPagarWhatsapp.isNumeroAutorizado(phone) && ['image', 'document'].includes(msg.type)) {
+            const mediaObj = msg[msg.type];
+            let localPath = null;
+            if (mediaObj?.id) {
+              try { localPath = await downloadMedia(mediaObj.id, mediaObj.filename || ''); }
+              catch (e) { console.error('[CONTAS-PAGAR-WA] erro ao baixar mídia:', e.message); }
+            }
+            if (localPath) await contasPagarWhatsapp.handleComprovanteDespesa(phone, msg.type, localPath);
+            continue;
+          }
+
           if (MEDIA_TYPES.includes(msg.type)) {
             const mediaObj = msg[msg.type];
             await handleInboundMedia(phone, profileName, msg.type, mediaObj, msg.id);
@@ -60,6 +72,15 @@ router.post('/', async (req, res) => {
           if (msg.type !== 'text') continue;
 
           const text = msg.text?.body || '';
+
+          // Intercepta SIM/NÃO para fluxo de confirmação de despesa (WhatsApp do financeiro)
+          if (contasPagarWhatsapp.isNumeroAutorizado(phone)) {
+            const respostaDespesa = await contasPagarWhatsapp.processarRespostaDespesaWA(phone, text);
+            if (respostaDespesa) {
+              await sendMessage(phone, respostaDespesa.mensagem);
+              continue;
+            }
+          }
 
           // Intercepta SIM/NÃO para fluxo de aprovação de orçamento
           const respostaOrc = await orcamentoService.processarRespostaWA(phone, text);

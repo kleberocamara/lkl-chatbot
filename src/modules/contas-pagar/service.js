@@ -1,27 +1,32 @@
 const { query, pool } = require('../../db');
 const c6bank = require('../../services/c6bank');
 const { format, subDays } = require('date-fns');
+const fornecedorMatcher = require('./fornecedor-matcher');
+const classificador = require('./classificador');
 
 // ─── LEITURA ──────────────────────────────────────────────────────────────
 
-async function listar({ status, tipo_despesa, vencimento_de, vencimento_ate, dias } = {}) {
+async function listar({ status, tipo_despesa_id, vencimento_de, vencimento_ate, dias } = {}) {
   const conds = [];
   const params = [];
 
-  if (status) { params.push(status); conds.push(`status = $${params.length}`); }
-  if (tipo_despesa) { params.push(tipo_despesa); conds.push(`tipo_despesa = $${params.length}`); }
-  if (vencimento_de) { params.push(vencimento_de); conds.push(`vencimento >= $${params.length}`); }
-  if (vencimento_ate) { params.push(vencimento_ate); conds.push(`vencimento <= $${params.length}`); }
+  if (status) { params.push(status); conds.push(`cp.status = $${params.length}`); }
+  if (tipo_despesa_id) { params.push(tipo_despesa_id); conds.push(`cp.tipo_despesa_id = $${params.length}`); }
+  if (vencimento_de) { params.push(vencimento_de); conds.push(`cp.vencimento >= $${params.length}`); }
+  if (vencimento_ate) { params.push(vencimento_ate); conds.push(`cp.vencimento <= $${params.length}`); }
   if (dias !== undefined) {
     const hoje = format(new Date(), 'yyyy-MM-dd');
     const ate = format(new Date(Date.now() + dias * 86400000), 'yyyy-MM-dd');
-    params.push(hoje); conds.push(`vencimento >= $${params.length}`);
-    params.push(ate);  conds.push(`vencimento <= $${params.length}`);
+    params.push(hoje); conds.push(`cp.vencimento >= $${params.length}`);
+    params.push(ate);  conds.push(`cp.vencimento <= $${params.length}`);
   }
 
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const r = await query(
-    `SELECT * FROM contas_pagar ${where} ORDER BY vencimento ASC, id ASC`,
+    `SELECT cp.*, td.nome AS tipo_despesa_nome, td.codigo AS tipo_despesa_codigo
+     FROM contas_pagar cp
+     LEFT JOIN tipos_despesa td ON td.id = cp.tipo_despesa_id
+     ${where} ORDER BY cp.vencimento ASC, cp.id ASC`,
     params
   );
   return r.rows;
@@ -56,30 +61,33 @@ async function kpis() {
 
 // ─── ESCRITA ──────────────────────────────────────────────────────────────
 
-async function criar({ descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao }) {
-  if (!descricao || !tipo_despesa || !valor || !vencimento) {
-    return { erro: ['descricao, tipo_despesa, valor e vencimento são obrigatórios'] };
+async function criar({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao }) {
+  if (!descricao || !tipo_despesa_id || !valor || !vencimento) {
+    return { erro: ['descricao, tipo_despesa_id, valor e vencimento são obrigatórios'] };
   }
   const r = await query(
     `INSERT INTO contas_pagar
-       (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, linha_digitavel, pix_content,
+       (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content,
         tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      RETURNING *`,
-    [descricao, fornecedor || null, tipo_despesa, valor, vencimento,
+    [descricao, fornecedor || null, fornecedor_id || null, tipo_despesa_id, valor, vencimento,
      tipo || 'outro', linha_digitavel || null, pix_content || null,
      tipo_entrada || 'manual', recorrente || false, recorrencia_dia || null,
      recorrencia_valor_fixo !== false, observacao || null]
   );
+  if (fornecedor_id) await gravarMemoriaFornecedor(fornecedor_id, tipo_despesa_id);
   return r.rows[0];
 }
 
 async function editar(id, campos) {
   const conta = await buscarPorId(id);
   if (!conta) return { erro: ['Conta não encontrada'] };
-  if (conta.status !== 'pendente') return { erro: ['Só é possível editar contas com status pendente'] };
+  if (!['pendente', 'pendente_classificacao'].includes(conta.status)) {
+    return { erro: ['Só é possível editar contas com status pendente'] };
+  }
 
-  const permitidos = ['descricao','fornecedor','tipo_despesa','valor','vencimento','tipo',
+  const permitidos = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo',
                       'linha_digitavel','pix_content','recorrente','recorrencia_dia',
                       'recorrencia_valor_fixo','observacao'];
   const sets = [];
@@ -88,12 +96,19 @@ async function editar(id, campos) {
     if (permitidos.includes(k)) { params.push(v); sets.push(`${k} = $${params.length}`); }
   }
   if (!sets.length) return { erro: ['Nenhum campo válido para atualizar'] };
+  if (campos.tipo_despesa_id && conta.status === 'pendente_classificacao') {
+    sets.push(`status = 'pendente'`);
+  }
   params.push(id);
   const r = await query(
     `UPDATE contas_pagar SET ${sets.join(', ')}, updated_at=NOW() WHERE id = $${params.length} RETURNING *`,
     params
   );
-  return r.rows[0];
+  const atualizada = r.rows[0];
+  if (atualizada.fornecedor_id && campos.tipo_despesa_id) {
+    await gravarMemoriaFornecedor(atualizada.fornecedor_id, campos.tipo_despesa_id);
+  }
+  return atualizada;
 }
 
 async function cancelar(id) {
@@ -119,9 +134,9 @@ async function pagarManual(id) {
 
 // ─── RECORRENTES ──────────────────────────────────────────────────────────
 
-async function criarRecorrente({ descricao, fornecedor, tipo_despesa, valor, tipo, linha_digitavel, pix_content, recorrencia_dia, recorrencia_valor_fixo, observacao }) {
-  if (!descricao || !tipo_despesa || !valor || !recorrencia_dia) {
-    return { erro: ['descricao, tipo_despesa, valor e recorrencia_dia são obrigatórios'] };
+async function criarRecorrente({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, tipo, linha_digitavel, pix_content, recorrencia_dia, recorrencia_valor_fixo, observacao }) {
+  if (!descricao || !tipo_despesa_id || !valor || !recorrencia_dia) {
+    return { erro: ['descricao, tipo_despesa_id, valor e recorrencia_dia são obrigatórios'] };
   }
   const client = await pool.connect();
   try {
@@ -133,10 +148,10 @@ async function criarRecorrente({ descricao, fornecedor, tipo_despesa, valor, tip
       const valorInst = recorrencia_valor_fixo !== false ? valor : 0;
       const r = await client.query(
         `INSERT INTO contas_pagar
-           (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, linha_digitavel, pix_content,
+           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content,
             tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'manual',true,$9,$10,$11) RETURNING *`,
-        [descricao, fornecedor || null, tipo_despesa, valorInst,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12) RETURNING *`,
+        [descricao, fornecedor || null, fornecedor_id || null, tipo_despesa_id, valorInst,
          format(data, 'yyyy-MM-dd'), tipo || 'outro',
          linha_digitavel || null, pix_content || null,
          recorrencia_dia, recorrencia_valor_fixo !== false, observacao || null]
@@ -144,6 +159,7 @@ async function criarRecorrente({ descricao, fornecedor, tipo_despesa, valor, tip
       criadas.push(r.rows[0]);
     }
     await client.query('COMMIT');
+    if (fornecedor_id) await gravarMemoriaFornecedor(fornecedor_id, tipo_despesa_id);
     return { criadas };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -162,20 +178,23 @@ async function sincronizarDDA() {
   for (const b of boletos) {
     if (!b.content) { ignorados++; continue; }
     try {
-      await query(
-        `INSERT INTO contas_pagar
-           (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo, linha_digitavel, tipo_entrada, status)
-         VALUES ($1,$2,'FORNECEDOR',$3,$4,'boleto',$5,'dda','pendente')
-         ON CONFLICT (linha_digitavel) WHERE linha_digitavel IS NOT NULL AND status != 'cancelado'
-         DO NOTHING`,
-        [
-          b.beneficiary_name || 'Boleto DDA',
-          b.beneficiary_name || null,
-          b.amount,
-          b.due_date,
-          b.content,
-        ]
+      const jaImportado = await query(
+        `SELECT id FROM contas_pagar WHERE linha_digitavel = $1 AND status != 'cancelado'`,
+        [b.content]
       );
+      if (jaImportado.rows.length) { ignorados++; continue; }
+
+      const fornecedor = await fornecedorMatcher.encontrarOuCriarFornecedor({ nome: b.beneficiary_name });
+      await criarOuReconciliarContaPagar({
+        fornecedorId: fornecedor?.id || null,
+        fornecedorNome: fornecedor?.nome || b.beneficiary_name || 'Boleto DDA',
+        descricao: fornecedor?.nome || b.beneficiary_name || 'Boleto DDA',
+        valor: b.amount,
+        vencimento: b.due_date,
+        linhaDigitavel: b.content,
+        tipo: 'boleto',
+        tipoEntrada: 'dda',
+      });
       importados++;
     } catch (err) { console.error('[CONTAS-PAGAR] sincronizarDDA erro ao inserir boleto:', err.message); ignorados++; }
   }
@@ -379,10 +398,10 @@ async function gerarRecorrentesProximoMes() {
     );
     if (existe.rowCount) continue;
     await query(
-      `INSERT INTO contas_pagar (descricao, fornecedor, tipo_despesa, valor, vencimento, tipo,
+      `INSERT INTO contas_pagar (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
         linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'manual',true,$9,$10,$11)`,
-      [c.descricao, c.fornecedor, c.tipo_despesa,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12)`,
+      [c.descricao, c.fornecedor, c.fornecedor_id, c.tipo_despesa_id,
        c.recorrencia_valor_fixo ? c.valor : 0,
        format(venc, 'yyyy-MM-dd'), c.tipo,
        c.linha_digitavel, c.pix_content, c.recorrencia_dia, c.recorrencia_valor_fixo, c.observacao]
@@ -390,6 +409,88 @@ async function gerarRecorrentesProximoMes() {
     geradas++;
   }
   return { geradas };
+}
+
+// ─── CLASSIFICAÇÃO E RECONCILIAÇÃO ─────────────────────────────────────────
+
+async function listarTiposDespesa() {
+  const r = await query('SELECT id, codigo, nome, categoria_dre, natureza FROM tipos_despesa WHERE ativo = true ORDER BY codigo');
+  return r.rows;
+}
+
+async function sugerirTipoDespesa({ fornecedor_id, fornecedor, descricao }) {
+  return classificador.classificarDespesa({ fornecedorId: fornecedor_id || null, nomeFornecedor: fornecedor, descricao });
+}
+
+async function gravarMemoriaFornecedor(fornecedorId, tipoDespesaId) {
+  if (!fornecedorId || !tipoDespesaId) return;
+  await query('UPDATE fornecedores SET tipo_despesa_padrao_id = $1, updated_at = NOW() WHERE id = $2', [tipoDespesaId, fornecedorId]);
+}
+
+// Ponto único de entrada para gravar uma nova dívida a partir de DDA, entrada de estoque
+// ou WhatsApp. Evita duplicar a mesma dívida (ex: NF lançada na entrada de estoque +
+// boleto do mesmo fornecedor/valor chegando depois via DDA): se achar exatamente uma
+// conta pendente do mesmo fornecedor com o mesmo valor (sem linha digitável ainda),
+// mescla nela em vez de criar uma nova. Zero ou 2+ candidatas → cria nova (mais seguro
+// que arriscar mesclar errado).
+async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let match = null;
+    if (fornecedorId && valor != null) {
+      const params = [fornecedorId, valor];
+      let cond = `fornecedor_id = $1 AND valor = $2 AND linha_digitavel IS NULL AND status IN ('pendente','pendente_classificacao')`;
+      if (vencimento) {
+        params.push(vencimento);
+        cond += ` AND vencimento BETWEEN $3::date - INTERVAL '10 days' AND $3::date + INTERVAL '10 days'`;
+      }
+      const r = await client.query(`SELECT * FROM contas_pagar WHERE ${cond}`, params);
+      if (r.rows.length === 1) match = r.rows[0];
+    }
+
+    let tipoFinal = tipoDespesaId || null;
+    if (!tipoFinal) {
+      const sugestao = await classificador.classificarDespesa({ fornecedorId, nomeFornecedor: fornecedorNome, descricao });
+      tipoFinal = sugestao.tipo_despesa_id;
+    }
+
+    let conta;
+    if (match) {
+      const sets = ['updated_at = NOW()'];
+      const params = [];
+      if (linhaDigitavel) { params.push(linhaDigitavel); sets.push(`linha_digitavel = $${params.length}`); }
+      if (vencimento)     { params.push(vencimento);     sets.push(`vencimento = $${params.length}`); }
+      if (tipo)           { params.push(tipo);           sets.push(`tipo = $${params.length}`); }
+      if (!match.tipo_despesa_id && tipoFinal) {
+        params.push(tipoFinal); sets.push(`tipo_despesa_id = $${params.length}`);
+        sets.push(`status = 'pendente'`);
+      }
+      params.push(match.id);
+      const r = await client.query(`UPDATE contas_pagar SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
+      conta = r.rows[0];
+    } else {
+      const status = tipoFinal ? 'pendente' : 'pendente_classificacao';
+      const r = await client.query(
+        `INSERT INTO contas_pagar
+           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
+            linha_digitavel, tipo_entrada, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [descricao, fornecedorNome || null, fornecedorId || null, tipoFinal, valor,
+         vencimento, tipo || 'boleto', linhaDigitavel || null, tipoEntrada, status]
+      );
+      conta = r.rows[0];
+    }
+    await client.query('COMMIT');
+    return conta;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
@@ -400,4 +501,5 @@ module.exports = {
   listarLotes, criarLoteC6, consultarLoteC6, removerItemLoteC6, submeterLoteC6,
   reconciliar,
   marcarVencidas, contasVencendoEm, atualizarStatusLotesSubmetidos, gerarRecorrentesProximoMes,
+  listarTiposDespesa, sugerirTipoDespesa, gravarMemoriaFornecedor, criarOuReconciliarContaPagar,
 };

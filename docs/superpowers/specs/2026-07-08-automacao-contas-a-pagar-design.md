@@ -121,7 +121,8 @@ A tabela `fornecedores` já existe (nome, CNPJ, categoria, contato) e já é usa
 
 ```sql
 ALTER TABLE fornecedores ADD COLUMN tipo_despesa_padrao_id INTEGER REFERENCES tipos_despesa(id);
-ALTER TABLE contas_pagar ADD COLUMN fornecedor_id INTEGER REFERENCES fornecedores(id);
+-- fornecedores.id é UUID (não INTEGER) — conferido em sql/migrations/001_sprint1_foundation.sql
+ALTER TABLE contas_pagar ADD COLUMN fornecedor_id UUID REFERENCES fornecedores(id);
 CREATE INDEX idx_contas_pagar_fornecedor_id ON contas_pagar(fornecedor_id);
 ```
 
@@ -220,7 +221,7 @@ BEGIN;
 CREATE TABLE despesas_pendentes_confirmacao (
   id              SERIAL PRIMARY KEY,
   telefone        TEXT NOT NULL,
-  fornecedor_id   INTEGER REFERENCES fornecedores(id),
+  fornecedor_id   UUID REFERENCES fornecedores(id),
   valor           NUMERIC(10,2),
   vencimento      DATE,
   descricao       TEXT,

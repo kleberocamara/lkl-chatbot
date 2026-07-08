@@ -7,6 +7,8 @@ const classificador = require('./classificador');
 const ocr = require('./ocr');
 const service = require('./service');
 
+const JANELA_CONFIRMACAO_MINUTOS = 30;
+
 const UPLOADS_DIR = path.join(__dirname, '../../../public/uploads');
 
 function _numerosAutorizados() {
@@ -44,26 +46,31 @@ async function handleComprovanteDespesa(phone, mediaType, localUrl) {
     return;
   }
 
-  const fornecedor = await fornecedorMatcher.encontrarOuCriarFornecedor({ nome: dados.fornecedor, cnpj: dados.cnpj });
-  const sugestao = await classificador.classificarDespesa({
-    fornecedorId: fornecedor?.id || null,
-    nomeFornecedor: dados.fornecedor,
-    descricao: dados.descricao,
-  });
+  try {
+    const fornecedor = await fornecedorMatcher.encontrarOuCriarFornecedor({ nome: dados.fornecedor, cnpj: dados.cnpj });
+    const sugestao = await classificador.classificarDespesa({
+      fornecedorId: fornecedor?.id || null,
+      nomeFornecedor: dados.fornecedor,
+      descricao: dados.descricao,
+    });
 
-  await db.query('DELETE FROM despesas_pendentes_confirmacao WHERE telefone = $1', [phone]);
-  await db.query(
-    `INSERT INTO despesas_pendentes_confirmacao (telefone, fornecedor_id, valor, vencimento, descricao, tipo_despesa_id)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [phone, fornecedor?.id || null, dados.valor, dados.vencimento, dados.descricao, sugestao.tipo_despesa_id]
-  );
+    await db.query('DELETE FROM despesas_pendentes_confirmacao WHERE telefone = $1', [phone]);
+    await db.query(
+      `INSERT INTO despesas_pendentes_confirmacao (telefone, fornecedor_id, valor, vencimento, descricao, tipo_despesa_id)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [phone, fornecedor?.id || null, dados.valor, dados.vencimento, dados.descricao, sugestao.tipo_despesa_id]
+    );
 
-  const nomeTipo = await _tipoDespesaNome(sugestao.tipo_despesa_id);
-  const valorFmt = 'R$ ' + Number(dados.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  const vencFmt = format(new Date(`${dados.vencimento}T00:00:00`), 'dd/MM/yyyy');
-  await sendMessage(phone,
-    `📄 *Fornecedor:* ${dados.fornecedor}\n*Valor:* ${valorFmt}\n*Vencimento:* ${vencFmt}\n*Categoria sugerida:* ${nomeTipo}\n\nConfirma? Responda *sim* ou *não*.`
-  );
+    const nomeTipo = await _tipoDespesaNome(sugestao.tipo_despesa_id);
+    const valorFmt = 'R$ ' + Number(dados.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const vencFmt = format(new Date(`${dados.vencimento}T00:00:00`), 'dd/MM/yyyy');
+    await sendMessage(phone,
+      `📄 *Fornecedor:* ${dados.fornecedor}\n*Valor:* ${valorFmt}\n*Vencimento:* ${vencFmt}\n*Categoria sugerida:* ${nomeTipo}\n\nConfirma? Responda *sim* ou *não*.`
+    );
+  } catch (err) {
+    console.error('[CONTAS-PAGAR-WA] erro ao classificar/gravar pendência:', err.message);
+    await sendMessage(phone, 'Tive um problema ao processar esse comprovante. Tente de novo ou lance manualmente no painel.');
+  }
 }
 
 async function processarRespostaDespesaWA(phone, texto) {
@@ -74,8 +81,8 @@ async function processarRespostaDespesaWA(phone, texto) {
   if (!isSim && !isNao) return null;
 
   const r = await db.query(
-    `SELECT * FROM despesas_pendentes_confirmacao WHERE telefone = $1 AND criado_em > NOW() - INTERVAL '30 minutes'`,
-    [phone]
+    `SELECT * FROM despesas_pendentes_confirmacao WHERE telefone = $1 AND criado_em > NOW() - ($2 || ' minutes')::interval`,
+    [phone, JANELA_CONFIRMACAO_MINUTOS]
   );
   if (!r.rows.length) return null;
   const pendente = r.rows[0];
@@ -107,7 +114,10 @@ async function processarRespostaDespesaWA(phone, texto) {
 }
 
 async function limparPendentesExpirados() {
-  const r = await db.query(`DELETE FROM despesas_pendentes_confirmacao WHERE criado_em < NOW() - INTERVAL '30 minutes' RETURNING id`);
+  const r = await db.query(
+    `DELETE FROM despesas_pendentes_confirmacao WHERE criado_em < NOW() - ($1 || ' minutes')::interval RETURNING id`,
+    [JANELA_CONFIRMACAO_MINUTOS]
+  );
   return { removidos: r.rowCount };
 }
 

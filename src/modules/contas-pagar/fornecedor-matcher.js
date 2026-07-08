@@ -34,6 +34,20 @@ async function buscarPorNome(nome) {
 }
 
 async function criarFornecedor({ nome, cnpj }) {
+  if (cnpj) {
+    const digitos = soDigitos(cnpj);
+    const r = await db.query(
+      `INSERT INTO fornecedores (nome, cnpj, status) VALUES ($1,$2,'ativo')
+       ON CONFLICT (cnpj) WHERE cnpj IS NOT NULL DO NOTHING RETURNING *`,
+      [nome, cnpj]
+    );
+    if (r.rows[0]) return r.rows[0];
+    // Conflito: outra chamada concorrente já criou um fornecedor com esse CNPJ — busca e retorna.
+    const existente = await buscarPorCnpj(digitos);
+    if (existente) return existente;
+    // Não deveria chegar aqui (conflito sem achar por busca), mas evita retornar undefined.
+    throw new Error(`Falha ao criar ou localizar fornecedor com CNPJ ${digitos} após conflito de índice único`);
+  }
   const r = await db.query(
     `INSERT INTO fornecedores (nome, cnpj, status) VALUES ($1,$2,'ativo') RETURNING *`,
     [nome, cnpj || null]

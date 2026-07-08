@@ -42,6 +42,16 @@ describe('encontrarOuCriarFornecedor', () => {
     expect(db.query).toHaveBeenCalledTimes(3);
   });
 
+  test('colisão de CNPJ único (chamada concorrente já criou) → busca e retorna o existente', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // busca por CNPJ inicial
+      .mockResolvedValueOnce({ rows: [] }) // busca por nome
+      .mockResolvedValueOnce({ rows: [] }) // INSERT ... ON CONFLICT DO NOTHING → sem linha (colidiu)
+      .mockResolvedValueOnce({ rows: [{ id: 'uuid-concorrente', nome: 'Fornecedor Concorrente' }] }); // busca de novo por CNPJ, acha o que a outra chamada criou
+    const f = await encontrarOuCriarFornecedor({ nome: 'Fornecedor Concorrente', cnpj: '99.888.777/0001-66' });
+    expect(f.id).toBe('uuid-concorrente');
+  });
+
   test('sem nome e sem cnpj → null', async () => {
     const f = await encontrarOuCriarFornecedor({});
     expect(f).toBeNull();

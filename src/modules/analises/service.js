@@ -56,12 +56,15 @@ async function dre({ inicio, fim } = {}) {
        ) h ON true
        GROUP BY p.orcamento_id
      )
-     SELECT COALESCE(SUM(o.total),0) AS receita
+     SELECT o.numero, c.nome AS cliente, o.total,
+            to_char(e.ultima_entrega::date, 'DD/MM/YYYY') AS data_entrega
      FROM orcamentos o
      JOIN entregas e ON e.orcamento_id = o.id
-     WHERE e.total_os = e.os_entregues AND e.ultima_entrega::date BETWEEN $1 AND $2`,
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE e.total_os = e.os_entregues AND e.ultima_entrega::date BETWEEN $1 AND $2
+     ORDER BY e.ultima_entrega`,
     [inicio, fim]);
-  const receita_bruta = Number(recR.rows[0].receita);
+  const receita_bruta = recR.rows.reduce((s, r) => s + Number(r.total), 0);
 
   // Despesa por competência: conta assim que lançada/incorrida, esteja paga ou não.
   // Só exclui canceladas (nunca aconteceram de verdade).
@@ -99,8 +102,15 @@ async function dre({ inicio, fim } = {}) {
     return linhaBucket;
   }
 
+  const detalhamentoReceita = recR.rows.map(r => {
+    const valor = Number(r.total);
+    return { categoria: `#${r.numero} — ${r.cliente || 'Cliente não identificado'} (${r.data_entrega})`, valor, percentual: pct(valor) };
+  });
+
   const linhas = [];
-  linhas.push({ id: 'receita_bruta', label: 'Receita Bruta de Vendas', valor: receita_bruta, percentual: pct(receita_bruta), tipo: 'base' });
+  const receitaBrutaLinha = { id: 'receita_bruta', label: 'Receita Bruta de Vendas', valor: receita_bruta, percentual: pct(receita_bruta), tipo: 'base' };
+  if (detalhamentoReceita.length) receitaBrutaLinha.detalhamento = detalhamentoReceita;
+  linhas.push(receitaBrutaLinha);
 
   const deducoesVendas = bucketPorId('deducoes_vendas');
   linhas.push(deducoesVendas);

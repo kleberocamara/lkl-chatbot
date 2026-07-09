@@ -10,7 +10,7 @@ describe('dre — receita pela última entrega do pedido', () => {
 
   test('usa a query de entregas (não mais pago_em de orçamentos)', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 5000 }] })
+      .mockResolvedValueOnce({ rows: [{ numero: 42, cliente: 'Cliente Teste', total: 5000, data_entrega: '15/08/2026' }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -29,7 +29,7 @@ describe('dre — despesas por competência', () => {
 
   test('despesa pendente (não paga) dentro da competência do período conta', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ categoria: 'CUSTOS DE PRODUÇÃO (CPV)', valor: 900 }] });
 
     const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -47,7 +47,10 @@ describe('dre — cascata completa', () => {
 
   test('cada subtotal soma corretamente a partir das linhas de dedução', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 10000 }] })
+      .mockResolvedValueOnce({ rows: [
+        { numero: 1, cliente: 'Cliente A', total: 6000, data_entrega: '10/08/2026' },
+        { numero: 2, cliente: 'Cliente B', total: 4000, data_entrega: '20/08/2026' },
+      ] })
       .mockResolvedValueOnce({ rows: [
         { categoria: 'DEDUÇÕES DE VENDAS', valor: 600 },
         { categoria: 'CUSTOS DE PRODUÇÃO (CPV)', valor: 3000 },
@@ -79,7 +82,7 @@ describe('dre — cascata completa', () => {
 
   test('linha com detalhamento traz cada categoria; linha sem lançamento fica sem detalhamento', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 10000 }] })
+      .mockResolvedValueOnce({ rows: [{ numero: 1, cliente: 'Cliente A', total: 10000, data_entrega: '10/08/2026' }] })
       .mockResolvedValueOnce({ rows: [
         { categoria: 'MÃO DE OBRA DIRETA (MOD)', valor: 1200 },
       ] });
@@ -99,7 +102,7 @@ describe('dre — cascata completa', () => {
 
   test('receita_bruta = 0 → todos os percentuais retornam 0, sem erro de divisão', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ categoria: 'CUSTOS DE PRODUÇÃO (CPV)', valor: 500 }] });
 
     const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -111,7 +114,7 @@ describe('dre — cascata completa', () => {
 
   test('período sem nenhuma despesa → todas as linhas de dedução ficam com valor 0, sem detalhamento', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 5000 }] })
+      .mockResolvedValueOnce({ rows: [{ numero: 1, cliente: 'Cliente A', total: 5000, data_entrega: '10/08/2026' }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -126,7 +129,7 @@ describe('dre — cascata completa', () => {
   test('categoria_dre sem bucket mapeado → gera warning no console, não trava nem some silenciosamente do total', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 10000 }] })
+      .mockResolvedValueOnce({ rows: [{ numero: 1, cliente: 'Cliente A', total: 10000, data_entrega: '10/08/2026' }] })
       .mockResolvedValueOnce({ rows: [
         { categoria: 'CUSTOS DE PRODUÇÃO (CPV)', valor: 1000 },
         { categoria: 'CATEGORIA_INEXISTENTE_NO_MAPEAMENTO', valor: 500 },
@@ -141,7 +144,7 @@ describe('dre — cascata completa', () => {
 
   test('SQL da receita considera vínculo indireto via os_itens/orcamento_itens (OS offset/revenda)', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -153,7 +156,7 @@ describe('dre — cascata completa', () => {
 
   test('SQL da receita exclui OS canceladas da contagem de "totalmente entregue"', async () => {
     db.query
-      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
@@ -161,5 +164,51 @@ describe('dre — cascata completa', () => {
     const receitaSql = db.query.mock.calls[0][0];
     const ocorrencias = receitaSql.match(/status != 'cancelado'/g) || [];
     expect(ocorrencias).toHaveLength(2);
+  });
+});
+
+describe('dre — detalhamento da Receita Bruta de Vendas', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  test('cada orçamento entregue no período aparece no detalhamento com número, cliente, valor e data', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [
+        { numero: 37, cliente: 'Kleber de Oliveira Camara', total: 663, data_entrega: '04/07/2026' },
+        { numero: 30, cliente: 'Kleber de Oliveira Câmara', total: 1030, data_entrega: '06/07/2026' },
+        { numero: 31, cliente: 'Cliente Evolution', total: 1500, data_entrega: '06/07/2026' },
+      ] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const r = await dre({ inicio: '2026-07-01', fim: '2026-07-31' });
+
+    const receitaBruta = linha(r, 'receita_bruta');
+    expect(receitaBruta.valor).toBe(3193);
+    expect(receitaBruta.detalhamento).toEqual([
+      { categoria: '#37 — Kleber de Oliveira Camara (04/07/2026)', valor: 663, percentual: expect.any(Number) },
+      { categoria: '#30 — Kleber de Oliveira Câmara (06/07/2026)', valor: 1030, percentual: expect.any(Number) },
+      { categoria: '#31 — Cliente Evolution (06/07/2026)', valor: 1500, percentual: expect.any(Number) },
+    ]);
+  });
+
+  test('orçamento sem cliente vinculado usa rótulo padrão', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ numero: 5, cliente: null, total: 200, data_entrega: '01/08/2026' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
+
+    expect(linha(r, 'receita_bruta').detalhamento[0].categoria).toBe('#5 — Cliente não identificado (01/08/2026)');
+  });
+
+  test('sem nenhum orçamento entregue no período → receita_bruta aparece com valor 0 e sem detalhamento', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
+
+    const receitaBruta = linha(r, 'receita_bruta');
+    expect(receitaBruta.valor).toBe(0);
+    expect(receitaBruta.detalhamento).toBeUndefined();
   });
 });

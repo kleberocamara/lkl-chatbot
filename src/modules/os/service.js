@@ -196,7 +196,12 @@ async function listar({ page = 1, limit = 20, status, orcamento_id } = {}) {
   let where = 'WHERE 1=1';
 
   if (status) { params.push(status); where += ` AND os.status = $${params.length}`; }
-  if (orcamento_id) { params.push(orcamento_id); where += ` AND os.orcamento_id = $${params.length}`; }
+  if (orcamento_id) {
+    params.push(orcamento_id);
+    where += ` AND (os.orcamento_id = $${params.length} OR os.id IN (
+      SELECT oit.os_id FROM os_itens oit JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id WHERE oi.orcamento_id = $${params.length}
+    ))`;
+  }
 
   const [rows, count] = await Promise.all([
     db.query(

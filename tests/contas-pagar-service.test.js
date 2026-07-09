@@ -77,6 +77,72 @@ describe('criarOuReconciliarContaPagar', () => {
 
     expect(r.id).toBe(40);
   });
+
+  test('com competencia e zero correspondências → INSERT inclui a coluna competencia', async () => {
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('SELECT * FROM contas_pagar')) return Promise.resolve({ rows: [] });
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        expect(sql).toContain('competencia');
+        expect(params).toContain('2026-05-27');
+        return Promise.resolve({ rows: [{ id: 50 }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarOuReconciliarContaPagar({
+      fornecedorId: 'uuid-5', fornecedorNome: 'Konita', descricao: 'NF Konita',
+      valor: 817.84, vencimento: '2026-06-29', tipoDespesaId: 2, tipoEntrada: 'whatsapp_ocr',
+      competencia: '2026-05-27',
+    });
+
+    expect(r.id).toBe(50);
+  });
+
+  test('com competencia e 1 correspondência (match) → UPDATE inclui a coluna competencia', async () => {
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('SELECT * FROM contas_pagar')) {
+        return Promise.resolve({ rows: [{ id: 60, tipo_despesa_id: 2 }] });
+      }
+      if (sql.startsWith('UPDATE contas_pagar')) {
+        expect(sql).toContain('competencia');
+        expect(params).toContain('2026-05-27');
+        return Promise.resolve({ rows: [{ id: 60 }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarOuReconciliarContaPagar({
+      fornecedorId: 'uuid-6', valor: 817.84, vencimento: '2026-06-29',
+      tipoDespesaId: 2, tipoEntrada: 'whatsapp_ocr', competencia: '2026-05-27',
+    });
+
+    expect(r.id).toBe(60);
+  });
+
+  test('sem competencia → INSERT não inclui a coluna (banco usa DEFAULT)', async () => {
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('SELECT * FROM contas_pagar')) return Promise.resolve({ rows: [] });
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        expect(sql).not.toContain('competencia');
+        return Promise.resolve({ rows: [{ id: 70 }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    await service.criarOuReconciliarContaPagar({
+      fornecedorId: 'uuid-7', valor: 100, vencimento: '2026-08-01',
+      tipoDespesaId: 1, tipoEntrada: 'manual',
+    });
+  });
 });
 
 describe('sincronizarDDA', () => {

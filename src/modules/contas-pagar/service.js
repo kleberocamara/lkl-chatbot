@@ -535,7 +535,7 @@ async function gravarMemoriaFornecedor(fornecedorId, tipoDespesaId) {
 // conta pendente do mesmo fornecedor com o mesmo valor (sem linha digitável ainda),
 // mescla nela em vez de criar uma nova. Zero ou 2+ candidatas → cria nova (mais seguro
 // que arriscar mesclar errado).
-async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo }) {
+async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo, competencia }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -568,6 +568,7 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
       if (linhaDigitavel) { params.push(linhaDigitavel); sets.push(`linha_digitavel = $${params.length}`); }
       if (vencimento)     { params.push(vencimento);     sets.push(`vencimento = $${params.length}`); }
       if (tipo)           { params.push(tipo);           sets.push(`tipo = $${params.length}`); }
+      if (competencia)    { params.push(competencia);    sets.push(`competencia = $${params.length}`); }
       if (!match.tipo_despesa_id && tipoFinal) {
         params.push(tipoFinal); sets.push(`tipo_despesa_id = $${params.length}`);
         sets.push(`status = 'pendente'`);
@@ -577,14 +578,14 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
       conta = r.rows[0];
     } else {
       const status = tipoFinal ? 'pendente' : 'pendente_classificacao';
+      const colunas = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo','linha_digitavel','tipo_entrada','status'];
+      const valores = [descricao, fornecedorNome || null, fornecedorId || null, tipoFinal, valor,
+                        vencimento, tipo || 'boleto', linhaDigitavel || null, tipoEntrada, status];
+      if (competencia) { colunas.push('competencia'); valores.push(competencia); }
+      const placeholders = valores.map((_, i) => `$${i + 1}`).join(',');
       const r = await client.query(
-        `INSERT INTO contas_pagar
-           (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
-            linha_digitavel, tipo_entrada, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-         RETURNING *`,
-        [descricao, fornecedorNome || null, fornecedorId || null, tipoFinal, valor,
-         vencimento, tipo || 'boleto', linhaDigitavel || null, tipoEntrada, status]
+        `INSERT INTO contas_pagar (${colunas.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+        valores
       );
       conta = r.rows[0];
     }

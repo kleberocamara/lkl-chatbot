@@ -153,38 +153,52 @@ router.post('/conversations/:id/reply', requireAuthApi, async (req, res) => {
 // Analista responde ao cliente com anexo (imagem ou documento)
 router.post('/conversations/:id/reply-media', requireAuthApi, uploadResposta.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  const fs = require('fs');
+  const limparArquivoOrfao = () => fs.unlink(req.file.path, () => {});
 
-  const conv = await db.query(
-    `SELECT c.*, ct.phone FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
-    [req.params.id]
-  );
-  if (!conv.rows[0]) return res.status(404).json({ error: 'Conversa não encontrada' });
+  try {
+    const conv = await db.query(
+      `SELECT c.*, ct.phone FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
+      [req.params.id]
+    );
+    if (!conv.rows[0]) {
+      limparArquivoOrfao();
+      return res.status(404).json({ error: 'Conversa não encontrada' });
+    }
 
-  const { phone, id: convId, contact_id } = conv.rows[0];
-  const legenda = (req.body.legenda || '').trim();
-  const publicUrl = `${process.env.BASE_URL}/uploads/respostas/${req.file.filename}`;
-  const isImagem = req.file.mimetype.startsWith('image/');
-  const tipo = isImagem ? 'imagem' : 'documento';
+    const { phone, id: convId, contact_id } = conv.rows[0];
+    const legenda = (req.body.legenda || '').trim();
+    const publicUrl = `${process.env.BASE_URL}/uploads/respostas/${req.file.filename}`;
+    const isImagem = req.file.mimetype.startsWith('image/');
+    const tipo = isImagem ? 'imagem' : 'documento';
 
-  if (isImagem) {
-    await sendImage(phone, publicUrl, legenda);
-  } else {
-    await sendDocument(phone, publicUrl, req.file.originalname, legenda);
+    // Só grava a mensagem/loga/notifica DEPOIS de confirmar que o WhatsApp aceitou o
+    // envio — evita registrar uma mensagem "enviada" que na verdade falhou, e evita
+    // deixar o arquivo órfão em disco sem nenhum registro correspondente.
+    if (isImagem) {
+      await sendImage(phone, publicUrl, legenda);
+    } else {
+      await sendDocument(phone, publicUrl, req.file.originalname, legenda);
+    }
+
+    const content = `[${tipo} recebido: ${publicUrl} | ${legenda || req.file.originalname}]`;
+    await db.query(
+      `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by, sent_by_name) VALUES ($1, $2, $3, 'outbound', 'human', $4)`,
+      [convId, contact_id, content, req.user.name]
+    );
+    await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
+    await log('human_reply', `${req.user.name} enviou um ${tipo} em ${convId}`, {
+      conversationId: convId, userId: req.user.id,
+      metadata: { tipo, filename: req.file.originalname },
+    });
+
+    if (global.io) global.io.emit('human_reply', { conversationId: convId, message: content, sent_by_name: req.user.name });
+    res.json({ ok: true });
+  } catch (err) {
+    limparArquivoOrfao();
+    console.error('[REPLY-MEDIA]', err.message);
+    res.status(500).json({ error: 'Erro ao enviar anexo' });
   }
-
-  const content = `[${tipo} recebido: ${publicUrl} | ${legenda || req.file.originalname}]`;
-  await db.query(
-    `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by, sent_by_name) VALUES ($1, $2, $3, 'outbound', 'human', $4)`,
-    [convId, contact_id, content, req.user.name]
-  );
-  await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
-  await log('human_reply', `${req.user.name} enviou um ${tipo} em ${convId}`, {
-    conversationId: convId, userId: req.user.id,
-    metadata: { tipo, filename: req.file.originalname },
-  });
-
-  if (global.io) global.io.emit('human_reply', { conversationId: convId, message: content, sent_by_name: req.user.name });
-  res.json({ ok: true });
 });
 
 // Marca orçamento como enviado e agenda follow-ups

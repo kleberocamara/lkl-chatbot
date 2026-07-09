@@ -131,7 +131,7 @@ async function processarRespostaDespesaWA(phone, texto) {
       tipo: 'boleto',
     });
   } else {
-    await service.criarParcelado({
+    const resultado = await service.criarParcelado({
       descricao: pendente.descricao,
       fornecedor: fornecedorNome,
       fornecedor_id: pendente.fornecedor_id,
@@ -140,6 +140,10 @@ async function processarRespostaDespesaWA(phone, texto) {
       tipo: 'boleto',
       parcelas,
     });
+    if (resultado.erro) {
+      console.error('[CONTAS-PAGAR-WA] erro ao criar parcelado:', resultado.erro.join('; '));
+      return { mensagem: 'Não consegui lançar essas parcelas, lance manualmente no painel financeiro.' };
+    }
   }
 
   return { mensagem: '✅ Lançado.' };

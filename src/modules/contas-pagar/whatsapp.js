@@ -46,6 +46,11 @@ async function handleComprovanteDespesa(phone, mediaType, localUrl) {
     return;
   }
 
+  if (fornecedorMatcher.ehCnpjProprio(dados.cnpj)) {
+    await sendMessage(phone, 'Não consegui identificar o fornecedor corretamente (os dados encontrados parecem ser da nossa própria empresa, não do fornecedor). Lance manualmente no painel financeiro.');
+    return;
+  }
+
   try {
     const fornecedor = await fornecedorMatcher.encontrarOuCriarFornecedor({ nome: dados.fornecedor, cnpj: dados.cnpj });
     const sugestao = await classificador.classificarDespesa({
@@ -56,16 +61,29 @@ async function handleComprovanteDespesa(phone, mediaType, localUrl) {
 
     await db.query('DELETE FROM despesas_pendentes_confirmacao WHERE telefone = $1', [phone]);
     await db.query(
-      `INSERT INTO despesas_pendentes_confirmacao (telefone, fornecedor_id, valor, vencimento, descricao, tipo_despesa_id)
+      `INSERT INTO despesas_pendentes_confirmacao (telefone, fornecedor_id, parcelas, data_entrega, descricao, tipo_despesa_id)
        VALUES ($1,$2,$3,$4,$5,$6)`,
-      [phone, fornecedor?.id || null, dados.valor, dados.vencimento, dados.descricao, sugestao.tipo_despesa_id]
+      [phone, fornecedor?.id || null, JSON.stringify(dados.parcelas), dados.data_entrega, dados.descricao, sugestao.tipo_despesa_id]
     );
 
     const nomeTipo = await _tipoDespesaNome(sugestao.tipo_despesa_id);
-    const valorFmt = 'R$ ' + Number(dados.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-    const vencFmt = format(new Date(`${dados.vencimento}T00:00:00`), 'dd/MM/yyyy');
+    const dataEntregaFmt = format(new Date(`${dados.data_entrega}T00:00:00`), 'dd/MM/yyyy');
+    const fmtValor = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+    let linhasParcelas;
+    if (dados.parcelas.length === 1) {
+      const p = dados.parcelas[0];
+      const vencFmt = format(new Date(`${p.vencimento}T00:00:00`), 'dd/MM/yyyy');
+      linhasParcelas = `*Valor:* ${fmtValor(p.valor)}\n*Vencimento:* ${vencFmt}`;
+    } else {
+      linhasParcelas = dados.parcelas.map((p, i) => {
+        const vencFmt = format(new Date(`${p.vencimento}T00:00:00`), 'dd/MM/yyyy');
+        return `${i + 1}ª parcela: ${fmtValor(p.valor)} — vence ${vencFmt}`;
+      }).join('\n');
+    }
+
     await sendMessage(phone,
-      `📄 *Fornecedor:* ${dados.fornecedor}\n*Valor:* ${valorFmt}\n*Vencimento:* ${vencFmt}\n*Categoria sugerida:* ${nomeTipo}\n\nConfirma? Responda *sim* ou *não*.`
+      `📄 *Fornecedor:* ${dados.fornecedor}\n*Data de entrega:* ${dataEntregaFmt}\n*Categoria sugerida:* ${nomeTipo}\n\n${linhasParcelas}\n\nConfirma? Responda *sim* ou *não*.`
     );
   } catch (err) {
     console.error('[CONTAS-PAGAR-WA] erro ao classificar/gravar pendência:', err.message);
@@ -99,16 +117,30 @@ async function processarRespostaDespesaWA(phone, texto) {
     fornecedorNome = f.rows[0]?.nome || null;
   }
 
-  await service.criarOuReconciliarContaPagar({
-    fornecedorId: pendente.fornecedor_id,
-    fornecedorNome,
-    descricao: pendente.descricao,
-    valor: pendente.valor,
-    vencimento: pendente.vencimento,
-    tipoDespesaId: pendente.tipo_despesa_id,
-    tipoEntrada: 'whatsapp_ocr',
-    tipo: 'boleto',
-  });
+  const parcelas = pendente.parcelas;
+  if (parcelas.length === 1) {
+    await service.criarOuReconciliarContaPagar({
+      fornecedorId: pendente.fornecedor_id,
+      fornecedorNome,
+      descricao: pendente.descricao,
+      valor: parcelas[0].valor,
+      vencimento: parcelas[0].vencimento,
+      competencia: pendente.data_entrega,
+      tipoDespesaId: pendente.tipo_despesa_id,
+      tipoEntrada: 'whatsapp_ocr',
+      tipo: 'boleto',
+    });
+  } else {
+    await service.criarParcelado({
+      descricao: pendente.descricao,
+      fornecedor: fornecedorNome,
+      fornecedor_id: pendente.fornecedor_id,
+      tipo_despesa_id: pendente.tipo_despesa_id,
+      competencia: pendente.data_entrega,
+      tipo: 'boleto',
+      parcelas,
+    });
+  }
 
   return { mensagem: '✅ Lançado.' };
 }

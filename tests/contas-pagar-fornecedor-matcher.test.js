@@ -1,7 +1,7 @@
 const db = require('../src/db');
 jest.mock('../src/db', () => ({ query: jest.fn() }));
 
-const { normalizarNome, soDigitos, encontrarOuCriarFornecedor } = require('../src/modules/contas-pagar/fornecedor-matcher');
+const { normalizarNome, soDigitos, encontrarOuCriarFornecedor, ehCnpjProprio } = require('../src/modules/contas-pagar/fornecedor-matcher');
 
 describe('normalizarNome', () => {
   test('maiusculas, sem acento, sem pontuação', () => {
@@ -56,5 +56,37 @@ describe('encontrarOuCriarFornecedor', () => {
     const f = await encontrarOuCriarFornecedor({});
     expect(f).toBeNull();
     expect(db.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('ehCnpjProprio', () => {
+  const ORIGINAL_ENV = process.env.EMPRESA_CNPJS;
+  afterEach(() => { process.env.EMPRESA_CNPJS = ORIGINAL_ENV; });
+
+  test('CNPJ com máscara bate um dos CNPJs próprios (com máscara na env)', () => {
+    process.env.EMPRESA_CNPJS = '19.296.723/0001-08,44.448.899/0001-85';
+    expect(ehCnpjProprio('19296723000108')).toBe(true);
+    expect(ehCnpjProprio('19.296.723/0001-08')).toBe(true);
+  });
+
+  test('CNPJ com máscara bate um dos CNPJs próprios (sem máscara na env)', () => {
+    process.env.EMPRESA_CNPJS = '19296723000108,44448899000185';
+    expect(ehCnpjProprio('19.296.723/0001-08')).toBe(true);
+  });
+
+  test('CNPJ de terceiro não bate', () => {
+    process.env.EMPRESA_CNPJS = '19.296.723/0001-08,44.448.899/0001-85';
+    expect(ehCnpjProprio('05.624.693/0001-07')).toBe(false);
+  });
+
+  test('EMPRESA_CNPJS vazio/ausente não quebra, retorna false', () => {
+    delete process.env.EMPRESA_CNPJS;
+    expect(ehCnpjProprio('19.296.723/0001-08')).toBe(false);
+  });
+
+  test('cnpj nulo/vazio → false', () => {
+    process.env.EMPRESA_CNPJS = '19.296.723/0001-08';
+    expect(ehCnpjProprio(null)).toBe(false);
+    expect(ehCnpjProprio('')).toBe(false);
   });
 });

@@ -13,6 +13,13 @@ function soDigitos(s) {
   return String(s || '').replace(/\D/g, '');
 }
 
+function ehCnpjProprio(cnpj) {
+  const digitos = soDigitos(cnpj);
+  if (!digitos) return false;
+  const proprios = String(process.env.EMPRESA_CNPJS || '').split(',').map(soDigitos).filter(Boolean);
+  return proprios.includes(digitos);
+}
+
 async function buscarPorCnpj(cnpj) {
   const digitos = soDigitos(cnpj);
   if (!digitos) return null;
@@ -72,6 +79,7 @@ async function encontrarOuCriarFornecedor({ nome, cnpj }) {
 module.exports = {
   normalizarNome,
   soDigitos,
+  ehCnpjProprio,
   buscarPorCnpj,
   buscarPorNome,
   criarFornecedor,

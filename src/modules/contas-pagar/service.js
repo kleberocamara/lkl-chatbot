@@ -174,8 +174,8 @@ async function criarRecorrente({ descricao, fornecedor, fornecedor_id, tipo_desp
 }
 
 async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, competencia, tipo, observacao, parcelas }) {
-  if (!descricao || !tipo_despesa_id || !Array.isArray(parcelas) || parcelas.length < 2) {
-    return { erro: ['descricao, tipo_despesa_id e parcelas (mínimo 2 itens) são obrigatórios'] };
+  if (!descricao || !Array.isArray(parcelas) || parcelas.length < 2) {
+    return { erro: ['descricao e parcelas (mínimo 2 itens) são obrigatórios'] };
   }
   for (let i = 0; i < parcelas.length; i++) {
     const p = parcelas[i];
@@ -187,6 +187,8 @@ async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despe
   const parcelaGrupoId = crypto.randomUUID();
   const competenciaFinal = competencia || format(new Date(), 'yyyy-MM-dd');
 
+  const statusInicial = tipo_despesa_id ? 'pendente' : 'pendente_classificacao';
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -197,11 +199,11 @@ async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despe
         `INSERT INTO contas_pagar
            (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel,
             competencia, parcela_grupo_id, parcela_numero, parcela_total, tipo_entrada, status, observacao)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual','pendente',$13)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$14)
          RETURNING *`,
-        [`${descricao} (${i + 1}/${parcelas.length})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id,
+        [`${descricao} (${i + 1}/${parcelas.length})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id || null,
          p.valor, p.vencimento, tipo || 'boleto', p.linha_digitavel || null,
-         competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, observacao || null]
+         competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, statusInicial, observacao || null]
       );
       criadas.push(r.rows[0]);
     }

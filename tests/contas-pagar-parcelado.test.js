@@ -118,6 +118,37 @@ describe('criarParcelado', () => {
 
     expect(linhasInseridas[0][8]).toBe(hoje);
   });
+
+  test('sem tipo_despesa_id (classificador não identificou) → cria mesmo assim com status pendente_classificacao', async () => {
+    const linhasInseridas = [];
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        linhasInseridas.push(params);
+        return Promise.resolve({ rows: [{ id: linhasInseridas.length }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarParcelado({
+      descricao: 'Nota NF-e via WhatsApp', fornecedor: 'Fornecedor X', fornecedor_id: null,
+      tipo_despesa_id: null,
+      parcelas: [
+        { vencimento: '2026-08-10', valor: 500 },
+        { vencimento: '2026-09-10', valor: 500 },
+      ],
+    });
+
+    expect(r.erro).toBeUndefined();
+    expect(r.criadas).toHaveLength(2);
+    expect(linhasInseridas).toHaveLength(2);
+    // params: [1]descricao [2]fornecedor [3]fornecedor_id [4]tipo_despesa_id ... status deve ser 'pendente_classificacao'
+    linhasInseridas.forEach(params => {
+      expect(params).toContain('pendente_classificacao');
+    });
+  });
 });
 
 describe('converterEmParcelado', () => {

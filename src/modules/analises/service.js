@@ -10,6 +10,15 @@ function _mesCorrente() {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+const CASCATA_DEDUCOES = [
+  { id: 'deducoes_vendas', label: 'Deduções de Vendas', categorias: ['DEDUÇÕES DE VENDAS'] },
+  { id: 'cpv', label: 'Custos de Produção (CPV)', categorias: ['CUSTOS DE PRODUÇÃO (CPV)'] },
+  { id: 'despesas_comerciais', label: 'Deduções e Despesas Comerciais', categorias: ['DEDUÇÕES E DESPESAS COMERCIAIS'] },
+  { id: 'custos_fixos_producao', label: 'Custos Fixos de Produção', categorias: ['MÃO DE OBRA DIRETA (MOD)', 'CUSTOS OPERACIONAIS DA FÁBRICA'] },
+  { id: 'despesas_operacionais', label: 'Despesas Operacionais', categorias: ['OCUPAÇÃO E INFRAESTRUTURA', 'PESSOAL E ADMINISTRAÇÃO', 'SERVIÇOS PROFISSIONAIS', 'SEGUROS', 'LOGÍSTICA E DESLOCAMENTO', 'VIAGENS E REPRESENTAÇÃO', 'OUTROS'] },
+  { id: 'resultado_financeiro', label: 'Resultado Financeiro', categorias: ['DESPESAS FINANCEIRAS'] },
+];
+
 async function dre({ inicio, fim } = {}) {
   if (!inicio || !fim) { const m = _mesCorrente(); inicio = inicio || m.inicio; fim = fim || m.fim; }
   if (!DATE_RE.test(inicio) || !DATE_RE.test(fim)) return { erro: ['Datas inválidas (use YYYY-MM-DD)'] };
@@ -34,7 +43,7 @@ async function dre({ inicio, fim } = {}) {
      JOIN entregas e ON e.orcamento_id = o.id
      WHERE e.total_os = e.os_entregues AND e.ultima_entrega::date BETWEEN $1 AND $2`,
     [inicio, fim]);
-  const receita = Number(recR.rows[0].receita);
+  const receita_bruta = Number(recR.rows[0].receita);
 
   // Despesa por competência: conta assim que lançada/incorrida, esteja paga ou não.
   // Só exclui canceladas (nunca aconteceram de verdade).
@@ -43,15 +52,58 @@ async function dre({ inicio, fim } = {}) {
      FROM contas_pagar cp
      JOIN tipos_despesa td ON td.id = cp.tipo_despesa_id
      WHERE cp.status != 'cancelado' AND cp.competencia BETWEEN $1 AND $2
-     GROUP BY td.categoria_dre ORDER BY valor DESC`,
+     GROUP BY td.categoria_dre`,
     [inicio, fim]);
-  const despesas = despR.rows.map(r => ({ categoria: r.categoria, valor: Number(r.valor) }));
-  const total_despesas = despesas.reduce((s, d) => s + d.valor, 0);
+  const porCategoria = {};
+  for (const r of despR.rows) porCategoria[r.categoria] = Number(r.valor);
 
-  const resultado = receita - total_despesas;
-  const margem = receita > 0 ? resultado / receita : 0;
+  const pct = v => receita_bruta > 0 ? Math.round((v / receita_bruta) * 1000) / 10 : 0;
 
-  return { periodo: { inicio, fim }, receita, despesas, total_despesas, resultado, margem };
+  function bucket({ id, label, categorias }) {
+    const detalhamento = categorias
+      .filter(c => porCategoria[c])
+      .map(c => ({ categoria: c, valor: -porCategoria[c], percentual: pct(-porCategoria[c]) }));
+    const soma = categorias.reduce((s, c) => s + (porCategoria[c] || 0), 0);
+    const valor = soma === 0 ? 0 : -soma;
+    const linhaBucket = { id, label, valor, percentual: pct(valor), tipo: 'deducao' };
+    if (detalhamento.length) linhaBucket.detalhamento = detalhamento;
+    return linhaBucket;
+  }
+
+  const linhas = [];
+  linhas.push({ id: 'receita_bruta', label: 'Receita Bruta de Vendas', valor: receita_bruta, percentual: pct(receita_bruta), tipo: 'base' });
+
+  const deducoesVendas = bucket(CASCATA_DEDUCOES[0]);
+  linhas.push(deducoesVendas);
+  const receita_liquida = receita_bruta + deducoesVendas.valor;
+  linhas.push({ id: 'receita_liquida', label: 'Receita Líquida de Vendas', valor: receita_liquida, percentual: pct(receita_liquida), tipo: 'subtotal' });
+
+  const cpv = bucket(CASCATA_DEDUCOES[1]);
+  const despesasComerciais = bucket(CASCATA_DEDUCOES[2]);
+  linhas.push(cpv, despesasComerciais);
+  const margem_contribuicao = receita_liquida + cpv.valor + despesasComerciais.valor;
+  linhas.push({ id: 'margem_contribuicao', label: 'Margem de Contribuição Bruta', valor: margem_contribuicao, percentual: pct(margem_contribuicao), tipo: 'subtotal' });
+
+  const custosFixosProducao = bucket(CASCATA_DEDUCOES[3]);
+  linhas.push(custosFixosProducao);
+  const lucro_bruto = margem_contribuicao + custosFixosProducao.valor;
+  linhas.push({ id: 'lucro_bruto', label: 'Lucro Bruto', valor: lucro_bruto, percentual: pct(lucro_bruto), tipo: 'subtotal' });
+
+  const despesasOperacionais = bucket(CASCATA_DEDUCOES[4]);
+  linhas.push(despesasOperacionais);
+  const ebitda = lucro_bruto + despesasOperacionais.valor;
+  linhas.push({ id: 'ebitda', label: 'EBITDA / LAJIDA', valor: ebitda, percentual: pct(ebitda), tipo: 'subtotal' });
+
+  const resultadoFinanceiro = bucket(CASCATA_DEDUCOES[5]);
+  linhas.push(resultadoFinanceiro);
+  linhas.push({ id: 'impostos_lucro', label: 'Impostos sobre o Lucro', valor: 0, percentual: 0, tipo: 'deducao' });
+
+  const lucro_liquido = ebitda + resultadoFinanceiro.valor;
+  linhas.push({ id: 'lucro_liquido', label: 'Lucro Líquido do Período', valor: lucro_liquido, percentual: pct(lucro_liquido), tipo: 'final' });
+
+  const margem_liquida = receita_liquida > 0 ? lucro_liquido / receita_liquida : 0;
+
+  return { periodo: { inicio, fim }, linhas, margem_liquida };
 }
 
 async function fluxoCaixa({ dias } = {}) {
@@ -155,15 +207,20 @@ async function gerarInsight() {
   const m = await metaMes({});
   const periodo = `${d.periodo.inicio.slice(0, 7)}`;
 
-  const desp = d.despesas.map(x => `  - ${x.categoria}: ${_brl(x.valor)}`).join('\n') || '  (sem despesas)';
+  const receitaBruta = d.linhas.find(l => l.id === 'receita_bruta').valor;
+  const lucroLiquido = d.linhas.find(l => l.id === 'lucro_liquido').valor;
+  const linhasDeducao = d.linhas.filter(l => l.tipo === 'deducao' && l.valor !== 0);
+  const totalDespesas = -linhasDeducao.reduce((s, l) => s + l.valor, 0);
+  const desp = linhasDeducao.map(x => `  - ${x.label}: ${_brl(-x.valor)}`).join('\n') || '  (sem despesas)';
+
   const user =
 `Dados financeiros da Gráfica LKL (mês ${periodo}):
 
 DRE (regime de competência):
-- Receita recebida: ${_brl(d.receita)}
-- Despesas pagas: ${_brl(d.total_despesas)}
+- Receita bruta: ${_brl(receitaBruta)}
+- Despesas totais: ${_brl(totalDespesas)}
 ${desp}
-- Resultado: ${_brl(d.resultado)} (margem ${(d.margem * 100).toFixed(1)}%)
+- Lucro líquido: ${_brl(lucroLiquido)} (margem ${(d.margem_liquida * 100).toFixed(1)}%)
 
 Metas:
 - Meta do mês: ${m.meta != null ? _brl(m.meta) : 'não definida'}

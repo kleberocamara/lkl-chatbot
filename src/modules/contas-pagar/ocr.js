@@ -26,14 +26,13 @@ function _cnpjsProprios() {
 
 function _prompt() {
   const cnpjs = _cnpjsProprios();
-  const cnpj1 = cnpjs[0] || '(não configurado)';
-  const cnpj2 = cnpjs[1] || '(não configurado)';
+  const listaCnpjs = cnpjs.length ? cnpjs.join(', ') : '(não configurado)';
   return `Você recebe a foto ou PDF de um boleto ou nota fiscal de compra de uma gráfica (DANFE/NF-e).
 
 IMPORTANTE — identificação do fornecedor:
 - O FORNECEDOR é sempre o EMITENTE/REMETENTE da nota (quem vendeu/prestou o serviço) — geralmente no topo do documento, perto do CNPJ do emitente.
 - O DESTINATÁRIO (para quem a nota foi emitida) NUNCA é o fornecedor — é o cliente que recebeu a mercadoria.
-- Os CNPJs ${cnpj1} e ${cnpj2} são da nossa própria empresa (destinatária). Se o CNPJ que você está prestes a extrair como "fornecedor" for um desses, você pegou o bloco errado — procure o CNPJ do emitente, não o do destinatário.
+- Os CNPJs ${listaCnpjs} são da nossa própria empresa (destinatária). Se o CNPJ que você está prestes a extrair como "fornecedor" for um desses, você pegou o bloco errado — procure o CNPJ do emitente, não o do destinatário.
 
 IMPORTANTE — parcelas:
 - Se a nota mostrar mais de um vencimento/boleto (ex: "PARCELADO", "BOL=001", "BOL=002", duplicatas), extraia CADA parcela separadamente no array "parcelas" — nunca escolha só uma.
@@ -53,7 +52,9 @@ function _validarDadosExtraidos(dados) {
   const parcelas = [];
   for (const p of dados.parcelas) {
     if (!p || p.valor == null || !p.vencimento) return null;
-    parcelas.push({ valor: Number(p.valor), vencimento: p.vencimento });
+    const valorNum = Number(p.valor);
+    if (!Number.isFinite(valorNum)) return null;
+    parcelas.push({ valor: valorNum, vencimento: p.vencimento });
   }
   return {
     fornecedor: dados.fornecedor,

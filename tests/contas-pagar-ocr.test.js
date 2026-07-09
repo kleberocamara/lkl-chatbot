@@ -99,4 +99,9 @@ describe('_validarDadosExtraidos', () => {
     const r = _validarDadosExtraidos({ fornecedor: 'X', parcelas: [{ valor: '150.50', vencimento: '2026-08-10' }] });
     expect(r.parcelas[0].valor).toBe(150.5);
   });
+
+  test('valor não numérico na parcela → null', () => {
+    const r = _validarDadosExtraidos({ fornecedor: 'X', parcelas: [{ valor: 'R$ 150,50', vencimento: '2026-08-10' }] });
+    expect(r).toBeNull();
+  });
 });

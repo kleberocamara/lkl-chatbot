@@ -138,4 +138,27 @@ describe('dre — cascata completa', () => {
     expect(warnSpy.mock.calls[0].join(' ')).toMatch(/CATEGORIA_INEXISTENTE_NO_MAPEAMENTO/);
     warnSpy.mockRestore();
   });
+
+  test('SQL da receita considera vínculo indireto via os_itens/orcamento_itens (OS offset/revenda)', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
+
+    const receitaSql = db.query.mock.calls[0][0];
+    expect(receitaSql).toMatch(/os_itens/);
+    expect(receitaSql).toMatch(/orcamento_itens/);
+  });
+
+  test('SQL da receita exclui OS canceladas da contagem de "totalmente entregue"', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ receita: 0 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
+
+    const receitaSql = db.query.mock.calls[0][0];
+    expect(receitaSql).toMatch(/status != 'cancelado'/);
+  });
 });

@@ -25,18 +25,36 @@ async function dre({ inicio, fim } = {}) {
   if (fim < inicio) return { erro: ['Data final menor que a inicial'] };
 
   // Receita por competência: um orçamento só conta no mês em que TODAS as suas
-  // OSs foram entregues (última entrega define o mês), não quando o cliente pagou.
+  // OSs não-canceladas foram entregues (última entrega define o mês), não quando
+  // o cliente pagou. Considera os dois caminhos de vínculo OS→orçamento: direto
+  // (ordens_servico.orcamento_id, usado por OS de Comunicação Visual) e indireto
+  // (os_itens → orcamento_itens.orcamento_id, único caminho pra OS offset/revenda,
+  // que podem cobrir itens de vários orçamentos e por isso não gravam orcamento_id).
   const recR = await db.query(
-    `WITH entregas AS (
-       SELECT os.orcamento_id,
+    `WITH os_do_orcamento AS (
+       SELECT DISTINCT orcamento_id, os_id FROM (
+         SELECT os.orcamento_id, os.id AS os_id
+         FROM ordens_servico os
+         WHERE os.orcamento_id IS NOT NULL AND os.status != 'cancelado'
+         UNION
+         SELECT oi.orcamento_id, os.id AS os_id
+         FROM os_itens oit
+         JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id
+         JOIN ordens_servico os ON os.id = oit.os_id
+         WHERE os.status != 'cancelado'
+       ) t
+     ),
+     entregas AS (
+       SELECT p.orcamento_id,
               COUNT(*) AS total_os,
               COUNT(*) FILTER (WHERE os.status = 'entregue') AS os_entregues,
               MAX(h.em) AS ultima_entrega
-       FROM ordens_servico os
+       FROM os_do_orcamento p
+       JOIN ordens_servico os ON os.id = p.os_id
        LEFT JOIN LATERAL (
-         SELECT em FROM os_historico h WHERE h.os_id = os.id AND h.para_status = 'entregue' ORDER BY h.em DESC LIMIT 1
+         SELECT em FROM os_historico hh WHERE hh.os_id = os.id AND hh.para_status = 'entregue' ORDER BY hh.em DESC LIMIT 1
        ) h ON true
-       GROUP BY os.orcamento_id
+       GROUP BY p.orcamento_id
      )
      SELECT COALESCE(SUM(o.total),0) AS receita
      FROM orcamentos o

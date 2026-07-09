@@ -108,7 +108,10 @@ async function buscarPorId(id) {
     [id]
   );
   const osR = await db.query(
-    'SELECT * FROM ordens_servico WHERE orcamento_id = $1 ORDER BY numero_os',
+    `SELECT os.* FROM ordens_servico os
+     WHERE os.orcamento_id = $1
+        OR os.id IN (SELECT oit.os_id FROM os_itens oit JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id WHERE oi.orcamento_id = $1)
+     ORDER BY os.numero_os`,
     [id]
   );
   const boletosR = await db.query(
@@ -486,7 +489,12 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
     db.query(
       `SELECT o.*, c.nome AS cliente_nome, u.name AS vendedor_nome,
               (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero,
-              EXISTS(SELECT 1 FROM ordens_servico os WHERE os.orcamento_id = o.id AND os.status = 'entregue') AS tem_os_entregue,
+              EXISTS(
+                SELECT 1 FROM ordens_servico os WHERE os.status = 'entregue' AND (
+                  os.orcamento_id = o.id
+                  OR os.id IN (SELECT oit.os_id FROM os_itens oit JOIN orcamento_itens oi ON oi.id = oit.orcamento_item_id WHERE oi.orcamento_id = o.id)
+                )
+              ) AS tem_os_entregue,
               (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status,
               (SELECT n.id FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_id
        FROM orcamentos o

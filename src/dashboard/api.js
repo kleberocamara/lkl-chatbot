@@ -168,7 +168,8 @@ router.post('/conversations/:id/reply-media', requireAuthApi, uploadResposta.sin
 
     const { phone, id: convId, contact_id } = conv.rows[0];
     const legenda = (req.body.legenda || '').trim();
-    const publicUrl = `${process.env.BASE_URL}/uploads/respostas/${req.file.filename}`;
+    const relativeUrl = `/uploads/respostas/${req.file.filename}`;
+    const publicUrl = `${process.env.BASE_URL}${relativeUrl}`;
     const isImagem = req.file.mimetype.startsWith('image/');
     const tipo = isImagem ? 'imagem' : 'documento';
 
@@ -181,7 +182,11 @@ router.post('/conversations/:id/reply-media', requireAuthApi, uploadResposta.sin
       await sendDocument(phone, publicUrl, req.file.originalname, legenda);
     }
 
-    const content = `[${tipo} recebido: ${publicUrl} | ${legenda || req.file.originalname}]`;
+    // O content grava o caminho RELATIVO (não publicUrl, que é absoluto com BASE_URL)
+    // porque o renderizador de mensagens do painel só reconhece um anexo como "local"
+    // (mostra miniatura/preview) quando a referência começa com /uploads/ ou /api/file/
+    // — mesma convenção já usada em orcamentos/service.js (mediaRef vs. urlEnvio).
+    const content = `[${tipo} recebido: ${relativeUrl} | ${legenda || req.file.originalname}]`;
     await db.query(
       `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by, sent_by_name) VALUES ($1, $2, $3, 'outbound', 'human', $4)`,
       [convId, contact_id, content, req.user.name]

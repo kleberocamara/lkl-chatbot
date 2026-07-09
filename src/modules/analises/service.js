@@ -57,7 +57,18 @@ async function dre({ inicio, fim } = {}) {
   const porCategoria = {};
   for (const r of despR.rows) porCategoria[r.categoria] = Number(r.valor);
 
+  const categoriasMapeadas = new Set(CASCATA_DEDUCOES.flatMap(b => b.categorias));
+  const categoriasSemBucket = Object.keys(porCategoria).filter(c => !categoriasMapeadas.has(c));
+  if (categoriasSemBucket.length) {
+    console.warn('[analises.dre] categoria_dre sem bucket mapeado em CASCATA_DEDUCOES (despesas ausentes do DRE):', categoriasSemBucket.join(', '));
+  }
+
   const pct = v => receita_bruta > 0 ? Math.round((v / receita_bruta) * 1000) / 10 : 0;
+
+  function bucketPorId(id) {
+    const def = CASCATA_DEDUCOES.find(b => b.id === id);
+    return bucket(def);
+  }
 
   function bucket({ id, label, categorias }) {
     const detalhamento = categorias
@@ -73,28 +84,28 @@ async function dre({ inicio, fim } = {}) {
   const linhas = [];
   linhas.push({ id: 'receita_bruta', label: 'Receita Bruta de Vendas', valor: receita_bruta, percentual: pct(receita_bruta), tipo: 'base' });
 
-  const deducoesVendas = bucket(CASCATA_DEDUCOES[0]);
+  const deducoesVendas = bucketPorId('deducoes_vendas');
   linhas.push(deducoesVendas);
   const receita_liquida = receita_bruta + deducoesVendas.valor;
   linhas.push({ id: 'receita_liquida', label: 'Receita Líquida de Vendas', valor: receita_liquida, percentual: pct(receita_liquida), tipo: 'subtotal' });
 
-  const cpv = bucket(CASCATA_DEDUCOES[1]);
-  const despesasComerciais = bucket(CASCATA_DEDUCOES[2]);
+  const cpv = bucketPorId('cpv');
+  const despesasComerciais = bucketPorId('despesas_comerciais');
   linhas.push(cpv, despesasComerciais);
   const margem_contribuicao = receita_liquida + cpv.valor + despesasComerciais.valor;
   linhas.push({ id: 'margem_contribuicao', label: 'Margem de Contribuição Bruta', valor: margem_contribuicao, percentual: pct(margem_contribuicao), tipo: 'subtotal' });
 
-  const custosFixosProducao = bucket(CASCATA_DEDUCOES[3]);
+  const custosFixosProducao = bucketPorId('custos_fixos_producao');
   linhas.push(custosFixosProducao);
   const lucro_bruto = margem_contribuicao + custosFixosProducao.valor;
   linhas.push({ id: 'lucro_bruto', label: 'Lucro Bruto', valor: lucro_bruto, percentual: pct(lucro_bruto), tipo: 'subtotal' });
 
-  const despesasOperacionais = bucket(CASCATA_DEDUCOES[4]);
+  const despesasOperacionais = bucketPorId('despesas_operacionais');
   linhas.push(despesasOperacionais);
   const ebitda = lucro_bruto + despesasOperacionais.valor;
   linhas.push({ id: 'ebitda', label: 'EBITDA / LAJIDA', valor: ebitda, percentual: pct(ebitda), tipo: 'subtotal' });
 
-  const resultadoFinanceiro = bucket(CASCATA_DEDUCOES[5]);
+  const resultadoFinanceiro = bucketPorId('resultado_financeiro');
   linhas.push(resultadoFinanceiro);
   linhas.push({ id: 'impostos_lucro', label: 'Impostos sobre o Lucro', valor: 0, percentual: 0, tipo: 'deducao' });
 

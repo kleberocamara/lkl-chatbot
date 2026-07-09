@@ -122,4 +122,20 @@ describe('dre — cascata completa', () => {
     });
     expect(linha(r, 'lucro_liquido').valor).toBe(5000);
   });
+
+  test('categoria_dre sem bucket mapeado → gera warning no console, não trava nem some silenciosamente do total', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    db.query
+      .mockResolvedValueOnce({ rows: [{ receita: 10000 }] })
+      .mockResolvedValueOnce({ rows: [
+        { categoria: 'CUSTOS DE PRODUÇÃO (CPV)', valor: 1000 },
+        { categoria: 'CATEGORIA_INEXISTENTE_NO_MAPEAMENTO', valor: 500 },
+      ] });
+
+    const r = await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
+
+    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy.mock.calls[0].join(' ')).toMatch(/CATEGORIA_INEXISTENTE_NO_MAPEAMENTO/);
+    warnSpy.mockRestore();
+  });
 });

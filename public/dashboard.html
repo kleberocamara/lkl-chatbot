@@ -657,7 +657,7 @@
   </div>
 
   <!-- MODAL NOVA/EDITAR CONTA A PAGAR -->
-  <div id="cp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cpFecharModal()">
+  <div id="cp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px">
     <div style="background:white;border-radius:14px;padding:28px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto">
       <h2 id="cp-modal-titulo" style="font-size:18px;margin-bottom:20px">Nova Conta a Pagar</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
@@ -2578,6 +2578,7 @@ let cpEditandoId = null;
 function cpAbrirModalNova() {
   cpEditandoId = null;
   cpConvertendoParcelado = false;
+  cpFecharSugestoesFornecedor();
   document.getElementById('cp-modal-titulo').textContent = 'Nova Conta a Pagar';
   ['cp-f-descricao','cp-f-fornecedor','cp-f-fornecedor-id','cp-f-linha-digitavel','cp-f-pix-content','cp-f-observacao','cp-f-parcelas','cp-f-data-entrega'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cp-f-tipo-despesa').value = '';
@@ -2603,6 +2604,7 @@ async function cpAbrirModalEditar(id) {
   if (!conta) { showToast('❌ Conta não encontrada'); return; }
   cpEditandoId = id;
   cpConvertendoParcelado = false;
+  cpFecharSugestoesFornecedor();
   document.getElementById('cp-modal-titulo').textContent = 'Editar Conta';
   document.getElementById('cp-f-descricao').value = conta.descricao || '';
   document.getElementById('cp-f-fornecedor').value = conta.fornecedor || '';

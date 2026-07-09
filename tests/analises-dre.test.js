@@ -159,6 +159,7 @@ describe('dre — cascata completa', () => {
     await dre({ inicio: '2026-08-01', fim: '2026-08-31' });
 
     const receitaSql = db.query.mock.calls[0][0];
-    expect(receitaSql).toMatch(/status != 'cancelado'/);
+    const ocorrencias = receitaSql.match(/status != 'cancelado'/g) || [];
+    expect(ocorrencias).toHaveLength(2);
   });
 });

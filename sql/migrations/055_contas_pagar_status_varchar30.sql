@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE contas_pagar ALTER COLUMN status TYPE VARCHAR(30);
+
+COMMIT;

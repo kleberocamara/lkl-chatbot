@@ -3100,16 +3100,19 @@ function _salvarFornecedor() {
   const celular = v('f-celular').replace(/\D/g,'')||null;
   return { nome: v('f-nome'), cnpj: cnpj||null, contato: v('f-contato')||null, email: v('f-email')||null, ddd, telefone: tel, celular, cep: v('f-cep').replace(/\D/g,'')||null, logradouro: v('f-logradouro')||null, cidade: v('f-cidade')||null, uf: v('f-uf')||null, categoria: v('f-categoria')||null, status: v('f-status') };
 }
-function abrirModalFornecedorMain() {
+function abrirModalFornecedorMain(nomeInicial, onSalvo) {
   document.getElementById('modal-cadastro-title').textContent = 'Novo Fornecedor';
-  document.getElementById('modal-cadastro-body').innerHTML = _formFornecedor();
+  document.getElementById('modal-cadastro-body').innerHTML = _formFornecedor(nomeInicial ? { nome: nomeInicial } : {});
   aplicarMascaras();
   document.getElementById('modal-cadastro-save').onclick = async () => {
     const body = _salvarFornecedor(); if (!body) return;
     if (!body.nome) { showToast('Nome é obrigatório','error'); return; }
     const r = await api('/api/v2/fornecedores', { method:'POST', body: JSON.stringify(body) });
     if (r?.erro||r?.errors) { showToast((r.erro||r.errors||['Erro']).join?.(', ')||'Erro','error'); return; }
-    showToast('Fornecedor cadastrado'); fecharModalCadastro(); loadFornecedoresMain(1);
+    showToast('Fornecedor cadastrado');
+    fecharModalCadastro();
+    if (onSalvo) onSalvo(r);
+    else loadFornecedoresMain(1);
   };
   document.getElementById('modal-cadastro').style.display = 'block';
 }

@@ -4003,6 +4003,9 @@ async function loadMessages(id) {
     ${c.status !== 'resolved' ? `
     <div class="chat-input">
       <textarea id="replyText" rows="2" placeholder="Digite sua resposta como analista..." onkeydown="if(event.ctrlKey&&event.key==='Enter')sendReply('${c.id}','${c.phone}')"></textarea>
+      <label class="btn btn-outline" style="cursor:pointer;display:flex;align-items:center;justify-content:center" title="Anexar imagem ou documento">
+        📎<input type="file" accept="image/*,.pdf,.doc,.docx" style="display:none" onchange="enviarAnexo(this,'${c.id}')">
+      </label>
       <button class="btn btn-primary" onclick="sendReply('${c.id}','${c.phone}')">Enviar</button>
     </div>` : '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Conversa resolvida</div>'}
   `;
@@ -4020,6 +4023,21 @@ async function sendReply(convId, phone) {
     method: 'POST',
     body: JSON.stringify({ message: msg }),
   });
+  await loadMessages(convId);
+}
+
+async function enviarAnexo(input, convId) {
+  const file = input.files[0];
+  if (!file) return;
+  const ta = document.getElementById('replyText');
+  const legenda = ta.value.trim();
+  const fd = new FormData();
+  fd.append('arquivo', file);
+  if (legenda) fd.append('legenda', legenda);
+  input.value = '';
+  ta.value = '';
+  const r = await fetch(`/api/conversations/${convId}/reply-media`, { method: 'POST', credentials: 'include', body: fd });
+  if (!r.ok) { showToast('❌ Erro ao enviar anexo'); return; }
   await loadMessages(convId);
 }
 

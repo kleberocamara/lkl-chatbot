@@ -5283,34 +5283,56 @@ async function dreAplicar() {
 }
 function renderDre(r) {
   const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
-  const corRes = r.resultado >= 0 ? '#2e7d32' : '#c62828';
+  const pctFmt = v => Number(v||0).toFixed(1) + '%';
+  const achar = id => r.linhas.find(l => l.id === id);
+  const lucroLiquido = achar('lucro_liquido');
+  const corRes = lucroLiquido && lucroLiquido.valor >= 0 ? '#2e7d32' : '#c62828';
+
+  const receitaLiquida = achar('receita_liquida');
+  const margemContrib = achar('margem_contribuicao');
+  const ebitda = achar('ebitda');
   document.getElementById('dre-kpis').innerHTML =
-    _kpiCard('Receita', fmt(r.receita)) +
-    _kpiCard('Despesas', fmt(r.total_despesas), '#e65100') +
-    _kpiCard('Resultado', fmt(r.resultado), corRes) +
-    _kpiCard('Margem', (r.margem*100).toFixed(1) + '%', corRes);
-  const max = Math.max(1, ...r.despesas.map(d => d.valor));
-  const linhas = r.despesas.length ? r.despesas.map(d => {
-    const pct = r.total_despesas > 0 ? (d.valor / r.total_despesas * 100) : 0;
-    const w = (d.valor / max * 100);
-    return `<div style="margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-        <span>${escHtml(d.categoria)}</span>
-        <span style="color:#555">${fmt(d.valor)} · ${pct.toFixed(1)}%</span>
-      </div>
-      <div style="background:#f0f0f0;border-radius:6px;height:8px;overflow:hidden">
-        <div style="background:#e65100;height:8px;width:${w}%"></div>
-      </div></div>`;
-  }).join('') : '<p style="color:#999;padding:12px">Sem despesas no período</p>';
+    _kpiCard('Receita Líquida', fmt(receitaLiquida ? receitaLiquida.valor : 0)) +
+    _kpiCard('Margem de Contribuição', fmt(margemContrib ? margemContrib.valor : 0)) +
+    _kpiCard('EBITDA / LAJIDA', fmt(ebitda ? ebitda.valor : 0)) +
+    _kpiCard('Lucro Líquido', fmt(lucroLiquido ? lucroLiquido.valor : 0) + ` (${(r.margem_liquida*100).toFixed(1)}%)`, corRes);
+
+  const estiloLinha = tipo => {
+    if (tipo === 'subtotal') return 'background:var(--bg-secondary,#f5f5f7);font-weight:600;font-size:14px;padding:10px 14px';
+    if (tipo === 'final') return 'background:#e8f5e9;font-weight:700;font-size:15px;padding:12px 14px';
+    return 'padding:8px 14px 8px 24px;font-size:13px';
+  };
+
+  const linhasHtml = r.linhas.map((l, i) => {
+    const cor = l.tipo === 'final' ? corRes : (l.valor < 0 ? '#666' : 'inherit');
+    const temDetalhamento = Array.isArray(l.detalhamento) && l.detalhamento.length > 0;
+    const detId = `dre-det-${l.id}`;
+    const seta = temDetalhamento ? `<span id="${detId}-seta" style="margin-right:6px;display:inline-block;width:10px">▸</span>` : '';
+    const clickAttr = temDetalhamento ? ` onclick="dreToggleLinha('${l.id}')"` : '';
+    const detalhamentoHtml = temDetalhamento ? `<div id="${detId}" style="display:none;background:#fafafa">
+      ${l.detalhamento.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 14px 4px 40px;font-size:12px;color:#666">
+        <span>${escHtml(d.categoria)}</span><span>${pctFmt(d.percentual)} · ${fmt(d.valor)}</span>
+      </div>`).join('')}
+    </div>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;border-top:${i===0?'none':'0.5px solid #eee'};${estiloLinha(l.tipo)};cursor:${temDetalhamento?'pointer':'default'}"${clickAttr}>
+        <span style="color:${cor}">${seta}${escHtml(l.label)}</span>
+        <span style="color:${cor}">${pctFmt(l.percentual)} · ${fmt(l.valor)}</span>
+      </div>${detalhamentoHtml}`;
+  }).join('');
+
   document.getElementById('dre-despesas').innerHTML = `
-    <div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:14px 16px">
-      <div style="font-weight:700;color:#3949ab;font-size:13px;margin-bottom:10px">DESPESAS POR CATEGORIA</div>
-      ${linhas}
-      <div style="border-top:0.5px solid #eee;margin-top:10px;padding-top:10px;display:flex;justify-content:space-between;font-weight:600">
-        <span>Receita ${fmt(r.receita)} − Despesas ${fmt(r.total_despesas)}</span>
-        <span style="color:${corRes}">= ${fmt(r.resultado)}</span>
-      </div>
+    <div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;overflow:hidden">
+      ${linhasHtml}
     </div>`;
+}
+
+function dreToggleLinha(id) {
+  const det = document.getElementById(`dre-det-${id}`);
+  const seta = document.getElementById(`dre-det-${id}-seta`);
+  if (!det) return;
+  const aberto = det.style.display === 'block';
+  det.style.display = aberto ? 'none' : 'block';
+  if (seta) seta.textContent = aberto ? '▸' : '▾';
 }
 
 // ── ANÁLISES GERENCIAIS — Fluxo de Caixa ───────────────────────────────────

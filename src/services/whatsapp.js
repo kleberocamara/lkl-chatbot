@@ -106,6 +106,22 @@ async function sendImage(to, imageUrl, caption) {
   });
 }
 
+async function sendDocument(to, documentUrl, filename, caption) {
+  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  await axios.post(url, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'document',
+    document: { link: documentUrl, filename: filename || undefined, caption: caption || '' },
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
 // Envia mensagem interativa com botões de resposta (até 3).
 // opts: { headerImage?, headerText?, bodyText, buttons: [{ id, title }] }
 async function sendInteractiveButtons(to, { headerImage, headerText, bodyText, buttons }) {
@@ -134,4 +150,4 @@ async function sendInteractiveButtons(to, { headerImage, headerText, bodyText, b
   });
 }
 
-module.exports = { sendMessage, sendImage, sendInteractiveButtons, sendTemplate, markAsRead, getMediaUrl, downloadMedia };
+module.exports = { sendMessage, sendImage, sendDocument, sendInteractiveButtons, sendTemplate, markAsRead, getMediaUrl, downloadMedia };

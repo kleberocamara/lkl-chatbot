@@ -2,10 +2,31 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
 const db = require('../db');
 const { requireAuthApi, requireAdmin } = require('../middleware/auth');
-const { sendMessage, getMediaUrl } = require('../services/whatsapp');
+const { sendMessage, sendImage, sendDocument, getMediaUrl } = require('../services/whatsapp');
 const { log } = require('../services/logger');
+
+const uploadResposta = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, '../../public/uploads/respostas'),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || '';
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const permitido = file.mimetype.startsWith('image/')
+      || file.mimetype === 'application/pdf'
+      || file.mimetype === 'application/msword'
+      || file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (permitido) cb(null, true);
+    else cb(new Error('Tipo de arquivo não suportado (use imagem, PDF ou Word)'));
+  },
+});
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 
@@ -126,6 +147,43 @@ router.post('/conversations/:id/reply', requireAuthApi, async (req, res) => {
   });
 
   if (global.io) global.io.emit('human_reply', { conversationId: convId, message, sent_by_name: req.user.name });
+  res.json({ ok: true });
+});
+
+// Analista responde ao cliente com anexo (imagem ou documento)
+router.post('/conversations/:id/reply-media', requireAuthApi, uploadResposta.single('arquivo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+
+  const conv = await db.query(
+    `SELECT c.*, ct.phone FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
+    [req.params.id]
+  );
+  if (!conv.rows[0]) return res.status(404).json({ error: 'Conversa não encontrada' });
+
+  const { phone, id: convId, contact_id } = conv.rows[0];
+  const legenda = (req.body.legenda || '').trim();
+  const publicUrl = `${process.env.BASE_URL}/uploads/respostas/${req.file.filename}`;
+  const isImagem = req.file.mimetype.startsWith('image/');
+  const tipo = isImagem ? 'imagem' : 'documento';
+
+  if (isImagem) {
+    await sendImage(phone, publicUrl, legenda);
+  } else {
+    await sendDocument(phone, publicUrl, req.file.originalname, legenda);
+  }
+
+  const content = `[${tipo} recebido: ${publicUrl} | ${legenda || req.file.originalname}]`;
+  await db.query(
+    `INSERT INTO messages (conversation_id, contact_id, content, direction, sent_by, sent_by_name) VALUES ($1, $2, $3, 'outbound', 'human', $4)`,
+    [convId, contact_id, content, req.user.name]
+  );
+  await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
+  await log('human_reply', `${req.user.name} enviou um ${tipo} em ${convId}`, {
+    conversationId: convId, userId: req.user.id,
+    metadata: { tipo, filename: req.file.originalname },
+  });
+
+  if (global.io) global.io.emit('human_reply', { conversationId: convId, message: content, sent_by_name: req.user.name });
   res.json({ ok: true });
 });
 

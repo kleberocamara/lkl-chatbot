@@ -139,17 +139,6 @@ async function avancarFase(osId, userId) {
     );
   }
 
-  if (proximo === 'entregue' && os.orcamento_id) {
-    db.query(
-      `SELECT COUNT(*) FROM ordens_servico WHERE orcamento_id=$1 AND status NOT IN ('entregue','cancelado')`,
-      [os.orcamento_id]
-    ).then(pendingR => {
-      if (parseInt(pendingR.rows[0].count) === 0 && global.io) {
-        global.io.emit('servico_concluido', { orcamento_id: os.orcamento_id });
-      }
-    }).catch(() => {});
-  }
-
   const fcmLabels = {
     corte:     'Em corte ✂️',
     impressao: 'Em impressão 🖨️',
@@ -158,17 +147,27 @@ async function avancarFase(osId, userId) {
     entregue:  'Entregue 🎉',
   };
   const label = fcmLabels[proximo];
-  if (label && os.orcamento_id) {
-    db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [os.orcamento_id])
-      .then(orcR => {
-        if (orcR.rows[0]?.vendedor_id) {
-          fcm.sendToUser(orcR.rows[0].vendedor_id, {
-            title: `ORC #${orcR.rows[0].numero} — ${label}`,
-            body: `OS #${updatedOs.numero_os} atualizada`,
-            data: { os_id: osId, orcamento_id: os.orcamento_id, status: proximo },
-          }).catch(() => {});
+  if (proximo === 'entregue' || label) {
+    orcamentosAfetadosPorOS(osId).then(async (orcIds) => {
+      for (const orcId of orcIds) {
+        if (proximo === 'entregue') {
+          const statuses = await statusOSsDoOrcamento(orcId);
+          if (statuses.length && statuses.every(s => s === 'entregue') && global.io) {
+            global.io.emit('servico_concluido', { orcamento_id: orcId });
+          }
         }
-      }).catch(() => {});
+        if (label) {
+          const orcR = await db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [orcId]);
+          if (orcR.rows[0]?.vendedor_id) {
+            fcm.sendToUser(orcR.rows[0].vendedor_id, {
+              title: `ORC #${orcR.rows[0].numero} — ${label}`,
+              body: `OS #${updatedOs.numero_os} atualizada`,
+              data: { os_id: osId, orcamento_id: orcId, status: proximo },
+            }).catch(() => {});
+          }
+        }
+      }
+    }).catch(() => {});
   }
 
   if (global.io) global.io.emit('os_status', { os_id: osId, status: proximo });
@@ -338,18 +337,8 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
     );
   }
 
-  // If entregue, check if all OSs for this orcamento are done
-  if (novoStatus === 'entregue') {
-    const pendingR = await db.query(
-      `SELECT COUNT(*) FROM ordens_servico WHERE orcamento_id=$1 AND status NOT IN ('entregue','cancelado')`,
-      [os.orcamento_id]
-    );
-    if (parseInt(pendingR.rows[0].count) === 0 && global.io) {
-      global.io.emit('servico_concluido', { orcamento_id: os.orcamento_id });
-    }
-  }
-
-  // Send FCM push to vendedor
+  // Se entregue, checa se todas as OS não-canceladas do(s) orçamento(s) afetados
+  // (pelos dois caminhos de vínculo) estão concluídas; envia FCM ao(s) vendedor(es).
   const labels = {
     corte:     'Em corte ✂️',
     impressao: 'Em impressão 🖨️',
@@ -358,15 +347,25 @@ async function atualizarStatus(id, novoStatus, responsavel_id) {
     entregue:  'Entregue 🎉',
   };
   const label = labels[novoStatus];
-  if (label) {
-    const orcR = await db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [os.orcamento_id]);
-    if (orcR.rows[0]) {
-      const { vendedor_id, numero } = orcR.rows[0];
-      fcm.sendToUser(vendedor_id, {
-        title: `ORC #${numero} — ${label}`,
-        body: `OS #${updatedOs.numero_os} atualizada`,
-        data: { os_id: id, orcamento_id: os.orcamento_id, status: novoStatus },
-      }).catch(() => {});
+  if (novoStatus === 'entregue' || label) {
+    const orcIds = await orcamentosAfetadosPorOS(id);
+    for (const orcId of orcIds) {
+      if (novoStatus === 'entregue') {
+        const statuses = await statusOSsDoOrcamento(orcId);
+        if (statuses.length && statuses.every(s => s === 'entregue') && global.io) {
+          global.io.emit('servico_concluido', { orcamento_id: orcId });
+        }
+      }
+      if (label) {
+        const orcR = await db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [orcId]);
+        if (orcR.rows[0]?.vendedor_id) {
+          fcm.sendToUser(orcR.rows[0].vendedor_id, {
+            title: `ORC #${orcR.rows[0].numero} — ${label}`,
+            body: `OS #${updatedOs.numero_os} atualizada`,
+            data: { os_id: id, orcamento_id: orcId, status: novoStatus },
+          }).catch(() => {});
+        }
+      }
     }
   }
 
@@ -404,27 +403,22 @@ async function entregar(id, { nome_recebedor, foto_url, userId }) {
     [id, 'entrega', 'entregue', userId || null]
   ).catch(e => console.warn('[OS-HIST entregar]', e.message));
 
-  // Check if all OSs of this orcamento are done
-  const pendentes = await db.query(
-    `SELECT COUNT(*) FROM ordens_servico
-     WHERE orcamento_id=$1 AND status NOT IN ('entregue','cancelado')`,
-    [os.orcamento_id]
-  );
-  if (parseInt(pendentes.rows[0].count) === 0 && global.io) {
-    global.io.emit('servico_concluido', { orcamento_id: os.orcamento_id });
-  }
-
-  // FCM push to vendedor
-  const orc = await db.query(
-    'SELECT vendedor_id, numero FROM orcamentos WHERE id=$1',
-    [os.orcamento_id]
-  );
-  if (orc.rows[0]?.vendedor_id) {
-    fcm.sendToUser(orc.rows[0].vendedor_id, {
-      title: `ORC #${orc.rows[0].numero} — Entregue 🎉`,
-      body: `OS #${os.numero_os} entregue para ${nome_recebedor.trim()}`,
-      data: { os_id: id, orcamento_id: os.orcamento_id, status: 'entregue' },
-    }).catch(() => {});
+  // Checa se todas as OS não-canceladas do(s) orçamento(s) afetados (pelos dois
+  // caminhos de vínculo) estão concluídas; envia FCM ao(s) vendedor(es).
+  const orcIds = await orcamentosAfetadosPorOS(id);
+  for (const orcId of orcIds) {
+    const statuses = await statusOSsDoOrcamento(orcId);
+    if (statuses.length && statuses.every(s => s === 'entregue') && global.io) {
+      global.io.emit('servico_concluido', { orcamento_id: orcId });
+    }
+    const orcR = await db.query('SELECT vendedor_id, numero FROM orcamentos WHERE id=$1', [orcId]);
+    if (orcR.rows[0]?.vendedor_id) {
+      fcm.sendToUser(orcR.rows[0].vendedor_id, {
+        title: `ORC #${orcR.rows[0].numero} — Entregue 🎉`,
+        body: `OS #${os.numero_os} entregue para ${nome_recebedor.trim()}`,
+        data: { os_id: id, orcamento_id: orcId, status: 'entregue' },
+      }).catch(() => {});
+    }
   }
 
   sincronizarPedidoPorOS(id).catch(e => console.warn('[SYNC-PEDIDO entregar]', e.message));

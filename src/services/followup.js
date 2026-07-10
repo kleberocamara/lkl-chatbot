@@ -85,7 +85,8 @@ async function scheduleFollowUps(conversationId, sentAt) {
   }
 
   await db.query(
-    `INSERT INTO follow_ups (conversation_id, attempt, scheduled_at) VALUES ${values.join(', ')}`,
+    `INSERT INTO follow_ups (conversation_id, attempt, scheduled_at) VALUES ${values.join(', ')}
+     ON CONFLICT (conversation_id, attempt) DO NOTHING`,
     params
   );
 }

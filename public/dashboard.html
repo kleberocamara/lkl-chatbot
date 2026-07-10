@@ -4962,10 +4962,16 @@ function npColetarItens() {
   const itens = [];
   document.querySelectorAll('#np-itens .np-item-row').forEach(row => {
     const i = row.dataset.idx;
-    const produto = document.getElementById('np-produto-' + i)?.value || '';
-    if (!produto) return;
+    const produtoRaw = document.getElementById('np-produto-' + i)?.value || '';
+    if (!produtoRaw) return;
+    const revSel = produtoRaw.startsWith('revenda:');
+    const revenda_produto_id = revSel ? produtoRaw.slice(8) : null;
+    const produto = revSel
+      ? (REVENDA_CATALOGO.find(x => String(x.id) === revenda_produto_id)?.nome || 'Revenda')
+      : produtoRaw;
     itens.push({
       produto,
+      revenda_produto_id,
       tipo_producao: document.getElementById('np-tipo-' + i)?.value || null,
       quantidade: parseInt(document.getElementById('np-qtd-' + i)?.value) || null,
       especificacao: document.getElementById('np-espec-' + i)?.value?.trim() || null,
@@ -4974,9 +4980,10 @@ function npColetarItens() {
   return itens;
 }
 
-function abrirNovoPedido() {
+async function abrirNovoPedido() {
   _novoPedidoClienteId = null;
   _npItemSeq = 0;
+  await carregarCatalogoRevenda();
   document.getElementById('modal-cadastro-title').textContent = 'Novo Pedido';
   document.getElementById('modal-cadastro-body').innerHTML = `
     <div style="display:grid;gap:12px">

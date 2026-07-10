@@ -529,7 +529,7 @@ async function salvarOrcamento() {
   if (prazo) body.prazo_entrega = prazo;
   if (obs) body.observacao = obs;
 
-  const data = await api('POST', '/api/orcamentos', body);
+  const data = await api('POST', '/api/v2/orcamentos', body);
   btn.disabled = false;
   btn.textContent = 'Salvar Orçamento';
 
@@ -573,7 +573,7 @@ function badgeClass(status) {
 async function carregarOrcamentos() {
   document.getElementById('meus-loading').style.display = 'block';
   document.getElementById('meus-lista').innerHTML = '';
-  const data = await api('GET', '/api/orcamentos?limit=50');
+  const data = await api('GET', '/api/v2/orcamentos?limit=50');
   document.getElementById('meus-loading').style.display = 'none';
 
   if (!data || !data.data || !data.data.length) {
@@ -592,7 +592,7 @@ async function carregarOrcamentos() {
         <span class="${badgeClass(o.status)}">${STATUS_LABELS[o.status] || o.status || '—'}</span>
       </div>
       <div class="orc-actions">
-        <a class="pdf-btn" href="/api/orcamentos/${o.id}/pdf" target="_blank" rel="noopener">📄 PDF</a>
+        <a class="pdf-btn" href="/api/v2/orcamentos/${o.id}/pdf" target="_blank" rel="noopener">📄 PDF</a>
       </div>
     </div>
   `).join('');

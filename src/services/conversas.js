@@ -188,7 +188,9 @@ async function sairDeAguardandoHumano(celular, { para, motivo } = {}) {
       [contato.id]
     );
     const conversa = r.rows[0];
-    if (!conversa || conversa.status !== 'aguardando_humano') return null;
+    if (!conversa) return null;
+    const origensValidas = para === 'orcamento_enviado' ? ['active', 'aguardando_humano'] : ['aguardando_humano'];
+    if (!origensValidas.includes(conversa.status)) return null;
 
     const setResolvedAt = para === 'resolved' ? 'resolved_at = NOW(), ' : '';
     await db.query(
@@ -210,7 +212,7 @@ async function sairDeAguardandoHumano(celular, { para, motivo } = {}) {
 
     if (global.io) global.io.emit('conversation_updated', { id: conversa.id, status: para });
 
-    return { conversationId: conversa.id, de: 'aguardando_humano', para };
+    return { conversationId: conversa.id, de: conversa.status, para };
   } catch (e) {
     console.warn('[AUTO-RESOLVE] Falha ao sair de aguardando_humano:', e.message);
     return null;

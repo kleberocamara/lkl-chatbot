@@ -111,4 +111,27 @@ describe('sairDeAguardandoHumano', () => {
     await conversas.sairDeAguardandoHumano('21988596449', { para: 'resolved', motivo: 'arte_enviada' });
     expect(scheduleFollowUps).not.toHaveBeenCalled();
   });
+
+  test('conversa em active + para=orcamento_enviado → transiciona e agenda follow-ups', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 30, status: 'active' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const r = await conversas.sairDeAguardandoHumano('21988596449', { para: 'orcamento_enviado', motivo: 'orcamento_enviado' });
+    expect(r).toEqual({ conversationId: 30, de: 'active', para: 'orcamento_enviado' });
+    const upd = db.query.mock.calls[2];
+    expect(upd[1]).toEqual([30, 'orcamento_enviado']);
+    expect(scheduleFollowUps).toHaveBeenCalledTimes(1);
+    expect(scheduleFollowUps.mock.calls[0][0]).toBe(30);
+  });
+
+  test('conversa em active + para=resolved → continua no-op (comportamento de resolved não muda)', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 30, status: 'active' }] });
+    const r = await conversas.sairDeAguardandoHumano('21988596449', { para: 'resolved', motivo: 'arte_enviada' });
+    expect(r).toBeNull();
+    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(scheduleFollowUps).not.toHaveBeenCalled();
+  });
 });

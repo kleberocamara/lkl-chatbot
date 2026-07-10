@@ -4724,12 +4724,15 @@ function statusColor(s) { return PEDIDO_STATUS.find(x => x.value === s)?.color |
 
 function pedidoStatusBadges(o) {
   const prod = `<span style="background:${statusColor(o.status)};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600">${statusLabel(o.status)}</span>`;
+  const semPrecoBadge = o.sem_preco_auto
+    ? `<span title="Nenhum item deste pedido foi precificado automaticamente — confira o orçamento" style="background:#f59e0b;color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-left:4px">⚠️ sem preço automático</span>`
+    : '';
   const pg = o.pagamento_status;
-  if (pg !== 'pago' && pg !== 'aguardando_pagamento') return prod;
+  if (pg !== 'pago' && pg !== 'aguardando_pagamento') return `${prod}${semPrecoBadge}`;
   const pgLabel = pg === 'pago' ? 'Pago' : 'Aguard. pagamento';
   const pgColor = pg === 'pago' ? '#16a34a' : '#f97316';
   const pgBadge = `<span style="background:${pgColor};color:white;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-left:4px">${pgLabel}</span>`;
-  return `${prod}${pgBadge}`;
+  return `${prod}${pgBadge}${semPrecoBadge}`;
 }
 
 function _orcBadge(o) {

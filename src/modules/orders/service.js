@@ -324,7 +324,8 @@ async function listar({ page = 1, limit = 50, status, cliente_id, origin_channel
               orc.status AS orcamento_status,
               orc.status_pagamento AS pagamento_status,
               (SELECT COALESCE(SUM(i.valor_total),0) FROM orcamento_itens i WHERE i.orcamento_id = orc.id) AS orcamento_total,
-              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itens_count
+              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) AS itens_count,
+              EXISTS(SELECT 1 FROM orcamento_itens i WHERE i.orcamento_id = orc.id AND i.preco_origem = 'manual' AND i.valor_total = 0) AS sem_preco_auto
        FROM orders o
        LEFT JOIN clientes_lkl c  ON c.id  = o.cliente_id
        LEFT JOIN users u          ON u.id  = o.vendedor_id

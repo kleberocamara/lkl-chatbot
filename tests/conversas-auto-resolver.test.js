@@ -1,9 +1,11 @@
 jest.mock('../src/db', () => ({ query: jest.fn() }));
 jest.mock('../src/services/whatsapp', () => ({ sendMessage: jest.fn(), sendImage: jest.fn(), sendInteractiveButtons: jest.fn() }));
 jest.mock('../src/services/logger', () => ({ log: jest.fn() }));
+jest.mock('../src/services/followup', () => ({ scheduleFollowUps: jest.fn().mockResolvedValue(undefined) }));
 
 const db = require('../src/db');
 const conversas = require('../src/services/conversas');
+const { scheduleFollowUps } = require('../src/services/followup');
 
 beforeEach(() => { jest.clearAllMocks(); delete global.io; });
 
@@ -87,5 +89,26 @@ describe('sairDeAguardandoHumano', () => {
     await conversas.sairDeAguardandoHumano('+55 (21) 98859-6449', { para: 'resolved', motivo: 'x' });
     const acharCall = db.query.mock.calls[0];
     expect(acharCall[1]).toEqual(['%988596449', '5521988596449']);
+  });
+
+  test('para=orcamento_enviado → chama scheduleFollowUps com a conversa e a hora atual', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 30, status: 'aguardando_humano' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await conversas.sairDeAguardandoHumano('21988596449', { para: 'orcamento_enviado', motivo: 'orcamento_enviado' });
+    expect(scheduleFollowUps).toHaveBeenCalledTimes(1);
+    expect(scheduleFollowUps.mock.calls[0][0]).toBe(30);
+    expect(scheduleFollowUps.mock.calls[0][1]).toBeInstanceOf(Date);
+  });
+
+  test('para=resolved → NÃO chama scheduleFollowUps', async () => {
+    global.io = { emit: jest.fn() };
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 30, status: 'aguardando_humano' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await conversas.sairDeAguardandoHumano('21988596449', { para: 'resolved', motivo: 'arte_enviada' });
+    expect(scheduleFollowUps).not.toHaveBeenCalled();
   });
 });

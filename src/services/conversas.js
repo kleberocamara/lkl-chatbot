@@ -1,6 +1,7 @@
 const db = require('../db');
 const whatsapp = require('./whatsapp');
 const { log } = require('./logger');
+const { scheduleFollowUps } = require('./followup');
 
 function soDigitos(cel) {
   return String(cel || '').replace(/\D/g, '');
@@ -194,6 +195,12 @@ async function sairDeAguardandoHumano(celular, { para, motivo } = {}) {
       `UPDATE conversations SET status = $2, ${setResolvedAt}alerta_humano_em = NULL, updated_at = NOW() WHERE id = $1`,
       [conversa.id, para]
     );
+
+    if (para === 'orcamento_enviado') {
+      try {
+        await scheduleFollowUps(conversa.id, new Date());
+      } catch (e) { console.warn('[AUTO-RESOLVE] Falha ao agendar follow-ups:', e.message); }
+    }
 
     try {
       await log('conversation_auto_resolved', `Conversa ${conversa.id} auto-resolvida (${motivo})`, {

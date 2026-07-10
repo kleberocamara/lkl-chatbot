@@ -46,9 +46,9 @@ function calcularRevenda(ctx, opts) {
 function calcularInternoM2(ctx, item) {
   const larg = Number(item.largura_cm), alt = Number(item.altura_cm);
   if (!(larg > 0) || !(alt > 0)) return null;
-  const b = engine.escolherBobinaComRotacao(larg, alt, ctx.espaco_corte_cm, ctx.bobinas);
-  if (!b) return null;
   const qtd = Number(item.quantidade) > 0 ? Number(item.quantidade) : 1;
+  const b = engine.escolherBobinaComRotacao(larg, alt, ctx.espaco_corte_cm, ctx.bobinas, qtd);
+  if (!b) return null;
   const comprimento = b.comprimento_cm;
   const area = (b.largura_util_cm / 100) * (comprimento / 100);
   const pm2 = Number(ctx.preco_m2) || 0;

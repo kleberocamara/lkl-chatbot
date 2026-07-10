@@ -5,16 +5,20 @@ const qtdOf = (item) => (Number(item.quantidade) > 0 ? Number(item.quantidade) :
 const temDims = (item) => Number(item.largura_cm) > 0 && Number(item.altura_cm) > 0;
 
 // Escolhe, entre as bobinas, a mais econômica (menor largura imputada por item),
-// descontando a folga de corte g (cm) entre imagens vizinhas.
+// descontando a folga de corte g (cm) entre imagens vizinhas. Se `quantidade` for informada,
+// o número de peças "por largura" (n) nunca excede a quantidade realmente pedida — não faz
+// sentido dividir o custo da largura entre cópias hipotéticas que não serão produzidas.
 // Retorna { largura_cm, n, largura_util_cm } ou null se nenhuma comporta a arte.
-function escolherBobina(larguraArteCm, g, bobinas) {
+function escolherBobina(larguraArteCm, g, bobinas, quantidade) {
   const gap = Number(g) > 0 ? Number(g) : 0;
+  const qtdLimite = Number(quantidade) > 0 ? Number(quantidade) : Infinity;
   let melhor = null;
   for (const b of bobinas || []) {
     const Lb = Number(b.largura_cm);
     if (!(Lb > 0)) continue;
-    const n = Math.floor((Lb + gap) / (larguraArteCm + gap));
-    if (n < 1) continue; // arte não cabe nem 1 vez
+    const nCapacidade = Math.floor((Lb + gap) / (larguraArteCm + gap));
+    if (nCapacidade < 1) continue; // arte não cabe nem 1 vez
+    const n = Math.min(nCapacidade, qtdLimite);
     const larguraUtil = Lb / n;
     if (!melhor || larguraUtil < melhor.largura_util_cm) {
       melhor = { largura_cm: Lb, n, largura_util_cm: larguraUtil };
@@ -23,14 +27,17 @@ function escolherBobina(larguraArteCm, g, bobinas) {
   return melhor;
 }
 
-// Tenta as duas orientações (normal e girada) e escolhe a de menor desperdício
-// entre as que couberem. Empate → prefere a orientação original (normal).
+// Tenta as duas orientações (normal e girada) e escolhe a de MENOR ÁREA TOTAL resultante
+// (não só menor largura imputada — o comprimento muda entre as orientações, então precisa
+// comparar a área final, não só a largura). Empate → prefere a orientação original (normal).
 // Retorna { largura_cm, n, largura_util_cm, comprimento_cm } ou null.
-function escolherBobinaComRotacao(largura_cm, altura_cm, g, bobinas) {
-  const normal = escolherBobina(Number(largura_cm), g, bobinas);
-  const girada = escolherBobina(Number(altura_cm), g, bobinas);
+function escolherBobinaComRotacao(largura_cm, altura_cm, g, bobinas, quantidade) {
+  const normal = escolherBobina(Number(largura_cm), g, bobinas, quantidade);
+  const girada = escolherBobina(Number(altura_cm), g, bobinas, quantidade);
+  const areaNormal = normal ? normal.largura_util_cm * Number(altura_cm) : Infinity;
+  const areaGirada = girada ? girada.largura_util_cm * Number(largura_cm) : Infinity;
   if (normal && girada) {
-    return girada.largura_util_cm < normal.largura_util_cm
+    return areaGirada < areaNormal
       ? { ...girada, comprimento_cm: Number(largura_cm) }
       : { ...normal, comprimento_cm: Number(altura_cm) };
   }

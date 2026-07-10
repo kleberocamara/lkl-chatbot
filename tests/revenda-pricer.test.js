@@ -64,11 +64,15 @@ describe('calcularInternoM2', () => {
     expect(r.bobina_cm).toBe(106);
     expect(r.valor_total).toBeCloseTo(63.60, 2);
   });
-  test('lona 2,00m x 1,00m → gira e casa 3× na bobina 320 (menor desperdício que 220 direto)', () => {
+  test('lona 2,00m x 1,00m, qtd 1 → não gira, bobina 220 (largura cheia, sem dividir por peças hipotéticas)', () => {
     const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
       { largura_cm: 200, altura_cm: 100, quantidade: 1 });
-    expect(r.bobina_cm).toBe(320);
-    expect(r.valor_total).toBeCloseTo(64.00, 2);
+    // com qtd=1, não faz sentido dividir a bobina por várias peças hipotéticas — usa a bobina inteira.
+    // normal (200cm de largura): bobina 220cm, n=1, útil=220cm → área = 2,20m × 1,00m = 2,20m²
+    // girada (100cm de largura): bobina 160cm, n=1, útil=160cm → área = 1,60m × 2,00m = 3,20m²
+    // 2,20m² é menor → escolhe normal (bobina 220, não gira)
+    expect(r.bobina_cm).toBe(220);
+    expect(r.valor_total).toBeCloseTo(66.00, 2);
   });
   test('arte 0,50m cabe 3× na bobina 150 (util 0,50m) × qtd 3 = 45,00', () => {
     const r = calcularInternoM2({ bobinas: bobinasAdesivo, preco_m2: 30 },
@@ -95,24 +99,40 @@ describe('calcularInternoM2', () => {
     expect(r.bobina_cm).toBe(320);
     expect(r.valor_total).toBeCloseTo(650.88, 2);
   });
-  test('área total abaixo de 1m² → aplica mínimo de 1m²/linha (banner 1,20m x 0,80m, qtd 1)', () => {
+  test('banner 1,20m x 0,80m, qtd 1 → bobina 160cm cheia (não divide por peça hipotética), R$38,40', () => {
     const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
       { largura_cm: 120, altura_cm: 80, quantidade: 1 });
-    // área bruta real: bobina 160cm, gira, 2 por largura → útil 0,80m × comprimento 1,20m = 0,96m²
-    // com mínimo de 1m²/linha: 1m² × R$30 = R$30,00 (em vez de R$28,80)
+    // capacidade física da bobina 160cm comportaria 2 peças de 80cm de largura, mas só 1 foi pedida —
+    // não faz sentido dividir o custo da largura com uma peça que não existe.
+    // normal (120cm largura): bobina 160, n=1, útil=160cm → área = 1,60m × 0,80m = 1,28m²
+    // girada (80cm largura): bobina 160, n=1 (min(2,1)), útil=160cm → área = 1,60m × 1,20m = 1,92m²
+    // 1,28m² é menor → escolhe normal.
+    expect(r.bobina_cm).toBe(160);
+    expect(r.valor_total).toBeCloseTo(38.40, 2);
+    expect(r.valor_unitario).toBeCloseTo(38.40, 2);
+  });
+  test('banner 1,20m x 0,80m, qtd 3 → capacidade (2) é menor que a quantidade (3), continua dividindo normalmente', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 120, altura_cm: 80, quantidade: 3 });
+    // aqui a capacidade física (2 peças cabem lado a lado) é MENOR que a quantidade pedida (3),
+    // então o min(capacidade, quantidade) = 2 continua valendo — comportamento igual ao de antes do fix.
+    expect(r.bobina_cm).toBe(160);
+    expect(r.valor_total).toBeCloseTo(86.40, 2);
+  });
+  test('peça pequena 0,30m x 0,30m, qtd 1 → área real 0,48m², aciona mínimo de 1m²/linha → R$30,00', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 30, altura_cm: 30, quantidade: 1 });
+    // peça bem menor que qualquer bobina — com qtd=1, usa a menor bobina disponível (160cm) inteira:
+    // 1,60m × 0,30m = 0,48m², abaixo do mínimo de 1m²/linha → cobrado como 1m² = R$30,00.
     expect(r.valor_total).toBeCloseTo(30.00, 2);
     expect(r.valor_unitario).toBeCloseTo(30.00, 2);
   });
-  test('quantidade multiplica a área bruta antes de checar o mínimo (3 peças de área bruta pequena somam >1m² → sem ajuste)', () => {
-    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
-      { largura_cm: 120, altura_cm: 80, quantidade: 3 });
-    // área bruta por peça 0,96m² × 3 = 2,88m² (já acima de 1m², não aciona o mínimo)
-    expect(r.valor_total).toBeCloseTo(86.40, 2);
-  });
-  test('área bruta já acima de 1m² (peça 1,00m x 1,00m nesting na bobina 320 dá 1,0667m²) → não aciona o mínimo, resultado igual ao cálculo normal', () => {
+  test('peça 1,00m x 1,00m, qtd 1 → bobina 160cm cheia (não faz nesting de 3 peças hipotéticas), área acima de 1m², sem ajuste de mínimo', () => {
     const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
       { largura_cm: 100, altura_cm: 100, quantidade: 1 });
-    // área real por nesting: bobina 320cm ÷ 3 = 106,67cm útil × 100cm = 1,0667m² × R$30 = R$32,00
-    expect(r.valor_total).toBeCloseTo(32.00, 2);
+    // com qtd=1, não faz sentido dividir a bobina entre 3 cópias hipotéticas (nesting) —
+    // usa a menor bobina que comporta a peça inteira: bobina 160cm × 1,00m = 1,60m² × R$30 = R$48,00
+    expect(r.bobina_cm).toBe(160);
+    expect(r.valor_total).toBeCloseTo(48.00, 2);
   });
 });

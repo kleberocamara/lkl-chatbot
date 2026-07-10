@@ -95,4 +95,24 @@ describe('calcularInternoM2', () => {
     expect(r.bobina_cm).toBe(320);
     expect(r.valor_total).toBeCloseTo(650.88, 2);
   });
+  test('área total abaixo de 1m² → aplica mínimo de 1m²/linha (banner 1,20m x 0,80m, qtd 1)', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 120, altura_cm: 80, quantidade: 1 });
+    // área bruta real: bobina 160cm, gira, 2 por largura → útil 0,80m × comprimento 1,20m = 0,96m²
+    // com mínimo de 1m²/linha: 1m² × R$30 = R$30,00 (em vez de R$28,80)
+    expect(r.valor_total).toBeCloseTo(30.00, 2);
+    expect(r.valor_unitario).toBeCloseTo(30.00, 2);
+  });
+  test('quantidade multiplica a área bruta antes de checar o mínimo (3 peças de área bruta pequena somam >1m² → sem ajuste)', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 120, altura_cm: 80, quantidade: 3 });
+    // área bruta por peça 0,96m² × 3 = 2,88m² (já acima de 1m², não aciona o mínimo)
+    expect(r.valor_total).toBeCloseTo(86.40, 2);
+  });
+  test('área bruta já acima de 1m² (peça 1,00m x 1,00m nesting na bobina 320 dá 1,0667m²) → não aciona o mínimo, resultado igual ao cálculo normal', () => {
+    const r = calcularInternoM2({ bobinas: bobinasLona, preco_m2: 30, espaco_corte_cm: 0 },
+      { largura_cm: 100, altura_cm: 100, quantidade: 1 });
+    // área real por nesting: bobina 320cm ÷ 3 = 106,67cm útil × 100cm = 1,0667m² × R$30 = R$32,00
+    expect(r.valor_total).toBeCloseTo(32.00, 2);
+  });
 });

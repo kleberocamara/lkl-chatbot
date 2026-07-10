@@ -52,9 +52,12 @@ function calcularInternoM2(ctx, item) {
   const comprimento = b.comprimento_cm;
   const area = (b.largura_util_cm / 100) * (comprimento / 100);
   const pm2 = Number(ctx.preco_m2) || 0;
-  const vu = round2(area * pm2);
-  const vt = round2(vu * qtd);
-  const memoria = `Bobina ${b.largura_cm / 100}m (${b.n} por largura) → ${round2(b.largura_util_cm / 100)}m × ${comprimento / 100}m = ${round2(area)}m² × R$ ${pm2}/m² = R$ ${vu}/un × ${qtd} = R$ ${vt}`;
+  const areaBruta = area * qtd;
+  const areaCobrada = Math.max(areaBruta, 1); // mínimo de 1m² por linha do orçamento
+  const vt = round2(areaCobrada * pm2);
+  const vu = round2(vt / qtd);
+  const minAplicado = areaCobrada > areaBruta;
+  const memoria = `Bobina ${b.largura_cm / 100}m (${b.n} por largura) → ${round2(b.largura_util_cm / 100)}m × ${comprimento / 100}m = ${round2(area)}m²/un × ${qtd} = ${round2(areaBruta)}m²${minAplicado ? ' → mínimo de 1m²/linha aplicado' : ''} × R$ ${pm2}/m² = R$ ${vt}`;
   return { valor_unitario: vu, valor_total: vt, memoria, bobina_cm: b.largura_cm };
 }
 

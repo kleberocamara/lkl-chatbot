@@ -930,6 +930,21 @@ async function enviarArteItem(itemId, arquivo_url) {
   return { erro: ['Falha ao enviar arte ao cliente'], item_id: itemId, status: 'erro_envio' };
 }
 
+// Acha o orçamento com status 'enviado' mais recente pra esse telefone (sufixo de 9 dígitos).
+async function buscarEnviadoPorTelefone(phone) {
+  const celular = String(phone || '').replace(/\D/g, '');
+  if (!celular) return null;
+  const r = await db.query(
+    `SELECT o.id
+     FROM orcamentos o
+     JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE o.status = 'enviado' AND (c.celular LIKE $1 OR c.celular LIKE $2)
+     ORDER BY o.enviado_em DESC NULLS LAST, o.created_at DESC LIMIT 1`,
+    [`%${celular.slice(-9)}`, `%${celular}`]
+  );
+  return r.rows[0] || null;
+}
+
 // Acha a arte pendente (status 'enviada') do cliente pelo telefone (sufixo de 9 dígitos).
 async function _acharArtePendente(phone) {
   const celular = String(phone || '').replace(/\D/g, '');
@@ -1003,4 +1018,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes };
+module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes, buscarEnviadoPorTelefone };

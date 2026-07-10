@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const db = require('../db');
 const { requireAuthApi, requireAdmin } = require('../middleware/auth');
+const { aprovar: aprovarOrcamento, buscarEnviadoPorTelefone } = require('../modules/orcamentos/service');
 const { sendMessage, sendImage, sendDocument, getMediaUrl } = require('../services/whatsapp');
 const { log } = require('../services/logger');
 
@@ -238,14 +239,25 @@ router.post('/conversations/:id/orcamento-enviado', requireAuthApi, async (req, 
 // Marca orçamento como aprovado pelo cliente (via painel)
 router.post('/conversations/:id/orcamento-aprovado', requireAuthApi, async (req, res) => {
   const { id } = req.params;
+  const conv = await db.query(
+    `SELECT c.*, ct.phone FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
+    [id]
+  );
+  if (!conv.rows[0]) return res.status(404).json({ error: 'Conversa não encontrada' });
+
   await db.query(
     `UPDATE conversations SET pedido_status = 'orcamento_aprovado', status = 'aguardando_humano', alerta_humano_em = NULL, updated_at = NOW() WHERE id = $1`,
     [id]
   );
-  await db.query(
-    `UPDATE orcamentos SET status = 'aprovado' WHERE conversation_id = $1`,
-    [id]
-  );
+  const orcamentoPendente = await buscarEnviadoPorTelefone(conv.rows[0].phone);
+  if (orcamentoPendente) {
+    const resultado = await aprovarOrcamento(orcamentoPendente.id, 'painel');
+    if (resultado.erro) {
+      console.warn('[API] Falha ao aprovar orçamento pelo painel:', resultado.erro.join('; '));
+    }
+  } else {
+    console.warn('[API] Nenhum orçamento "enviado" encontrado pro telefone', conv.rows[0].phone, 'ao aprovar pelo painel');
+  }
   await log('orcamento_aprovado_manual', `Orçamento marcado como aprovado pelo analista`, {
     conversationId: id, userId: req.user.id,
   });

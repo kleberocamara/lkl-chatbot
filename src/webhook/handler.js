@@ -1,7 +1,7 @@
 const db = require('../db');
 const { processMessage } = require('../ai/agent');
 const { sendMessage, markAsRead, downloadMedia } = require('../services/whatsapp');
-const { responderArteItem, responderArteBotao } = require('../modules/orcamentos/service');
+const { responderArteItem, responderArteBotao, aprovar: aprovarOrcamento, buscarEnviadoPorTelefone } = require('../modules/orcamentos/service');
 const { notifyAnalyst } = require('../services/email');
 const { log } = require('../services/logger');
 
@@ -120,10 +120,15 @@ async function handleInboundMessage(phone, profileName, messageText, waMessageId
         `UPDATE conversations SET status = 'aguardando_humano', pedido_status = 'orcamento_aprovado', updated_at = NOW() WHERE id = $1`,
         [conversation.id]
       );
-      await db.query(
-        `UPDATE orcamentos SET status = 'aprovado' WHERE conversation_id = $1`,
-        [conversation.id]
-      );
+      const orcamentoPendente = await buscarEnviadoPorTelefone(phone);
+      if (orcamentoPendente) {
+        const resultado = await aprovarOrcamento(orcamentoPendente.id, 'whatsapp');
+        if (resultado.erro) {
+          console.warn('[WEBHOOK] Falha ao aprovar orçamento via texto livre:', resultado.erro.join('; '));
+        }
+      } else {
+        console.warn('[WEBHOOK] Nenhum orçamento "enviado" encontrado pro telefone', phone, 'ao processar aprovação por texto livre');
+      }
 
       // Responde ao cliente confirmando
       const nomeCliente = contact.name || contact.profile_name || '';

@@ -2,6 +2,7 @@ const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const { app } = require('../../src/app');
 const db = require('../../src/db');
+const orcamentosService = require('../../src/modules/orcamentos/service');
 
 function token(role = 'vendedor', id = '00000000-0000-0000-0000-000000000001') {
   return 'Bearer ' + jwt.sign({ id, name: 'Test', email: 't@t.com', role }, process.env.JWT_SECRET);
@@ -109,5 +110,51 @@ describe('PATCH /api/orcamentos/:id/aprovar', () => {
     expect(res.status).toBe(200);
     expect(res.body.ordens_servico.length).toBe(2);
     expect(res.body.ordens_servico[0].status).toBe('aguardando');
+  });
+});
+
+describe('buscarEnviadoPorTelefone', () => {
+  const CELULAR = '11987654321';
+  let clienteTelId;
+  let orcamentoEnviadoId;
+
+  beforeAll(async () => {
+    const cli = await db.query(
+      `INSERT INTO clientes_lkl (tipo_pessoa, nome, canal_origem, status, celular)
+       VALUES ('PF', 'Cliente Teste Telefone', 'balcao', 'ativo', $1)
+       RETURNING id`,
+      [CELULAR]
+    );
+    clienteTelId = cli.rows[0].id;
+
+    const orc = await db.query(
+      `INSERT INTO orcamentos (cliente_id, status, enviado_em)
+       VALUES ($1, 'enviado', NOW())
+       RETURNING id`,
+      [clienteTelId]
+    );
+    orcamentoEnviadoId = orc.rows[0].id;
+  });
+
+  afterAll(async () => {
+    await db.query('DELETE FROM orcamentos WHERE cliente_id = $1', [clienteTelId]);
+    await db.query('DELETE FROM clientes_lkl WHERE id = $1', [clienteTelId]);
+  });
+
+  it('finds the most recent orçamento "enviado" by exact phone', async () => {
+    const r = await orcamentosService.buscarEnviadoPorTelefone(CELULAR);
+    expect(r).toBeTruthy();
+    expect(r.id).toBe(orcamentoEnviadoId);
+  });
+
+  it('finds the orçamento by phone with DDI/mask (matches by 9-digit suffix)', async () => {
+    const r = await orcamentosService.buscarEnviadoPorTelefone(`+55${CELULAR}`);
+    expect(r).toBeTruthy();
+    expect(r.id).toBe(orcamentoEnviadoId);
+  });
+
+  it('returns null when phone has no orçamento "enviado"', async () => {
+    const r = await orcamentosService.buscarEnviadoPorTelefone('11900000000');
+    expect(r).toBeNull();
   });
 });

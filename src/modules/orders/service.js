@@ -81,6 +81,7 @@ function _normalizarItens(dados) {
       largura_cm: it.largura_cm != null ? it.largura_cm : null,
       altura_cm: it.altura_cm != null ? it.altura_cm : null,
       material_id: it.material_id || null,
+      revenda_produto_id: it.revenda_produto_id || null,
     }))
     .filter(it => it.produto);
   if (!itens.length && dados.produto) {
@@ -95,6 +96,7 @@ function _normalizarItens(dados) {
       largura_cm: null,
       altura_cm: null,
       material_id: null,
+      revenda_produto_id: null,
     }];
   }
   return itens;
@@ -169,10 +171,17 @@ async function criarOrder(dados, userId) {
       let materialId = it.material_id;
       if (!materialId && it.material) materialId = await _resolverMaterialId(it.material);
 
-      // Auto-precificação (rascunho): casa o item a um SKU e usa o motor de preço da revenda.
+      // Usa o SKU escolhido explicitamente pelo operador (revenda_produto_id), ou tenta
+      // casar por texto (resolverProdutoRevenda) quando nenhum SKU específico foi informado.
       let valorUnit = 0, valorTotal = 0, precoOrigem = 'manual', precoMemoria = null, revProdId = null;
       try {
-        const prod = await revendaService.resolverProdutoRevenda({ produto: it.produto, material: it.material, tipo_producao: tipo, largura_cm: larg, altura_cm: alt, impressao: it.impressao, especificacao: it.especificacao });
+        let prod = null;
+        if (it.revenda_produto_id) {
+          const r = await db.query('SELECT id, nome, estrategia FROM revenda_produtos WHERE id=$1 AND ativo=TRUE', [it.revenda_produto_id]);
+          prod = r.rows[0] || null;
+        } else {
+          prod = await revendaService.resolverProdutoRevenda({ produto: it.produto, material: it.material, tipo_producao: tipo, largura_cm: larg, altura_cm: alt, impressao: it.impressao, especificacao: it.especificacao });
+        }
         if (prod && prod.estrategia !== 'manual') {
           const calc = await revendaService.precificarItemRevenda({
             revenda_produto_id: prod.id, quantidade: it.quantidade,

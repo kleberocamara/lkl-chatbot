@@ -241,6 +241,19 @@ async function cancelarPixCobranca(txid) {
   }));
 }
 
+/**
+ * Consulta cobrança PIX pelo txid — usada para reconfirmar o status real
+ * antes de dar baixa em pagamento a partir de um webhook (nunca confiar no body).
+ */
+async function consultarPixCobranca(txid) {
+  const token = await getAccessToken();
+  const res = await c6Request(() => axios.get(`${BASE_URL}/v2/pix/cob/${txid}`, {
+    httpsAgent: getAgent(),
+    headers: authHeaders(token),
+  }));
+  return res.data;
+}
+
 async function registrarWebhookPix(webhookUrl) {
   if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
   const token = await getAccessToken();
@@ -310,7 +323,7 @@ async function consultarExtrato(startDate, endDate) {
 
 module.exports = {
   emitirBolepix, consultarBoleto, cancelarBoleto, alterarBoleto,
-  criarPixCobranca, cancelarPixCobranca, registrarWebhookPix,
+  criarPixCobranca, cancelarPixCobranca, consultarPixCobranca, registrarWebhookPix,
   consultarDDA, criarLote, consultarLote, removerItemLote, submeterLote, consultarExtrato,
   _getAccessToken: getAccessToken,
   _getAgent: getAgent,

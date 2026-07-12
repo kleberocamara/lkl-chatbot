@@ -231,11 +231,16 @@ async function mudarStatus(id, novoStatus, extra = {}) {
   }
 
   params.push(id);
+  const idIdx = params.length;
+  params.push(currentStatus);
+  const statusIdx = params.length;
+  // WHERE ... AND status=$statusIdx fecha a corrida: se outra requisição já mudou o status
+  // entre o SELECT acima e este UPDATE, 0 linhas são afetadas em vez de sobrescrever de novo.
   const r = await db.query(
-    `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${idIdx} AND status = $${statusIdx} RETURNING *`,
     params
   );
-  if (!r.rows[0]) return { erro: ['Orçamento não encontrado'] };
+  if (!r.rows[0]) return { erro: ['Este orçamento já foi atualizado por outra ação simultânea. Recarregue e tente novamente.'] };
 
   _syncPedidoStatus(id, novoStatus);
   _notifyVendedorResposta(id, novoStatus);
@@ -460,11 +465,15 @@ async function aprovar(id, aprovado_via) {
   const params = ['aprovado'];
   if (aprovado_via) { params.push(aprovado_via); updates.push(`aprovado_via = $${params.length}`); }
   params.push(id);
+  const idIdx = params.length;
 
+  // WHERE ... AND status='enviado' fecha a corrida: se outra requisição concorrente já
+  // aprovou/reprovou entre o SELECT acima e este UPDATE, 0 linhas são afetadas.
   const r = await db.query(
-    `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    `UPDATE orcamentos SET ${updates.join(', ')} WHERE id = $${idIdx} AND status = 'enviado' RETURNING *`,
     params
   );
+  if (!r.rows[0]) return { erro: ['Este orçamento já foi processado por outra ação simultânea.'] };
   const orcamento = r.rows[0];
 
   // Sync pedido → aprovado (OS de CV será criada via aprovação de arte por item)
@@ -873,6 +882,7 @@ async function _rebuildOrderItems(orcamentoId) {
 const APROVACAO_ARTE_EXATO = ['ok', 'sim', 'pode', 'aprovo'];          // mensagem precisa ser exatamente essa palavra
 const APROVACAO_ARTE_INC = ['aprovado', 'aprovada', 'confirmo', 'autorizo']; // pode aparecer no meio do texto
 const MSG_ARTE_REPROVADA = 'Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.';
+const MSG_ARTE_JA_PROCESSADA = 'Essa arte já tinha acabado de ser respondida — sua última resposta não foi necessária, mas está tudo certo!';
 
 // Busca um item de orçamento pelo id com o superset de colunas usado nos fluxos de arte por item.
 async function _buscarItemArtePorId(itemId) {
@@ -995,8 +1005,15 @@ async function buscarArtePorToken(itemId) {
 }
 
 // Reprova a arte de um item: marca 'reprovada', notifica o vendedor.
+// WHERE ... AND arte_status='enviada' fecha a corrida: se outra requisição concorrente já
+// aprovou/reprovou esse item entre o SELECT que achou o item e este UPDATE, 0 linhas são
+// afetadas — retorna false em vez de notificar o vendedor de novo por um clique duplicado.
 async function _reprovarArteItem(item, comentario) {
-  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [comentario, item.id]);
+  const r = await db.query(
+    `UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2 AND arte_status='enviada'`,
+    [comentario, item.id]
+  );
+  if (r.rowCount === 0) return false;
   if (item.vendedor_id) {
     fcm.sendToUser(item.vendedor_id, {
       title: `Arte com ajustes — Pedido #${item.pedido_numero || ''}`,
@@ -1004,12 +1021,19 @@ async function _reprovarArteItem(item, comentario) {
       data: { orcamento_id: item.orcamento_id },
     }).catch(e => console.warn('[ARTE-REPROVADA-FCM]', e.message));
   }
+  return true;
 }
 
-// Aprova a arte de um item: marca 'aprovada', dispara OS de CV se for o caso. Retorna a mensagem ao cliente.
+// Aprova a arte de um item: marca 'aprovada', dispara OS de CV se for o caso. Retorna a mensagem
+// ao cliente, ou null se a arte já tinha sido processada por outra requisição concorrente
+// (mesma proteção de corrida do WHERE ... AND arte_status='enviada' acima).
 async function _aprovarArteItem(item) {
   const refPed = item.pedido_numero || '';
-  await db.query(`UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1`, [item.id]);
+  const r = await db.query(
+    `UPDATE orcamento_itens SET arte_status='aprovada', arte_aprovada_em=NOW() WHERE id=$1 AND arte_status='enviada'`,
+    [item.id]
+  );
+  if (r.rowCount === 0) return null;
   if (item.tipo_producao === 'COMUNICAÇÃO VISUAL') {
     osService.criarOSComunicacaoVisual(item.orcamento_id).catch(e => console.warn('[OS-CV-ARTE]', e.message));
   }
@@ -1024,9 +1048,11 @@ async function responderArteItem(phone, mensagem) {
   const aprovado = !negado && (APROVACAO_ARTE_INC.some(kw => texto.includes(kw)) || APROVACAO_ARTE_EXATO.includes(texto));
   if (aprovado) {
     const resposta = await _aprovarArteItem(item);
+    if (!resposta) return { aprovado: true, item_id: item.id, resposta: MSG_ARTE_JA_PROCESSADA };
     return { aprovado: true, item_id: item.id, resposta };
   }
-  await _reprovarArteItem(item, String(mensagem || '').trim());
+  const ok = await _reprovarArteItem(item, String(mensagem || '').trim());
+  if (!ok) return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_JA_PROCESSADA };
   return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 
@@ -1039,9 +1065,11 @@ async function processarRespostaArteToken(itemId, resposta, comentario) {
   }
   if (resposta === 'aprovado') {
     const msg = await _aprovarArteItem(item);
+    if (!msg) return { erro: ['Esta arte já foi processada.'] };
     return { aprovado: true, item_id: item.id, resposta: msg };
   }
-  await _reprovarArteItem(item, comentario ? String(comentario).trim() : null);
+  const ok = await _reprovarArteItem(item, comentario ? String(comentario).trim() : null);
+  if (!ok) return { erro: ['Esta arte já foi processada.'] };
   return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 

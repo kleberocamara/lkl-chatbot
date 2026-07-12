@@ -4,6 +4,7 @@ jest.mock('../../src/services/conversas', () => ({
   enviarClienteTexto: jest.fn(),
   sairDeAguardandoHumano: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../src/services/fcm', () => ({ sendToUser: jest.fn().mockResolvedValue(undefined) }));
 
 const db = require('../../src/db');
 const conversas = require('../../src/services/conversas');
@@ -125,7 +126,7 @@ describe('processarRespostaArteToken', () => {
   test('aprovado → arte_status=aprovada e resposta de confirmação', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] }) // SELECT item
-      .mockResolvedValueOnce({ rows: [] });             // UPDATE aprovada
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE aprovada
     const r = await service.processarRespostaArteToken('5', 'aprovado');
     expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 5 }));
     expect(db.query.mock.calls[1][0]).toMatch(/arte_status='aprovada'/);
@@ -134,7 +135,7 @@ describe('processarRespostaArteToken', () => {
   test('reprovado → arte_status=reprovada', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
     const r = await service.processarRespostaArteToken('5', 'reprovado');
     expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 5 }));
     expect(db.query.mock.calls[1][0]).toMatch(/arte_status='reprovada'/);
@@ -143,7 +144,7 @@ describe('processarRespostaArteToken', () => {
   test('reprovado com comentário → grava arte_comentario', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
     const r = await service.processarRespostaArteToken('5', 'reprovado', '  mudar a cor do fundo  ');
     expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 5 }));
     expect(db.query.mock.calls[1][1]).toEqual(['mudar a cor do fundo', 5]);
@@ -161,6 +162,27 @@ describe('processarRespostaArteToken', () => {
     const r = await service.processarRespostaArteToken('999', 'aprovado');
     expect(r.erro[0]).toMatch(/não encontrada/);
   });
+
+  test('corrida: duas aprovações concorrentes do MESMO item — a segunda (UPDATE afeta 0 linhas) retorna erro, sem duplicar efeitos', async () => {
+    // SELECT ainda vê arte_status='enviada' (a primeira requisição ainda não commitou quando esta leu),
+    // mas o UPDATE com WHERE arte_status='enviada' não encontra mais a linha nesse estado.
+    db.query
+      .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] }) // SELECT item
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // UPDATE não afeta nenhuma linha
+    const r = await service.processarRespostaArteToken('5', 'aprovado');
+    expect(r.erro[0]).toMatch(/já foi processada/);
+    expect(db.query).toHaveBeenCalledTimes(2);
+  });
+
+  test('corrida: reprovação perdedora (UPDATE afeta 0 linhas) retorna erro e não notifica o vendedor de novo', async () => {
+    const fcm = require('../../src/services/fcm');
+    db.query
+      .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const r = await service.processarRespostaArteToken('5', 'reprovado');
+    expect(r.erro[0]).toMatch(/já foi processada/);
+    expect(fcm.sendToUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('responderArteItem', () => {
@@ -169,7 +191,7 @@ describe('responderArteItem', () => {
   test('texto de aprovação ("sim") → arte_status=aprovada', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [PEND] }) // _acharArtePendente
-      .mockResolvedValueOnce({ rows: [] });    // UPDATE aprovada
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE aprovada
     const r = await service.responderArteItem('21988596449', 'sim');
     expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 9 }));
     expect(db.query.mock.calls[1][0]).toMatch(/arte_status='aprovada'/);
@@ -178,7 +200,7 @@ describe('responderArteItem', () => {
   test('texto de reprovação ("não, mudar a cor") → arte_status=reprovada e grava arte_comentario', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [PEND] }) // _acharArtePendente
-      .mockResolvedValueOnce({ rows: [] });    // UPDATE reprovada
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE reprovada
     const r = await service.responderArteItem('21988596449', 'não, mudar a cor');
     expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 9 }));
     expect(db.query.mock.calls[1][0]).toMatch(/arte_status='reprovada'/);
@@ -189,5 +211,14 @@ describe('responderArteItem', () => {
     db.query.mockResolvedValueOnce({ rows: [] });
     const r = await service.responderArteItem('21988596449', 'sim');
     expect(r).toBeNull();
+  });
+
+  test('corrida: cliente manda "sim" pelo link E pelo texto quase ao mesmo tempo — a segunda (UPDATE afeta 0 linhas) não trava, retorna mensagem de já processado', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [PEND] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const r = await service.responderArteItem('21988596449', 'sim');
+    expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 9 }));
+    expect(r.resposta).toMatch(/já tinha acabado de ser respondida/);
   });
 });

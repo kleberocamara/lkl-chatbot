@@ -969,6 +969,34 @@ async function _acharArtePendente(phone) {
   return pend.rows[0] || null;
 }
 
+async function buscarArtePorToken(itemId) {
+  if (!itemId) return null;
+  const r = await db.query(
+    `SELECT oi.id, oi.produto, oi.descricao, oi.arte_status, oi.arte_arquivo_url,
+            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     WHERE oi.id = $1`,
+    [itemId]
+  );
+  const item = r.rows[0];
+  if (!item) return null;
+  const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
+  item.arte_arquivo_url_publica = item.arte_arquivo_url ? `${baseUrl}${item.arte_arquivo_url}` : null;
+  return item;
+}
+
+// Reprova a arte de um item: marca 'reprovada', notifica o vendedor.
+async function _reprovarArteItem(item, comentario) {
+  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [comentario || null, item.id]);
+  if (item.vendedor_id) {
+    fcm.sendToUser(item.vendedor_id, {
+      title: `Arte com ajustes — Pedido #${item.pedido_numero || ''}`,
+      body: `${item.produto || 'Item'}: cliente pediu alterações`,
+      data: { orcamento_id: item.orcamento_id },
+    }).catch(() => {});
+  }
+}
+
 // Aprova a arte de um item: marca 'aprovada', dispara OS de CV se for o caso. Retorna a mensagem ao cliente.
 async function _aprovarArteItem(item) {
   const refPed = item.pedido_numero || '';
@@ -985,16 +1013,36 @@ async function responderArteItem(phone, mensagem) {
   const texto = String(mensagem || '').trim().toLowerCase();
   const negado = /\bn[aã]o\b/.test(texto);
   const aprovado = !negado && (APROVACAO_ARTE_INC.some(kw => texto.includes(kw)) || APROVACAO_ARTE_EXATO.includes(texto));
-  const refPed = item.pedido_numero || '';
   if (aprovado) {
     const resposta = await _aprovarArteItem(item);
     return { aprovado: true, item_id: item.id, resposta };
   }
-  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [String(mensagem || '').trim(), item.id]);
-  if (item.vendedor_id) {
-    fcm.sendToUser(item.vendedor_id, { title: `Arte com ajustes — Pedido #${refPed}`, body: `${item.produto || 'Item'}: cliente pediu alterações`, data: { orcamento_id: item.orcamento_id } }).catch(() => {});
-  }
+  await _reprovarArteItem(item, String(mensagem || '').trim());
   return { aprovado: false, item_id: item.id, resposta: `Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.` };
+}
+
+// Processa resposta via link web (token = itemId), análogo a processarRespostaToken para orçamentos.
+async function processarRespostaArteToken(itemId, resposta) {
+  const r = await db.query(
+    `SELECT oi.id, oi.produto, oi.descricao, oi.arte_status, oi.tipo_producao, oi.orcamento_id,
+            o.vendedor_id,
+            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     JOIN orcamentos o ON o.id = oi.orcamento_id
+     WHERE oi.id = $1`,
+    [itemId]
+  );
+  const item = r.rows[0];
+  if (!item) return { erro: ['Arte não encontrada.'] };
+  if (item.arte_status !== 'enviada') {
+    return { erro: [`Esta arte já foi ${item.arte_status === 'aprovada' ? 'aprovada' : 'processada'}.`] };
+  }
+  if (resposta === 'aprovado') {
+    const msg = await _aprovarArteItem(item);
+    return { aprovado: true, item_id: item.id, resposta: msg };
+  }
+  await _reprovarArteItem(item, null);
+  return { aprovado: false, item_id: item.id, resposta: `Anotado! Vamos ajustar a arte.` };
 }
 
 // Resposta via clique de botão interativo (roteia pelo id, não pelo texto).
@@ -1025,4 +1073,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes, buscarEnviadoPorTelefone };
+module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes, buscarEnviadoPorTelefone, buscarArtePorToken, processarRespostaArteToken };

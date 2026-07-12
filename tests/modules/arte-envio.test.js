@@ -124,3 +124,89 @@ describe('responderArteBotao', () => {
     expect(r).toBeNull();
   });
 });
+
+describe('buscarArtePorToken', () => {
+  test('item encontrado → monta arte_arquivo_url_publica a partir de BASE_URL', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 5, produto: 'FOLDER', arte_status: 'enviada', arte_arquivo_url: '/uploads/artes/arte_1.png', pedido_numero: 42 }],
+    });
+    const r = await service.buscarArtePorToken('5');
+    expect(r.arte_arquivo_url_publica).toBe('https://app.graficalkl.com.br/uploads/artes/arte_1.png');
+  });
+
+  test('item não encontrado → null', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+    const r = await service.buscarArtePorToken('999');
+    expect(r).toBeNull();
+  });
+
+  test('itemId vazio → null sem consultar o banco', async () => {
+    const r = await service.buscarArtePorToken(null);
+    expect(r).toBeNull();
+    expect(db.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('processarRespostaArteToken', () => {
+  const ITEM_ENVIADA = { id: 5, produto: 'FOLDER', arte_status: 'enviada', tipo_producao: 'OFFSET', orcamento_id: 1, vendedor_id: 3, pedido_numero: 42 };
+
+  test('aprovado → arte_status=aprovada e resposta de confirmação', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] }) // SELECT item
+      .mockResolvedValueOnce({ rows: [] });             // UPDATE aprovada
+    const r = await service.processarRespostaArteToken('5', 'aprovado');
+    expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 5 }));
+    expect(db.query.mock.calls[1][0]).toMatch(/arte_status='aprovada'/);
+  });
+
+  test('reprovado → arte_status=reprovada', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] })
+      .mockResolvedValueOnce({ rows: [] });
+    const r = await service.processarRespostaArteToken('5', 'reprovado');
+    expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 5 }));
+    expect(db.query.mock.calls[1][0]).toMatch(/arte_status='reprovada'/);
+  });
+
+  test('item já processado (arte_status=aprovada) → erro, nenhum UPDATE', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ ...ITEM_ENVIADA, arte_status: 'aprovada' }] });
+    const r = await service.processarRespostaArteToken('5', 'aprovado');
+    expect(r.erro[0]).toMatch(/já foi/);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('item inexistente → erro', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+    const r = await service.processarRespostaArteToken('999', 'aprovado');
+    expect(r.erro[0]).toMatch(/não encontrada/);
+  });
+});
+
+describe('responderArteItem', () => {
+  const PEND = { id: 9, orcamento_id: 1, produto: 'BANNER', tipo_producao: 'OFFSET', vendedor_id: 3, pedido_numero: 31 };
+
+  test('texto de aprovação ("sim") → arte_status=aprovada', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [PEND] }) // _acharArtePendente
+      .mockResolvedValueOnce({ rows: [] });    // UPDATE aprovada
+    const r = await service.responderArteItem('21988596449', 'sim');
+    expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 9 }));
+    expect(db.query.mock.calls[1][0]).toMatch(/arte_status='aprovada'/);
+  });
+
+  test('texto de reprovação ("não, mudar a cor") → arte_status=reprovada e grava arte_comentario', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [PEND] }) // _acharArtePendente
+      .mockResolvedValueOnce({ rows: [] });    // UPDATE reprovada
+    const r = await service.responderArteItem('21988596449', 'não, mudar a cor');
+    expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 9 }));
+    expect(db.query.mock.calls[1][0]).toMatch(/arte_status='reprovada'/);
+    expect(db.query.mock.calls[1][1]).toEqual(['não, mudar a cor', 9]);
+  });
+
+  test('sem arte pendente → null', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] });
+    const r = await service.responderArteItem('21988596449', 'sim');
+    expect(r).toBeNull();
+  });
+});

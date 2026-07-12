@@ -938,9 +938,10 @@ async function enviarArteItem(itemId, arquivo_url) {
     `Para solicitar ajustes, responda *NÃO* e descreva o que deseja mudar.\n\n` +
     `Ou clique para aprovar/reprovar: ${linkResposta}`;
 
-  const envioTexto = await conversas.enviarClienteTexto(item.cliente_celular, textoAprovacao, { nome: item.cliente_nome });
-  if (!envioTexto.ok) {
-    console.warn('[ARTE] Falha ao enviar texto de aprovação do item', itemId);
+  try {
+    await conversas.enviarClienteTexto(item.cliente_celular, textoAprovacao, { nome: item.cliente_nome });
+  } catch (e) {
+    console.warn('[ARTE] Falha ao enviar texto de aprovação do item', itemId, e.message);
   }
 
   await db.query(

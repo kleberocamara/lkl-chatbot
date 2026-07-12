@@ -104,6 +104,64 @@ router.post('/resposta', async (req, res) => {
   res.send(_paginaSimples(msg, r === 'aprovado' ? '#2e7d32' : '#c62828'));
 });
 
+// GET /arte-resposta?token=xxx — PÚBLICA, SOMENTE LEITURA: mostra a página de aprovação da arte.
+router.get('/arte-resposta', async (req, res) => {
+  const { token } = req.query;
+  if (!token || !UUID_RE.test(token)) return res.status(400).send('Link inválido.');
+
+  let item;
+  try {
+    item = await service.buscarArtePorToken(token);
+  } catch (e) {
+    console.error('[ARTE-RESPOSTA-GET]', e.message);
+    return res.status(500).send(_paginaSimples('⚠️ Não foi possível carregar a arte agora.', '#c62828'));
+  }
+  if (!item) return res.send(_paginaSimples('⚠️ Link inválido ou expirado.', '#c62828'));
+
+  if (item.arte_status !== 'enviada') {
+    const rotulo = item.arte_status === 'aprovada' ? 'aprovada' : item.arte_status === 'reprovada' ? 'reprovada' : 'processada';
+    return res.send(_paginaSimples(`Esta arte já foi <b>${rotulo}</b>.`, '#1a237e'));
+  }
+
+  const refPedido = item.pedido_numero || '';
+  const nomeItem = item.produto || item.descricao || 'item';
+
+  res.send(`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body style="font-family:Arial;background:#f5f5f5;margin:0;padding:24px">
+      <div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+        <h2 style="color:#1a237e;margin:0 0 4px">Gráfica LKL</h2>
+        <p style="color:#555;margin:0 0 20px">Pedido #${_escHtml(refPedido)} — ${_escHtml(nomeItem)}</p>
+        <img src="${_escHtml(item.arte_arquivo_url_publica)}" style="width:100%;border-radius:8px;border:1px solid #eee;margin-bottom:20px">
+        <form method="POST" action="/api/v2/orcamentos/arte-resposta" style="display:flex;gap:12px">
+          <input type="hidden" name="token" value="${_escHtml(token)}">
+          <button type="submit" name="r" value="aprovado" style="flex:1;background:#2e7d32;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">✅ Aprovar</button>
+          <button type="submit" name="r" value="reprovado" style="flex:1;background:#c62828;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">❌ Reprovar</button>
+        </form>
+      </div>
+    </body></html>`);
+});
+
+// POST /arte-resposta — PÚBLICA: executa a aprovação/reprovação da arte.
+router.post('/arte-resposta', async (req, res) => {
+  const { token, r } = req.body || {};
+  if (!token || !UUID_RE.test(token) || !['aprovado', 'reprovado'].includes(r)) {
+    return res.status(400).send('Requisição inválida.');
+  }
+  let result;
+  try {
+    result = await service.processarRespostaArteToken(token, r);
+  } catch (e) {
+    console.error('[ARTE-RESPOSTA-POST]', e.message);
+    return res.status(500).send(_paginaSimples('⚠️ Não foi possível processar sua resposta agora.', '#c62828'));
+  }
+  if (result.erro) return res.send(_paginaSimples(`⚠️ ${_escHtml(result.erro[0])}`, '#c62828'));
+
+  const msg = r === 'aprovado'
+    ? '✅ Arte aprovada! Seu pedido seguirá para produção.'
+    : '❌ Anotado! Nosso time vai revisar os ajustes solicitados.';
+  res.send(_paginaSimples(msg, r === 'aprovado' ? '#2e7d32' : '#c62828'));
+});
+
 // POST / — create orçamento (any authenticated user)
 router.post('/', async (req, res) => {
   try {

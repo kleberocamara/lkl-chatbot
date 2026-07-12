@@ -898,9 +898,9 @@ async function enviarArteItem(itemId, arquivo_url) {
     return { ok: true, item_id: itemId, status: 'enviada' };
   }
 
-  const publicUrl = `${process.env.BASE_URL || 'https://app.graficalkl.com.br'}${arquivo_url}`;
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
-  const linkResposta = `${baseUrl}/api/v2/orcamentos/arte-resposta?token=${item.id}`;
+  const publicUrl = `${baseUrl}${arquivo_url}`;
+  const linkResposta = `${baseUrl}/api/v2/orcamentos/arte-resposta?token=${itemId}`;
 
   const envioImagem = await conversas.enviarClienteImagem(item.cliente_celular, publicUrl, null, {
     mediaRef: arquivo_url,
@@ -923,7 +923,10 @@ async function enviarArteItem(itemId, arquivo_url) {
     `Para solicitar ajustes, responda *NÃO* e descreva o que deseja mudar.\n\n` +
     `Ou clique para aprovar/reprovar: ${linkResposta}`;
 
-  await conversas.enviarClienteTexto(item.cliente_celular, textoAprovacao, { nome: item.cliente_nome });
+  const envioTexto = await conversas.enviarClienteTexto(item.cliente_celular, textoAprovacao, { nome: item.cliente_nome });
+  if (!envioTexto.ok) {
+    console.warn('[ARTE] Falha ao enviar texto de aprovação do item', itemId);
+  }
 
   await db.query(
     `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,

@@ -63,6 +63,25 @@ test('envio falha total → arte_status=erro_envio, não envia texto, e retorna 
   expect(r.erro[0]).toMatch(/Falha ao enviar arte/);
 });
 
+test('envio de texto falha → loga warning mas ainda marca arte_status=enviada', async () => {
+  db.query
+    .mockResolvedValueOnce({ rows: [ITEM] }) // SELECT item
+    .mockResolvedValueOnce({ rows: [] });    // UPDATE status
+
+  conversas.enviarClienteImagem.mockResolvedValueOnce({ ok: true, via: 'imagem' });
+  conversas.enviarClienteTexto.mockResolvedValueOnce({ ok: false });
+  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const r = await service.enviarArteItem(5, '/uploads/artes/arte_1.png');
+
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Falha ao enviar texto/), 5);
+  const upd = db.query.mock.calls[1];
+  expect(upd[0]).toMatch(/arte_status='enviada'/);
+  expect(r).toEqual({ ok: true, item_id: 5, status: 'enviada' });
+
+  warnSpy.mockRestore();
+});
+
 test('item não encontrado → erro', async () => {
   db.query.mockResolvedValueOnce({ rows: [] });
   const r = await service.enviarArteItem(999, '/uploads/x.png');

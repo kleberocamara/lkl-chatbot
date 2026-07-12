@@ -11,7 +11,14 @@ const _arteStorage = multer.diskStorage({
   destination: path.join(__dirname, '../../../public/uploads/artes'),
   filename: (req, file, cb) => cb(null, `arte_orc_${Date.now()}_${Math.round(Math.random()*1e6)}${path.extname(file.originalname)}`),
 });
-const _uploadArte = multer({ storage: _arteStorage, limits: { fileSize: 15 * 1024 * 1024 } });
+const _uploadArte = multer({
+  storage: _arteStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Apenas imagens são aceitas'));
+  },
+});
 
 const router = express.Router();
 

@@ -28,25 +28,11 @@ _revCron.schedule('0 4 * * *', () => {
 }, { timezone: 'America/Sao_Paulo' });
 
 app.set('trust proxy', 1);
-// CSP: o painel usa onclick="" e style="" inline em todo lugar (legado), então script-src/style-src
-// precisam de 'unsafe-inline' pra não quebrar a UI. Mesmo assim, isso ainda bloqueia o vetor mais
-// comum de exfiltração de dados por XSS: carregar script de outro domínio, ou usar fetch/imagem
-// pra mandar dados roubados pra um servidor externo (connect-src/img-src restritos a 'self').
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      fontSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      frameAncestors: ["'self'"],
-    },
-  },
-}));
+// CSP desabilitada: o painel usa onclick="" inline em milhares de pontos (legado), e mesmo
+// com 'unsafe-inline' em script-src o CSP quebrou a navegação lateral em produção — revertido.
+// A defesa real contra XSS aqui é a correção de escape em escHtml()/escJs() (ver commit
+// "fix(seguranca): corrige XSS armazenado no painel"), não a CSP.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.BASE_URL, credentials: true }));
 app.use('/webhook', rateLimit({ windowMs: 60000, max: 200 }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 100 }));

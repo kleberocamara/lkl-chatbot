@@ -19,9 +19,10 @@ router.use('/revenda', requireAuthApi, require('./revenda/router'));
 router.use('/revenda-compras', requireAuthApi, require('./revenda-compras/router'));
 router.use('/orders', requireAuthApi, require('./orders/router'));
 router.use('/notifications', requireAuthApi, require('./notifications/router'));
-// /orcamentos/resposta é público (link de aprovação: GET mostra a página, POST executa); demais rotas exigem auth
+// /orcamentos/resposta e /orcamentos/arte-resposta são públicas (links de aprovação: GET mostra a página, POST executa); demais rotas exigem auth
+const ORCAMENTOS_ROTAS_PUBLICAS = ['/resposta', '/arte-resposta'];
 router.use('/orcamentos',
-  (req, res, next) => (req.path === '/resposta' && ['GET', 'POST'].includes(req.method)) ? next() : requireAuthApi(req, res, next),
+  (req, res, next) => (ORCAMENTOS_ROTAS_PUBLICAS.includes(req.path) && ['GET', 'POST'].includes(req.method)) ? next() : requireAuthApi(req, res, next),
   require('./orcamentos/router'));
 router.use('/os', requireAuthApi, require('./os/router'));
 router.use('/especificacoes', requireAuthApi, require('./especificacoes/router'));

@@ -1,5 +1,9 @@
 jest.mock('../../src/db', () => ({ query: jest.fn() }));
-jest.mock('../../src/services/conversas', () => ({ enviarClienteImagem: jest.fn(), enviarClienteTexto: jest.fn() }));
+jest.mock('../../src/services/conversas', () => ({
+  enviarClienteImagem: jest.fn(),
+  enviarClienteTexto: jest.fn(),
+  sairDeAguardandoHumano: jest.fn().mockResolvedValue(undefined),
+}));
 
 const db = require('../../src/db');
 const conversas = require('../../src/services/conversas');
@@ -12,26 +16,40 @@ const ITEM = {
 
 beforeEach(() => { jest.clearAllMocks(); process.env.BASE_URL = 'https://app.graficalkl.com.br'; });
 
-test('envio OK → arte_status=enviada e usa enviarClienteImagem com mediaRef relativo', async () => {
+test('envio OK → envia imagem sem botões, depois texto com link, e marca arte_status=enviada', async () => {
   db.query
     .mockResolvedValueOnce({ rows: [ITEM] }) // SELECT item
     .mockResolvedValueOnce({ rows: [] });    // UPDATE status
+
   conversas.enviarClienteImagem.mockResolvedValueOnce({ ok: true, via: 'imagem' });
+  conversas.enviarClienteTexto.mockResolvedValueOnce({ ok: true });
 
   const r = await service.enviarArteItem(5, '/uploads/artes/arte_1.png');
 
   expect(conversas.enviarClienteImagem).toHaveBeenCalledWith(
     '21988596449',
     'https://app.graficalkl.com.br/uploads/artes/arte_1.png',
-    expect.stringMatching(/Pedido #42/),
+    null,
     expect.objectContaining({ mediaRef: '/uploads/artes/arte_1.png' })
   );
+  expect(conversas.enviarClienteImagem.mock.calls[0][3]).not.toHaveProperty('buttons');
+
+  expect(conversas.enviarClienteTexto).toHaveBeenCalledWith(
+    '21988596449',
+    expect.stringMatching(/Pedido #42/),
+    expect.objectContaining({ nome: 'KLEBER' })
+  );
+  const textoEnviado = conversas.enviarClienteTexto.mock.calls[0][1];
+  expect(textoEnviado).toMatch(/\*SIM\*/);
+  expect(textoEnviado).toMatch(/\*NÃO\*/);
+  expect(textoEnviado).toMatch(/arte-resposta\?token=5/);
+
   const upd = db.query.mock.calls[1];
   expect(upd[0]).toMatch(/arte_status='enviada'/);
   expect(r).toEqual({ ok: true, item_id: 5, status: 'enviada' });
 });
 
-test('envio falha total → arte_status=erro_envio e retorna erro', async () => {
+test('envio falha total → arte_status=erro_envio, não envia texto, e retorna erro', async () => {
   db.query
     .mockResolvedValueOnce({ rows: [ITEM] }) // SELECT item
     .mockResolvedValueOnce({ rows: [] });    // UPDATE erro_envio
@@ -39,6 +57,7 @@ test('envio falha total → arte_status=erro_envio e retorna erro', async () => 
 
   const r = await service.enviarArteItem(5, '/uploads/artes/arte_1.png');
 
+  expect(conversas.enviarClienteTexto).not.toHaveBeenCalled();
   expect(db.query.mock.calls[1][0]).toMatch(/arte_status='erro_envio'/);
   expect(r.status).toBe('erro_envio');
   expect(r.erro[0]).toMatch(/Falha ao enviar arte/);

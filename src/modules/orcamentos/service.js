@@ -899,35 +899,39 @@ async function enviarArteItem(itemId, arquivo_url) {
   }
 
   const publicUrl = `${process.env.BASE_URL || 'https://app.graficalkl.com.br'}${arquivo_url}`;
-  const caption = `Olá! Segue a arte do *Pedido #${refPed}* (${nomeItem}) para sua aprovação.\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
-  const fallbackTexto = `Olá! Segue a arte do seu *Pedido #${refPed}* (${nomeItem}): ${publicUrl}\n\nResponda *APROVADO* para confirmar ou envie os ajustes desejados.`;
+  const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
+  const linkResposta = `${baseUrl}/api/v2/orcamentos/arte-resposta?token=${item.id}`;
 
-  const envio = await conversas.enviarClienteImagem(item.cliente_celular, publicUrl, caption, {
+  const envioImagem = await conversas.enviarClienteImagem(item.cliente_celular, publicUrl, null, {
     mediaRef: arquivo_url,
     legenda: `Arte Pedido #${refPed}`,
-    fallbackTexto,
-    buttons: [
-      { id: 'arte_aprovar', title: '✅ Aprovar' },
-      { id: 'arte_reprovar', title: '✏️ Reprovar' },
-    ],
   });
 
-  if (envio.ok) {
+  if (!envioImagem.ok) {
     await db.query(
-      `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
+      `UPDATE orcamento_itens SET arte_status='erro_envio', arte_arquivo_url=$1, arte_enviada_em=NULL WHERE id=$2`,
       [arquivo_url, itemId]
     );
-    conversas.sairDeAguardandoHumano(item.cliente_celular, { para: 'resolved', motivo: 'arte_enviada' })
-      .catch(e => console.warn('[AUTO-RESOLVE] arte:', e.message));
-    return { ok: true, item_id: itemId, status: 'enviada' };
+    console.warn('[ARTE] Falha total ao enviar arte do item', itemId);
+    return { erro: ['Falha ao enviar arte ao cliente'], item_id: itemId, status: 'erro_envio' };
   }
 
+  const textoAprovacao =
+    `Olá, ${item.cliente_nome || 'cliente'}! 🖨\n\n` +
+    `Segue a arte final do seu *Pedido #${refPed}* (${nomeItem}) para aprovação.\n\n` +
+    `Para aprovar e seguir para produção, responda *SIM*.\n` +
+    `Para solicitar ajustes, responda *NÃO* e descreva o que deseja mudar.\n\n` +
+    `Ou clique para aprovar/reprovar: ${linkResposta}`;
+
+  await conversas.enviarClienteTexto(item.cliente_celular, textoAprovacao, { nome: item.cliente_nome });
+
   await db.query(
-    `UPDATE orcamento_itens SET arte_status='erro_envio', arte_arquivo_url=$1, arte_enviada_em=NULL WHERE id=$2`,
+    `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
     [arquivo_url, itemId]
   );
-  console.warn('[ARTE] Falha total ao enviar arte do item', itemId);
-  return { erro: ['Falha ao enviar arte ao cliente'], item_id: itemId, status: 'erro_envio' };
+  conversas.sairDeAguardandoHumano(item.cliente_celular, { para: 'resolved', motivo: 'arte_enviada' })
+    .catch(e => console.warn('[AUTO-RESOLVE] arte:', e.message));
+  return { ok: true, item_id: itemId, status: 'enviada' };
 }
 
 // Acha o orçamento com status 'enviado' mais recente pra esse telefone (sufixo de 9 dígitos).

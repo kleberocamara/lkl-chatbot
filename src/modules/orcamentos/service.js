@@ -1044,19 +1044,6 @@ async function processarRespostaArteToken(itemId, resposta) {
   return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 
-// Resposta via clique de botão interativo (roteia pelo id, não pelo texto).
-async function responderArteBotao(phone, buttonId) {
-  const item = await _acharArtePendente(phone);
-  if (!item) return null;
-  if (buttonId === 'arte_aprovar') {
-    const resposta = await _aprovarArteItem(item);
-    return { aprovado: true, item_id: item.id, resposta };
-  }
-  // arte_reprovar → mantém 'enviada'; pede a descrição do ajuste (Opção A).
-  // A próxima mensagem de texto do cliente cai no responderArteItem (texto ≠ aprovação → reprovada + comentário).
-  return { pediu_ajuste: true, item_id: item.id, resposta: `Certo! ✏️ Pode nos descrever o ajuste que deseja? Assim já mandamos a nova versão certinha.` };
-}
-
 async function listarArtesPendentes() {
   const r = await db.query(
     `SELECT oi.id, oi.produto, oi.descricao, oi.tipo_producao, oi.arte_status, oi.arte_arquivo_url, oi.arte_comentario,
@@ -1072,4 +1059,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, responderArteBotao, listarArtesPendentes, buscarEnviadoPorTelefone, buscarArtePorToken, processarRespostaArteToken };
+module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, listarArtesPendentes, buscarEnviadoPorTelefone, buscarArtePorToken, processarRespostaArteToken };

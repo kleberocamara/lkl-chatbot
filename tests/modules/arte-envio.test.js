@@ -97,34 +97,6 @@ test('item sem celular → salva status enviada sem tentar enviar', async () => 
   expect(r.status).toBe('enviada');
 });
 
-describe('responderArteBotao', () => {
-  const PEND = { id: 9, orcamento_id: 1, produto: 'BANNER', tipo_producao: 'OFFSET', vendedor_id: 3, pedido_numero: 31 };
-
-  test('arte_aprovar → status aprovada + resposta de confirmação', async () => {
-    db.query
-      .mockResolvedValueOnce({ rows: [PEND] }) // _acharArtePendente
-      .mockResolvedValueOnce({ rows: [] });    // UPDATE aprovada
-    const r = await service.responderArteBotao('21988596449', 'arte_aprovar');
-    expect(r).toEqual(expect.objectContaining({ aprovado: true, item_id: 9 }));
-    expect(r.resposta).toMatch(/aprovada/i);
-    expect(db.query.mock.calls[1][0]).toMatch(/arte_status='aprovada'/);
-  });
-
-  test('arte_reprovar → NÃO muda status, pede descrição do ajuste', async () => {
-    db.query.mockResolvedValueOnce({ rows: [PEND] }); // só o SELECT
-    const r = await service.responderArteBotao('21988596449', 'arte_reprovar');
-    expect(r).toEqual(expect.objectContaining({ pediu_ajuste: true, item_id: 9 }));
-    expect(r.resposta).toMatch(/descrever o ajuste/i);
-    expect(db.query).toHaveBeenCalledTimes(1); // nenhum UPDATE
-  });
-
-  test('sem arte pendente → null', async () => {
-    db.query.mockResolvedValueOnce({ rows: [] });
-    const r = await service.responderArteBotao('21988596449', 'arte_aprovar');
-    expect(r).toBeNull();
-  });
-});
-
 describe('buscarArtePorToken', () => {
   test('item encontrado → monta arte_arquivo_url_publica a partir de BASE_URL', async () => {
     db.query.mockResolvedValueOnce({

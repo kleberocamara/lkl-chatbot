@@ -1,7 +1,7 @@
 const db = require('../db');
 const { processMessage } = require('../ai/agent');
 const { sendMessage, markAsRead, downloadMedia } = require('../services/whatsapp');
-const { responderArteItem, responderArteBotao, aprovar: aprovarOrcamento, buscarEnviadoPorTelefone } = require('../modules/orcamentos/service');
+const { responderArteItem, aprovar: aprovarOrcamento, buscarEnviadoPorTelefone } = require('../modules/orcamentos/service');
 const { notifyAnalyst } = require('../services/email');
 const { log } = require('../services/logger');
 
@@ -77,18 +77,6 @@ async function handleInboundMessage(phone, profileName, messageText, waMessageId
   // Salva mensagem do cliente
   await saveMessage(conversation.id, contact.id, messageText, 'inbound', waMessageId, 'ai');
   await db.query('UPDATE conversations SET reengajado_em = NULL WHERE id = $1 AND reengajado_em IS NOT NULL', [conversation.id]);
-
-  // Clique de botão interativo da arte — roteia pelo id (não pelo texto)
-  if (buttonId === 'arte_aprovar' || buttonId === 'arte_reprovar') {
-    const respBotao = await responderArteBotao(phone, buttonId);
-    if (respBotao) {
-      await sendMessage(phone, respBotao.resposta);
-      await saveMessage(conversation.id, contact.id, respBotao.resposta, 'outbound', null, 'system');
-      if (respBotao.aprovado && global.io) global.io.emit('arte_aprovada', { item_id: respBotao.item_id });
-      return;
-    }
-    // sem arte pendente → segue o fluxo normal com o título do botão como texto
-  }
 
   await log('message_received', `Mensagem recebida de ${phone}`, {
     contactId: contact.id,

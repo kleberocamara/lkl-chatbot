@@ -1653,9 +1653,9 @@ function renderOrcItens(orcId, itens) {
         <div style="width:110px;text-align:right;font-size:13px;color:#555;flex-shrink:0">a R$ ${parseFloat(it.valor_unitario||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
         <div style="width:130px;text-align:right;font-weight:700;font-size:13px;flex-shrink:0">Total R$ ${parseFloat(it.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
         ${travado ? '<div style="width:62px;flex-shrink:0"></div>' : `
-        <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}',${it.quantidade},${it.valor_unitario||0})"
+        <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escJs(it.descricao)}',${it.quantidade},${it.valor_unitario||0})"
           style="background:none;border:none;cursor:pointer;font-size:18px;color:#5c6bc0;padding:2px 4px;flex-shrink:0" title="Editar">✏️</button>
-        <button onclick="excluirItemOrc('${orcId}','${it.id}','${escHtml(it.descricao)}')"
+        <button onclick="excluirItemOrc('${orcId}','${it.id}','${escJs(it.descricao)}')"
           style="background:#e53935;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;color:white;font-size:16px;line-height:1;flex-shrink:0" title="Excluir">−</button>`}
       </div>`).join('')}
       ${travado ? '' : `<div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
@@ -2028,7 +2028,7 @@ function buscarMaterialViaQuery(idx, q) {
     const lista = res?.materiais || res?.data || (Array.isArray(res) ? res : []) || [];
     if (!lista.length) { result.innerHTML = '<div style="padding:8px;color:#999;font-size:12px">Nenhum material</div>'; return; }
     result.innerHTML = lista.map(m => `
-      <div onclick="selecionarMaterialVia(${idx},'${m.id}','${escHtml(((m.codigo?m.codigo+' - ':'')+m.nome)).replace(/'/g,"\\'")}')"
+      <div onclick="selecionarMaterialVia(${idx},'${m.id}','${escJs((m.codigo?m.codigo+' - ':'')+m.nome)}')"
         style="padding:8px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px"
         onmouseenter="this.style.background='#f5f7ff'" onmouseleave="this.style.background='#fff'">
         <b>${escHtml(m.codigo||'')}</b> ${escHtml(m.nome)} <span style="color:#888;font-size:11px">${m.unidade||''}</span></div>`).join('');
@@ -3800,7 +3800,7 @@ async function loadUsuarios2() {
     <td style="display:flex;gap:6px;flex-wrap:wrap">
       ${u.active?`<button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="toggleUserActive('${u.id}',false)">Desativar</button>`
                 :`<button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="toggleUserActive('${u.id}',true)">Ativar</button>`}
-      <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="openEditUser2('${u.id}','${escHtml(u.name)}','${escHtml(u.email)}','${u.role}','${u.setor||''}')">✏️</button>
+      <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="openEditUser2('${u.id}','${escJs(u.name)}','${escJs(u.email)}','${u.role}','${u.setor||''}')">✏️</button>
     </td>
   </tr>`).join('');
 }
@@ -4145,7 +4145,22 @@ async function resolveConv(convId) {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>');
+}
+
+// Escapa um valor para uso seguro DENTRO de uma string JS de aspas simples embutida em
+// atributo HTML (ex: onclick="fn('${escJs(valor)}')"). Necessário porque escHtml() sozinho
+// não protege esse contexto: entidades HTML são decodificadas ANTES do parser JS ler o
+// atributo, então &#39; viraria ' de novo e o texto do usuário poderia fechar a string e
+// injetar código. Ordem importa: escapa barra invertida antes de aspas.
+function escJs(str) {
+  return String(str ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, '\\n');
 }
 
 // Escapa HTML e transforma URLs (http/https) em links clicáveis.
@@ -4836,8 +4851,8 @@ async function carregarItensPedidoEdit(orcId, orcStatus, orderId) {
       ${_arteChip(orcId, it.id, !!it.tem_arte, travado)}
       <span style="color:#666">${it.quantidade}</span>
       ${travado ? '' : `
-      <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}',${it.quantidade},${it.valor_unitario||0},'${(orderId||'').replace(/'/g,"\\'")}')" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>
-      <button onclick="excluirItemPedidoEdit('${orcId}','${it.id}','${escHtml(it.descricao||'').replace(/'/g,"\\'")}')" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer">−</button>`}
+      <button onclick="abrirEditarItemOrc('${orcId}','${it.id}','${escJs(it.descricao||'')}',${it.quantidade},${it.valor_unitario||0},'${escJs(orderId||'')}')" style="background:none;border:none;cursor:pointer;font-size:15px">✏️</button>
+      <button onclick="excluirItemPedidoEdit('${orcId}','${it.id}','${escJs(it.descricao||'')}')" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer">−</button>`}
     </div>`).join('');
   box.innerHTML = `${linhas || '<span style="color:#999">Sem itens</span>'}
     ${travado ? `<div style="margin-top:6px;font-size:11px;color:#e65100">${({enviado:'📤 Enviado ao cliente — aguardando resposta (itens bloqueados)',aprovado:'🔒 Orçamento aprovado — itens bloqueados',reprovado:'❌ Orçamento reprovado — itens bloqueados',cancelado:'🚫 Orçamento cancelado — itens bloqueados'}[orcStatus] || '🔒 Itens bloqueados')}</div>`

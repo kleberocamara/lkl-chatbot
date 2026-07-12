@@ -987,7 +987,7 @@ async function buscarArtePorToken(itemId) {
 
 // Reprova a arte de um item: marca 'reprovada', notifica o vendedor.
 async function _reprovarArteItem(item, comentario) {
-  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [comentario || null, item.id]);
+  await db.query(`UPDATE orcamento_itens SET arte_status='reprovada', arte_comentario=$1 WHERE id=$2`, [comentario, item.id]);
   if (item.vendedor_id) {
     fcm.sendToUser(item.vendedor_id, {
       title: `Arte com ajustes — Pedido #${item.pedido_numero || ''}`,

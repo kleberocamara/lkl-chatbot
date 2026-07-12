@@ -140,6 +140,15 @@ describe('processarRespostaArteToken', () => {
     expect(db.query.mock.calls[1][0]).toMatch(/arte_status='reprovada'/);
   });
 
+  test('reprovado com comentário → grava arte_comentario', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [ITEM_ENVIADA] })
+      .mockResolvedValueOnce({ rows: [] });
+    const r = await service.processarRespostaArteToken('5', 'reprovado', '  mudar a cor do fundo  ');
+    expect(r).toEqual(expect.objectContaining({ aprovado: false, item_id: 5 }));
+    expect(db.query.mock.calls[1][1]).toEqual(['mudar a cor do fundo', 5]);
+  });
+
   test('item já processado (arte_status=aprovada) → erro, nenhum UPDATE', async () => {
     db.query.mockResolvedValueOnce({ rows: [{ ...ITEM_ENVIADA, arte_status: 'aprovada' }] });
     const r = await service.processarRespostaArteToken('5', 'aprovado');

@@ -132,10 +132,14 @@ router.get('/arte-resposta', async (req, res) => {
         <h2 style="color:#1a237e;margin:0 0 4px">Gráfica LKL</h2>
         <p style="color:#555;margin:0 0 20px">Pedido #${_escHtml(refPedido)} — ${_escHtml(nomeItem)}</p>
         <img src="${_escHtml(item.arte_arquivo_url_publica)}" style="width:100%;border-radius:8px;border:1px solid #eee;margin-bottom:20px">
-        <form method="POST" action="/api/v2/orcamentos/arte-resposta" style="display:flex;gap:12px">
+        <form method="POST" action="/api/v2/orcamentos/arte-resposta">
           <input type="hidden" name="token" value="${_escHtml(token)}">
-          <button type="submit" name="r" value="aprovado" style="flex:1;background:#2e7d32;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">✅ Aprovar</button>
-          <button type="submit" name="r" value="reprovado" style="flex:1;background:#c62828;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">❌ Reprovar</button>
+          <label style="display:block;font-size:13px;color:#555;margin-bottom:6px">Observações (opcional — descreva o ajuste desejado se for reprovar)</label>
+          <textarea name="comentario" rows="3" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:Arial;font-size:14px;margin-bottom:16px"></textarea>
+          <div style="display:flex;gap:12px">
+            <button type="submit" name="r" value="aprovado" style="flex:1;background:#2e7d32;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">✅ Aprovar</button>
+            <button type="submit" name="r" value="reprovado" style="flex:1;background:#c62828;color:white;border:none;padding:14px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer">❌ Reprovar</button>
+          </div>
         </form>
       </div>
     </body></html>`);
@@ -143,13 +147,13 @@ router.get('/arte-resposta', async (req, res) => {
 
 // POST /arte-resposta — PÚBLICA: executa a aprovação/reprovação da arte.
 router.post('/arte-resposta', async (req, res) => {
-  const { token, r } = req.body || {};
+  const { token, r, comentario } = req.body || {};
   if (!token || !UUID_RE.test(token) || !['aprovado', 'reprovado'].includes(r)) {
     return res.status(400).send('Requisição inválida.');
   }
   let result;
   try {
-    result = await service.processarRespostaArteToken(token, r);
+    result = await service.processarRespostaArteToken(token, r, comentario);
   } catch (e) {
     console.error('[ARTE-RESPOSTA-POST]', e.message);
     return res.status(500).send(_paginaSimples('⚠️ Não foi possível processar sua resposta agora.', '#c62828'));

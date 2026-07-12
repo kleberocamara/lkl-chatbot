@@ -1030,7 +1030,7 @@ async function responderArteItem(phone, mensagem) {
 }
 
 // Processa resposta via link web (token = itemId), análogo a processarRespostaToken para orçamentos.
-async function processarRespostaArteToken(itemId, resposta) {
+async function processarRespostaArteToken(itemId, resposta, comentario) {
   const item = await _buscarItemArtePorId(itemId);
   if (!item) return { erro: ['Arte não encontrada.'] };
   if (item.arte_status !== 'enviada') {
@@ -1040,7 +1040,7 @@ async function processarRespostaArteToken(itemId, resposta) {
     const msg = await _aprovarArteItem(item);
     return { aprovado: true, item_id: item.id, resposta: msg };
   }
-  await _reprovarArteItem(item, null);
+  await _reprovarArteItem(item, comentario ? String(comentario).trim() : null);
   return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 

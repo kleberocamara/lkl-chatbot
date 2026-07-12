@@ -872,6 +872,21 @@ async function _rebuildOrderItems(orcamentoId) {
 
 const APROVACAO_ARTE_EXATO = ['ok', 'sim', 'pode', 'aprovo'];          // mensagem precisa ser exatamente essa palavra
 const APROVACAO_ARTE_INC = ['aprovado', 'aprovada', 'confirmo', 'autorizo']; // pode aparecer no meio do texto
+const MSG_ARTE_REPROVADA = 'Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.';
+
+// Busca um item de orçamento pelo id com o superset de colunas usado nos fluxos de arte por item.
+async function _buscarItemArtePorId(itemId) {
+  const r = await db.query(
+    `SELECT oi.id, oi.produto, oi.descricao, oi.arte_status, oi.arte_arquivo_url, oi.tipo_producao, oi.orcamento_id,
+            o.vendedor_id,
+            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
+     FROM orcamento_itens oi
+     JOIN orcamentos o ON o.id = oi.orcamento_id
+     WHERE oi.id = $1`,
+    [itemId]
+  );
+  return r.rows[0] || null;
+}
 
 async function enviarArteItem(itemId, arquivo_url) {
   const r = await db.query(
@@ -971,14 +986,7 @@ async function _acharArtePendente(phone) {
 
 async function buscarArtePorToken(itemId) {
   if (!itemId) return null;
-  const r = await db.query(
-    `SELECT oi.id, oi.produto, oi.descricao, oi.arte_status, oi.arte_arquivo_url,
-            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
-     FROM orcamento_itens oi
-     WHERE oi.id = $1`,
-    [itemId]
-  );
-  const item = r.rows[0];
+  const item = await _buscarItemArtePorId(itemId);
   if (!item) return null;
   const baseUrl = process.env.BASE_URL || 'https://app.graficalkl.com.br';
   item.arte_arquivo_url_publica = item.arte_arquivo_url ? `${baseUrl}${item.arte_arquivo_url}` : null;
@@ -993,7 +1001,7 @@ async function _reprovarArteItem(item, comentario) {
       title: `Arte com ajustes — Pedido #${item.pedido_numero || ''}`,
       body: `${item.produto || 'Item'}: cliente pediu alterações`,
       data: { orcamento_id: item.orcamento_id },
-    }).catch(() => {});
+    }).catch(e => console.warn('[ARTE-REPROVADA-FCM]', e.message));
   }
 }
 
@@ -1018,21 +1026,12 @@ async function responderArteItem(phone, mensagem) {
     return { aprovado: true, item_id: item.id, resposta };
   }
   await _reprovarArteItem(item, String(mensagem || '').trim());
-  return { aprovado: false, item_id: item.id, resposta: `Anotado! ✏️ Vamos ajustar a arte e te enviar uma nova versão em breve.` };
+  return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 
 // Processa resposta via link web (token = itemId), análogo a processarRespostaToken para orçamentos.
 async function processarRespostaArteToken(itemId, resposta) {
-  const r = await db.query(
-    `SELECT oi.id, oi.produto, oi.descricao, oi.arte_status, oi.tipo_producao, oi.orcamento_id,
-            o.vendedor_id,
-            (SELECT numero_os FROM orders WHERE orcamento_id = oi.orcamento_id ORDER BY created_at LIMIT 1) AS pedido_numero
-     FROM orcamento_itens oi
-     JOIN orcamentos o ON o.id = oi.orcamento_id
-     WHERE oi.id = $1`,
-    [itemId]
-  );
-  const item = r.rows[0];
+  const item = await _buscarItemArtePorId(itemId);
   if (!item) return { erro: ['Arte não encontrada.'] };
   if (item.arte_status !== 'enviada') {
     return { erro: [`Esta arte já foi ${item.arte_status === 'aprovada' ? 'aprovada' : 'processada'}.`] };
@@ -1042,7 +1041,7 @@ async function processarRespostaArteToken(itemId, resposta) {
     return { aprovado: true, item_id: item.id, resposta: msg };
   }
   await _reprovarArteItem(item, null);
-  return { aprovado: false, item_id: item.id, resposta: `Anotado! Vamos ajustar a arte.` };
+  return { aprovado: false, item_id: item.id, resposta: MSG_ARTE_REPROVADA };
 }
 
 // Resposta via clique de botão interativo (roteia pelo id, não pelo texto).

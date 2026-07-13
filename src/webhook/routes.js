@@ -6,6 +6,7 @@ const { handleC6Webhook } = require('./c6bank');
 const { handleMercadoPagoWebhook } = require('./mercadopago');
 const orcamentoService = require('../modules/orcamentos/service');
 const contasPagarWhatsapp = require('../modules/contas-pagar/whatsapp');
+const { excedeuLimite } = require('./phoneRateLimit');
 
 // Verificação do webhook (Meta exige isso na configuração)
 router.get('/', (req, res) => {
@@ -63,6 +64,12 @@ router.post('/', async (req, res) => {
 
         for (const msg of messages) {
           const phone = msg.from;
+
+          if (excedeuLimite(phone)) {
+            console.warn('[WEBHOOK-WA] Limite de mensagens por telefone excedido, ignorando:', phone);
+            continue;
+          }
+
           const profileName = contacts.find(c => c.wa_id === phone)?.profile?.name || '';
 
           await markAsRead(msg.id);

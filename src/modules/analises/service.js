@@ -152,6 +152,15 @@ async function fluxoCaixa({ dias } = {}) {
      FROM orcamento_boletos
      WHERE status = 'aguardando' AND vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
      GROUP BY 1`, [String(d)]);
+  // PIX e link Mercado Pago não têm vencimento (são cobrança à vista) — usa a data de envio da
+  // cobrança pra bucketizar na semana certa. Só entra na tabela se foi enviada de hoje pra frente;
+  // enviada antes de hoje e ainda não paga conta como atrasado (ver atrPixMp abaixo).
+  const entPixMp = await db.query(
+    `SELECT date_trunc('week', COALESCE(enviado_em, created_at))::date AS semana, COALESCE(SUM(total),0) AS total
+     FROM orcamentos
+     WHERE status_pagamento = 'aguardando_pagamento' AND tipo_cobranca IN ('pix','link_mp')
+       AND COALESCE(enviado_em, created_at) BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
+     GROUP BY 1`, [String(d)]);
   const saiR = await db.query(
     `SELECT date_trunc('week', vencimento)::date AS semana, COALESCE(SUM(valor),0) AS total
      FROM contas_pagar
@@ -159,7 +168,8 @@ async function fluxoCaixa({ dias } = {}) {
      GROUP BY 1`, [String(d)]);
 
   const map = {};
-  for (const r of entR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas = Number(r.total); }
+  for (const r of entR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas += Number(r.total); }
+  for (const r of entPixMp.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas += Number(r.total); }
   for (const r of saiR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).saidas = Number(r.total); }
   const semanas = Object.keys(map).sort().map(k => {
     const inicio = k;
@@ -174,13 +184,17 @@ async function fluxoCaixa({ dias } = {}) {
 
   const atrR = await db.query(
     `SELECT COALESCE(SUM(valor),0) AS total FROM orcamento_boletos WHERE status='aguardando' AND vencimento < CURRENT_DATE`);
+  const atrPixMp = await db.query(
+    `SELECT COALESCE(SUM(total),0) AS total FROM orcamentos
+     WHERE status_pagamento = 'aguardando_pagamento' AND tipo_cobranca IN ('pix','link_mp')
+       AND COALESCE(enviado_em, created_at) < CURRENT_DATE`);
   const atrP = await db.query(
     `SELECT COALESCE(SUM(valor),0) AS total FROM contas_pagar WHERE status IN ('pendente','agendado','vencido') AND vencimento < CURRENT_DATE`);
 
   return {
     dias: d, semanas,
     total_entradas: totalEnt, total_saidas: totalSai,
-    atrasado_receber: Number(atrR.rows[0].total),
+    atrasado_receber: Number(atrR.rows[0].total) + Number(atrPixMp.rows[0].total),
     atrasado_pagar: Number(atrP.rows[0].total),
   };
 }

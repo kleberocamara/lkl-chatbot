@@ -20,8 +20,33 @@ router.get('/', (req, res) => {
   res.sendStatus(403);
 });
 
+// Verifica a assinatura HMAC-SHA256 que a Meta envia em X-Hub-Signature-256, calculada com o
+// App Secret do app configurado no Meta Developers (Configurações Básicas > Chave Secreta do
+// Aplicativo). Sem isso, qualquer POST anônimo com o formato certo é processado como se fosse
+// uma mensagem real de cliente — incluindo aprovação de orçamento por "SIM"/"NÃO" e o fluxo de
+// comprovantes financeiros do número autorizado.
+function _assinaturaValida(req) {
+  const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) return true; // não configurado — sem essa defesa, mas não bloqueia o webhook
+  const sig = req.headers['x-hub-signature-256'] || '';
+  if (!sig.startsWith('sha256=') || !req.rawBody) return false;
+  const crypto = require('crypto');
+  const expected = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+  const received = Buffer.from(sig.slice(7));
+  const expectedBuf = Buffer.from(expected);
+  return received.length === expectedBuf.length && crypto.timingSafeEqual(received, expectedBuf);
+}
+
 // Recebimento de mensagens
 router.post('/', async (req, res) => {
+  if (!_assinaturaValida(req)) {
+    console.warn('[WEBHOOK-WA] Assinatura inválida — rejeitado');
+    return res.sendStatus(403);
+  }
+  if (!process.env.WHATSAPP_APP_SECRET) {
+    console.warn('[WEBHOOK-WA] AVISO: WHATSAPP_APP_SECRET não configurado — webhook aceita POSTs sem verificar remetente.');
+  }
+
   // Responde 200 imediatamente para a Meta não reenviar
   res.sendStatus(200);
 
@@ -105,3 +130,4 @@ router.post('/c6bank', express.json(), handleC6Webhook);
 router.post('/mercadopago', express.json(), handleMercadoPagoWebhook);
 
 module.exports = router;
+module.exports._assinaturaValida = _assinaturaValida;

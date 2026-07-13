@@ -37,7 +37,11 @@ app.use(cors({ origin: process.env.BASE_URL, credentials: true }));
 app.use('/webhook', rateLimit({ windowMs: 60000, max: 200 }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 100 }));
 app.use(morgan('combined'));
-app.use(express.json());
+// Guarda o corpo bruto (bytes exatos recebidos) para permitir verificar a assinatura
+// HMAC do webhook do WhatsApp/Meta (X-Hub-Signature-256) — não dá pra recalcular a
+// assinatura a partir de req.body já parseado, porque JSON.stringify não garante
+// reproduzir os mesmos bytes que a Meta assinou.
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

@@ -2,6 +2,9 @@ const db = require('../../db');
 const fcm = require('../../services/fcm');
 const { tipoPorProduto, parseDimensoes, selecionarMaterialId } = require('../../constants/produtos');
 const revendaService = require('../revenda/service');
+const orcamentosService = require('../orcamentos/service');
+const osService = require('../os/service');
+const { FLUXO } = require('../../constants/fluxoProducao');
 
 async function _resolverMaterialId(nome) {
   const termo = String(nome || '').trim();
@@ -259,6 +262,34 @@ async function buscarPorId(id) {
   return { ...order.rows[0], itens: items.rows };
 }
 
+// Visão completa do pedido pra expandir na listagem: dados do pedido, itens do orçamento
+// (com valores) e, pra cada OS vinculada, quais fases já foram concluídas, a fase atual e as
+// futuras (a partir de FLUXO[tipo_servico]), mais o histórico com data/hora de cada mudança.
+async function detalheCompleto(id) {
+  const order = await buscarPorId(id);
+  if (!order) return null;
+
+  let orcamento = null;
+  let ordens_servico = [];
+  if (order.orcamento_id) {
+    orcamento = await orcamentosService.buscarPorId(order.orcamento_id);
+    if (orcamento && Array.isArray(orcamento.ordens_servico)) {
+      ordens_servico = await Promise.all(orcamento.ordens_servico.map(async os => {
+        const fases = FLUXO[os.tipo_servico] || [];
+        const entregue = os.status === 'entregue';
+        const idxAtual = fases.indexOf(os.status);
+        const fases_concluidas = entregue ? fases : (idxAtual > 0 ? fases.slice(0, idxAtual) : []);
+        const fase_atual = !entregue && idxAtual >= 0 ? os.status : null;
+        const fases_futuras = entregue ? [] : (idxAtual >= 0 ? fases.slice(idxAtual + 1) : fases);
+        const historico = await osService.historico(os.id);
+        return { ...os, fases, fases_concluidas, fase_atual, fases_futuras, historico };
+      }));
+    }
+  }
+
+  return { ...order, orcamento, ordens_servico };
+}
+
 async function atualizarStatus(id, novoStatus) {
   if (!STATUS_VALIDOS.includes(novoStatus))
     return { erro: [`Status inválido. Válidos: ${STATUS_VALIDOS.join(', ')}`] };
@@ -378,4 +409,4 @@ async function atualizarPedido(id, dados) {
   return { order };
 }
 
-module.exports = { criarOrder, buscarPorId, atualizarStatus, atualizarPedido, vincularOrcamento, listar, linhasServicoAuto, STATUS_VALIDOS, STATUS_VENDEDOR };
+module.exports = { criarOrder, buscarPorId, detalheCompleto, atualizarStatus, atualizarPedido, vincularOrcamento, listar, linhasServicoAuto, STATUS_VALIDOS, STATUS_VENDEDOR };

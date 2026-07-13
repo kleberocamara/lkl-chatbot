@@ -26,6 +26,14 @@ router.get('/:id', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+router.get('/:id/detalhe', async (req, res) => {
+  try {
+    const detalhe = await service.detalheCompleto(req.params.id);
+    if (!detalhe) return res.status(404).json({ error: 'Pedido não encontrado' });
+    res.json(detalhe);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 router.post('/', async (req, res) => {
   try {
     const result = await service.criarOrder(req.body, req.user.id);

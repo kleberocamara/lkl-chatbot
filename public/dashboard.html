@@ -4776,7 +4776,7 @@ function renderOrderRows(data) {
   const tbody = document.getElementById('ordersBody');
   const countEl = document.getElementById('orders-count');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:24px;text-align:center;color:#aaa">Nenhum pedido encontrado.</td></tr>';
     if (countEl) countEl.textContent = '';
     return;
   }
@@ -4790,14 +4790,77 @@ function renderOrderRows(data) {
     const produtoCel = extras > 0
       ? `<td style="${C}max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(String(o.produto||''))}">${escHtml(String(o.produto||'—'))} <span style="background:#e8eaf6;color:#3949ab;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600">+${extras}</span></td>`
       : td(o.produto);
-    return `<tr style="background:${bg}">
-      <td style="${C}font-weight:700;color:#1a237e">#${o.numero_os||'—'}</td>
+    const detId = `ped-det-${o.id}`;
+    return `<tr style="background:${bg};cursor:pointer" onclick="pedidoToggleDetalhe('${o.id}')">
+      <td style="${C}font-weight:700;color:#1a237e"><span id="${detId}-seta" style="margin-right:4px;display:inline-block;width:10px">▸</span>#${o.numero_os||'—'}</td>
       <td style="${C}">${pedidoStatusBadges(o)}</td>
       ${td(dt)}${td(o.cliente_nome)}${td(o.origin_channel)}${produtoCel}${td(o.quantidade)}
       <td style="padding:10px;border-bottom:1px solid #f0f0f0;max-width:240px">${_obsPreview(o.observacoes)}</td>
-      <td style="${C}text-align:center"><button onclick="editarPedido('${o.id}')" title="Editar contato/observações" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px">✏️</button></td>
+      <td style="${C}text-align:center"><button onclick="event.stopPropagation();editarPedido('${o.id}')" title="Editar contato/observações" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px">✏️</button></td>
+    </tr>
+    <tr id="${detId}" style="display:none;background:#f5f6fc">
+      <td colspan="9" style="padding:14px 20px 18px 34px"><div id="${detId}-conteudo" style="font-size:13px;color:#777">Carregando…</div></td>
     </tr>`;
   }).join('');
+}
+
+async function pedidoToggleDetalhe(id) {
+  const det = document.getElementById(`ped-det-${id}`);
+  const seta = document.getElementById(`ped-det-${id}-seta`);
+  if (!det) return;
+  const aberto = det.style.display === 'table-row';
+  if (aberto) { det.style.display = 'none'; if (seta) seta.textContent = '▸'; return; }
+  det.style.display = 'table-row';
+  if (seta) seta.textContent = '▾';
+  if (det.dataset.loaded) return;
+  const conteudo = document.getElementById(`ped-det-${id}-conteudo`);
+  const r = await api(`/api/v2/orders/${id}/detalhe`);
+  if (!r || r.error) { conteudo.innerHTML = '<span style="color:#c00">Erro ao carregar detalhes do pedido.</span>'; return; }
+  det.dataset.loaded = '1';
+  conteudo.innerHTML = _renderPedidoDetalhe(r);
+}
+
+function _renderPedidoDetalhe(r) {
+  const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const itensHtml = (r.orcamento?.itens || []).length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
+        <thead><tr style="color:#777;text-align:left">
+          <th style="padding:4px 8px">Item</th><th style="padding:4px 8px;text-align:center">Qtd</th>
+          <th style="padding:4px 8px;text-align:right">Valor unit.</th><th style="padding:4px 8px;text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${r.orcamento.itens.map(it => `<tr style="border-top:1px solid #e8eaf6">
+          <td style="padding:4px 8px">${escHtml(it.descricao || it.produto || 'item')}</td>
+          <td style="padding:4px 8px;text-align:center">${it.quantidade}</td>
+          <td style="padding:4px 8px;text-align:right">${fmt(it.valor_unitario)}</td>
+          <td style="padding:4px 8px;text-align:right;font-weight:600">${fmt(it.valor_total)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`
+    : '<div style="color:#999;margin-bottom:14px">Sem itens de orçamento vinculados.</div>';
+
+  const FASE_LABEL = { corte:'Corte', impressao:'Impressão', acabamento:'Acabamento', entrega:'Entrega', entregue:'Entregue' };
+  const osHtml = (r.ordens_servico || []).map(os => {
+    const fasesHtml = os.fases.map(f => {
+      const concluida = os.fases_concluidas.includes(f);
+      const atual = os.fase_atual === f;
+      const cor = atual ? '#1a237e' : (concluida ? '#2e7d32' : '#bbb');
+      const peso = atual ? '700' : '400';
+      const icone = concluida ? '✓ ' : (atual ? '● ' : '○ ');
+      return `<span style="color:${cor};font-weight:${peso};margin-right:14px">${icone}${FASE_LABEL[f]||f}</span>`;
+    }).join('');
+    const entregueTag = os.status === 'entregue' ? `<span style="color:${'#2e7d32'};font-weight:700">✓ ${FASE_LABEL.entregue}</span>` : '';
+    const historicoHtml = (os.historico || []).length
+      ? `<div style="margin-top:6px;font-size:11px;color:#999">${os.historico.map(h =>
+          `${FASE_LABEL[h.para_status]||h.para_status} em ${new Date(h.em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${h.usuario_nome ? ' · '+escHtml(h.usuario_nome) : ''}`
+        ).join(' &nbsp;→&nbsp; ')}</div>`
+      : '';
+    return `<div style="background:white;border:1px solid #e8eaf6;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="font-size:12px;color:#555;margin-bottom:6px"><b>OS #${os.numero_os||os.id.slice(0,8)}</b> — ${os.tipo_servico === 'offset' ? 'Offset' : 'Comunicação Visual'}</div>
+      <div>${fasesHtml}${entregueTag}</div>
+      ${historicoHtml}
+    </div>`;
+  }).join('');
+
+  return `${itensHtml}${osHtml || '<div style="color:#999">Nenhuma ordem de serviço gerada ainda para este pedido.</div>'}`;
 }
 
 function editarPedido(id) {

@@ -5535,17 +5535,30 @@ function renderFluxoTabela() {
   const fmt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
   const fmtD = s => { const d = new Date(s+'T00:00:00'); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); };
   let saldo = parseFloat(document.getElementById('fx-saldo').value) || 0;
-  const linhas = _fluxoData.semanas.length ? _fluxoData.semanas.map(s => {
+  const linhas = _fluxoData.semanas.length ? _fluxoData.semanas.map((s, i) => {
     saldo += s.liquido;
     const corL = s.liquido >= 0 ? '#2e7d32' : '#c62828';
     const corS = saldo >= 0 ? '#2e7d32' : '#c62828';
-    return `<tr style="border-bottom:0.5px solid #eee">
-      <td style="padding:6px 8px">${fmtD(s.inicio)}–${fmtD(s.fim)}</td>
+    const temItens = Array.isArray(s.itens) && s.itens.length > 0;
+    const detId = `fx-det-${i}`;
+    const seta = temItens ? `<span id="${detId}-seta" style="margin-right:6px;display:inline-block;width:10px">▸</span>` : '';
+    const clickAttr = temItens ? ` onclick="fxToggleSemana(${i})"` : '';
+    const linhaPrincipal = `<tr style="border-bottom:0.5px solid #eee;cursor:${temItens?'pointer':'default'}"${clickAttr}>
+      <td style="padding:6px 8px">${seta}${fmtD(s.inicio)}–${fmtD(s.fim)}</td>
       <td style="padding:6px 8px;text-align:right;color:#2e7d32">${fmt(s.entradas)}</td>
       <td style="padding:6px 8px;text-align:right;color:#e65100">${fmt(s.saidas)}</td>
       <td style="padding:6px 8px;text-align:right;color:${corL}">${fmt(s.liquido)}</td>
       <td style="padding:6px 8px;text-align:right;font-weight:600;color:${corS}">${fmt(saldo)}</td>
     </tr>`;
+    const detalhamentoHtml = temItens ? `<tr id="${detId}" style="display:none;background:#fafafa">
+      <td colspan="5" style="padding:2px 0">
+        ${s.itens.map(it => `<div style="display:flex;justify-content:space-between;gap:12px;padding:4px 14px 4px 34px;font-size:12px;color:${it.tipo==='entrada'?'#2e7d32':'#e65100'}">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tipo==='entrada'?'▲':'▼'} ${escHtml(it.descricao)}</span>
+          <span style="flex-shrink:0">${fmt(it.valor)}</span>
+        </div>`).join('')}
+      </td>
+    </tr>` : '';
+    return linhaPrincipal + detalhamentoHtml;
   }).join('') : '<tr><td colspan="5" style="padding:14px;color:#999;text-align:center">Sem lançamentos no período</td></tr>';
   document.getElementById('fx-tabela').innerHTML = `
     <div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:8px 4px;overflow-x:auto">
@@ -5560,6 +5573,14 @@ function renderFluxoTabela() {
         <tbody>${linhas}</tbody>
       </table>
     </div>`;
+}
+function fxToggleSemana(i) {
+  const det = document.getElementById(`fx-det-${i}`);
+  const seta = document.getElementById(`fx-det-${i}-seta`);
+  if (!det) return;
+  const aberto = det.style.display === 'table-row';
+  det.style.display = aberto ? 'none' : 'table-row';
+  if (seta) seta.textContent = aberto ? '▸' : '▾';
 }
 </script>
 

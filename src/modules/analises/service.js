@@ -147,36 +147,79 @@ async function dre({ inicio, fim } = {}) {
 
 async function fluxoCaixa({ dias } = {}) {
   const d = [30, 60, 90].includes(Number(dias)) ? Number(dias) : 90;
-  const entR = await db.query(
-    `SELECT date_trunc('week', vencimento)::date AS semana, COALESCE(SUM(valor),0) AS total
-     FROM orcamento_boletos
-     WHERE status = 'aguardando' AND vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
-     GROUP BY 1`, [String(d)]);
+
+  // Busca os lançamentos individuais (não só o agregado) — a soma de cada semana é calculada
+  // a partir deles mesmos, então a tabela consegue expandir pra mostrar a lista plana de
+  // entradas/saídas que compõem aquela semana.
+  const entRItens = await db.query(
+    `SELECT date_trunc('week', ob.vencimento)::date AS semana, ob.vencimento AS data, ob.valor,
+            o.numero, c.nome AS cliente, ob.parcela, ob.total_parcelas
+     FROM orcamento_boletos ob
+     JOIN orcamentos o ON o.id = ob.orcamento_id
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE ob.status = 'aguardando' AND ob.vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
+     ORDER BY ob.vencimento`, [String(d)]);
   // PIX e link Mercado Pago não têm vencimento (são cobrança à vista) — usa a data de envio da
   // cobrança pra bucketizar na semana certa. Só entra na tabela se foi enviada de hoje pra frente;
   // enviada antes de hoje e ainda não paga conta como atrasado (ver atrPixMp abaixo).
-  const entPixMp = await db.query(
-    `SELECT date_trunc('week', COALESCE(enviado_em, created_at))::date AS semana, COALESCE(SUM(total),0) AS total
-     FROM orcamentos
-     WHERE status_pagamento = 'aguardando_pagamento' AND tipo_cobranca IN ('pix','link_mp')
-       AND COALESCE(enviado_em, created_at) BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
-     GROUP BY 1`, [String(d)]);
-  const saiR = await db.query(
-    `SELECT date_trunc('week', vencimento)::date AS semana, COALESCE(SUM(valor),0) AS total
+  const entPixMpItens = await db.query(
+    `SELECT date_trunc('week', COALESCE(o.enviado_em, o.created_at))::date AS semana,
+            COALESCE(o.enviado_em, o.created_at) AS data, o.total AS valor, o.numero, o.tipo_cobranca, c.nome AS cliente
+     FROM orcamentos o
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE o.status_pagamento = 'aguardando_pagamento' AND o.tipo_cobranca IN ('pix','link_mp')
+       AND COALESCE(o.enviado_em, o.created_at) BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
+     ORDER BY COALESCE(o.enviado_em, o.created_at)`, [String(d)]);
+  const saiRItens = await db.query(
+    `SELECT date_trunc('week', vencimento)::date AS semana, vencimento AS data, valor, descricao, fornecedor
      FROM contas_pagar
      WHERE status IN ('pendente','agendado','vencido') AND vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::interval
-     GROUP BY 1`, [String(d)]);
+     ORDER BY vencimento`, [String(d)]);
 
+  const keyOf = v => v instanceof Date ? v.toISOString().slice(0,10) : String(v);
   const map = {};
-  for (const r of entR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas += Number(r.total); }
-  for (const r of entPixMp.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).entradas += Number(r.total); }
-  for (const r of saiR.rows) { const k = r.semana instanceof Date ? r.semana.toISOString().slice(0,10) : String(r.semana); (map[k] = map[k] || { entradas:0, saidas:0 }).saidas = Number(r.total); }
+  const ensure = k => (map[k] = map[k] || { entradas: 0, saidas: 0, itens: [] });
+
+  for (const r of entRItens.rows) {
+    const bucket = ensure(keyOf(r.semana));
+    const valor = Number(r.valor);
+    bucket.entradas += valor;
+    const parcelaTxt = r.total_parcelas > 1 ? ` (parcela ${r.parcela}/${r.total_parcelas})` : '';
+    bucket.itens.push({
+      tipo: 'entrada', origem: 'boleto',
+      descricao: `Pedido #${r.numero} — ${r.cliente || 'Cliente não identificado'}${parcelaTxt}`,
+      valor, data: keyOf(r.data),
+    });
+  }
+  for (const r of entPixMpItens.rows) {
+    const bucket = ensure(keyOf(r.semana));
+    const valor = Number(r.valor);
+    bucket.entradas += valor;
+    const label = r.tipo_cobranca === 'pix' ? 'PIX' : 'Link Mercado Pago';
+    bucket.itens.push({
+      tipo: 'entrada', origem: r.tipo_cobranca,
+      descricao: `Pedido #${r.numero} — ${r.cliente || 'Cliente não identificado'} (${label})`,
+      valor, data: keyOf(r.data),
+    });
+  }
+  for (const r of saiRItens.rows) {
+    const bucket = ensure(keyOf(r.semana));
+    const valor = Number(r.valor);
+    bucket.saidas += valor;
+    bucket.itens.push({
+      tipo: 'saida', origem: 'conta_pagar',
+      descricao: r.fornecedor ? `${r.descricao} — ${r.fornecedor}` : r.descricao,
+      valor, data: keyOf(r.data),
+    });
+  }
+
   const semanas = Object.keys(map).sort().map(k => {
     const inicio = k;
     const fimD = new Date(k + 'T00:00:00'); fimD.setDate(fimD.getDate() + 6);
     const fim = fimD.toISOString().slice(0,10);
-    const entradas = map[k].entradas, saidas = map[k].saidas;
-    return { inicio, fim, entradas, saidas, liquido: entradas - saidas };
+    const { entradas, saidas } = map[k];
+    const itens = [...map[k].itens].sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
+    return { inicio, fim, entradas, saidas, liquido: entradas - saidas, itens };
   });
 
   const totalEnt = semanas.reduce((s,x)=>s+x.entradas,0);

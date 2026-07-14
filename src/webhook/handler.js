@@ -42,7 +42,33 @@ async function createConversation(contactId) {
     `INSERT INTO conversations (contact_id, status) VALUES ($1, 'active') RETURNING *`,
     [contactId]
   );
-  return result.rows[0];
+  const nova = result.rows[0];
+  await _herdarContextoRecente(contactId, nova.id);
+  return nova;
+}
+
+// Se o contato teve uma conversa recente (últimos 7 dias, qualquer status — inclusive
+// 'resolved') com contexto de IA salvo, herda esse contexto pra conversa nova. Sem isso, toda
+// vez que uma conversa é encerrada (ex: depois de enviar a arte) e o cliente escreve de novo
+// pouco depois sobre o mesmo assunto, o bot "esquece" tudo e recomeça do zero — porque
+// getActiveConversation só considera active/aguardando_humano/orcamento_enviado, e cada
+// conversation.id tem seu próprio ai_context isolado.
+async function _herdarContextoRecente(contactId, novaConversaId) {
+  try {
+    const r = await db.query(
+      `SELECT ai_context FROM conversations
+       WHERE contact_id = $1 AND id != $2 AND updated_at > NOW() - INTERVAL '7 days'
+         AND ai_context IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 1`,
+      [contactId, novaConversaId]
+    );
+    const contextoAnterior = r.rows[0]?.ai_context;
+    if (Array.isArray(contextoAnterior) && contextoAnterior.length > 0) {
+      await db.query('UPDATE conversations SET ai_context = $1 WHERE id = $2', [JSON.stringify(contextoAnterior), novaConversaId]);
+    }
+  } catch (e) {
+    console.warn('[HERDAR-CONTEXTO]', e.message);
+  }
 }
 
 async function saveMessage(conversationId, contactId, content, direction, waMessageId, sentBy = 'ai') {
@@ -278,4 +304,4 @@ async function handleInboundMedia(phone, profileName, mediaType, mediaObj, waMes
   }
 }
 
-module.exports = { handleInboundMessage, handleInboundMedia };
+module.exports = { handleInboundMessage, handleInboundMedia, createConversation, _herdarContextoRecente };

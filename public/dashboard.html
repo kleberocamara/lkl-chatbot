@@ -954,7 +954,7 @@
       <h3 style="margin-bottom:14px">➕ Novo Usuário</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Funcionário</label>
-          <select id="nu2-funcionario" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+          <select id="nu2-funcionario" onchange="preencherEmailFuncionario()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
             <option value="">Carregando...</option>
           </select></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">E-mail</label>
@@ -3800,8 +3800,14 @@ async function loadFuncionariosSemUsuario() {
   const data = await api('/api/v2/funcionarios?semUsuario=true&status=ativo&limit=200');
   const lista = data?.funcionarios || [];
   sel.innerHTML = lista.length
-    ? `<option value="">Selecione...</option>` + lista.map(f => `<option value="${f.id}" data-celular="${f.celular||''}">${f.matricula} — ${escHtml(f.nome)} (${escHtml(f.cargo)})</option>`).join('')
+    ? `<option value="">Selecione...</option>` + lista.map(f => `<option value="${f.id}" data-celular="${f.celular||''}" data-email="${escHtml(f.email||'')}">${f.matricula} — ${escHtml(f.nome)} (${escHtml(f.cargo)})</option>`).join('')
     : `<option value="">Nenhum funcionário sem usuário — cadastre em Funcionários</option>`;
+}
+
+function preencherEmailFuncionario() {
+  const opt = document.getElementById('nu2-funcionario').selectedOptions[0];
+  const emailInput = document.getElementById('nu2-email');
+  if (opt?.dataset.email) emailInput.value = opt.dataset.email;
 }
 
 async function loadUsuarios2() {

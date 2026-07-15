@@ -312,6 +312,21 @@ router.patch('/:id/reprovar', requireRole('admin', 'gestor', 'analista', 'atende
   }
 });
 
+// PATCH /:id/reabrir — reabre orçamento reprovado para correção/reenvio (atendente, analista, gestor, admin)
+router.patch('/:id/reabrir', requireRole('admin', 'gestor', 'analista', 'atendente'), async (req, res) => {
+  try {
+    const result = await service.reabrir(req.params.id);
+    if (result.erro) {
+      const isNotFound = result.erro.some(e => e.includes('não encontrado'));
+      return res.status(isNotFound ? 404 : 400).json(isNotFound ? { error: result.erro[0] } : { errors: result.erro });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /:id/cancelar — gestor, admin
 router.patch('/:id/cancelar', requireRole('admin', 'gestor'), async (req, res) => {
   try {

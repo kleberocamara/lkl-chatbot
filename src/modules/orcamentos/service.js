@@ -13,10 +13,11 @@ const osService = require('../os/service');
 async function _syncPedidoStatus(orcamentoId, novoStatus) {
   try {
     const MAP = {
-      enviado:   'aguardando_aprovacao',
-      aprovado:  'aprovado',
-      reprovado: 'reprovado',
-      cancelado: 'cancelado',
+      enviado:      'aguardando_aprovacao',
+      aprovado:     'aprovado',
+      reprovado:    'reprovado',
+      cancelado:    'cancelado',
+      em_orcamento: 'em_orcamento',
     };
     const pedidoStatus = MAP[novoStatus];
     if (!pedidoStatus) return;
@@ -454,6 +455,25 @@ async function reprovar(id, reprovado_via) {
   if (!orc) return { erro: ['Orçamento não encontrado'] };
   if (orc.status !== 'enviado') return { erro: ['Orçamento precisa estar "enviado" para ser reprovado'] };
   return mudarStatus(id, 'reprovado', { reprovado_via: reprovado_via || 'manual' });
+}
+
+// Reabre um orçamento reprovado para correção e reenvio ao cliente
+async function reabrir(id) {
+  const existing = await buscarPorId(id);
+  if (!existing) return { erro: ['Orçamento não encontrado'] };
+  if (existing.status !== 'reprovado') return { erro: ['Só é possível reabrir um orçamento com status "reprovado"'] };
+
+  // WHERE ... AND status='reprovado' fecha a corrida: se outra ação simultânea já mudou
+  // o status entre o SELECT acima e este UPDATE, 0 linhas são afetadas.
+  const r = await db.query(
+    `UPDATE orcamentos SET status='em_orcamento', updated_at=NOW() WHERE id=$1 AND status='reprovado' RETURNING *`,
+    [id]
+  );
+  if (!r.rows[0]) return { erro: ['Este orçamento já foi processado por outra ação simultânea.'] };
+
+  _syncPedidoStatus(id, 'em_orcamento');
+
+  return { orcamento: r.rows[0] };
 }
 
 async function aprovar(id, aprovado_via) {
@@ -1088,4 +1108,4 @@ async function listarArtesPendentes() {
   return r.rows;
 }
 
-module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, listarArtesPendentes, buscarEnviadoPorTelefone, buscarArtePorToken, processarRespostaArteToken };
+module.exports = { listar, buscarPorId, buscarResumoPorToken, criar, precificar, mudarStatus, concluir, reenviar, aprovar, reprovar, reabrir, processarRespostaToken, processarRespostaWA, cobrar, confirmarPagamento, cancelarBoleto, cancelarBoletoDireto, cancelarPix, cancelarLinkMp, _rebuildOrderItems, enviarArteItem, responderArteItem, listarArtesPendentes, buscarEnviadoPorTelefone, buscarArtePorToken, processarRespostaArteToken };

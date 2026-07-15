@@ -1525,7 +1525,18 @@ function orcAcoesBtns(o) {
       btn('↻ Reenviar', `orcReenviar('${o.id}')`, '#0277bd'),
     ].join(' ');
   }
+  if (s === 'reprovado') {
+    return btn('🔓 Reabrir p/ edição', `orcReabrir('${o.id}')`, '#f57f17');
+  }
   return '';
+}
+
+async function orcReabrir(id) {
+  if (!confirm('Reabrir este orçamento para correção? Ele volta para "Em Orçamento" e os itens ficam editáveis novamente.')) return;
+  const res = await api(`/api/v2/orcamentos/${id}/reabrir`, { method: 'PATCH' });
+  if (res?.erro || res?.error) { showToast('Erro: ' + (res.erro?.[0] || res.error), 'error'); return; }
+  showToast('🔓 Orçamento reaberto para edição!');
+  loadOrcamentosMain();
 }
 
 async function orcReenviar(id) {

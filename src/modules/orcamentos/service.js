@@ -1102,7 +1102,7 @@ async function listarArtesPendentes() {
      FROM orcamento_itens oi
      JOIN orcamentos o ON o.id = oi.orcamento_id
      LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
-     WHERE o.status='aprovado' AND oi.arte_status <> 'aprovada'
+     WHERE o.status='aprovado' AND oi.arte_status <> 'aprovada' AND oi.tipo_producao IS DISTINCT FROM 'SERVICO'
      ORDER BY o.numero DESC, oi.codigo`
   );
   return r.rows;

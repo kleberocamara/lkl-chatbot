@@ -84,15 +84,21 @@ router.get('/dashboard/stats', requireAuthApi, async (req, res) => {
 // ── CONVERSAS ─────────────────────────────────────────────────────────────────
 
 router.get('/conversations', requireAuthApi, async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
+  const { status, busca, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
 
-  let where = '';
+  const conditions = [];
   const params = [limit, offset];
   if (status) {
-    where = `WHERE c.status = $3`;
     params.push(status);
+    conditions.push(`c.status = $${params.length}`);
   }
+  if (busca) {
+    params.push(`%${busca}%`);
+    const idx = params.length;
+    conditions.push(`(ct.name ILIKE $${idx} OR ct.profile_name ILIKE $${idx} OR ct.phone ILIKE $${idx})`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await db.query(`
     SELECT c.*, ct.phone, ct.name, ct.profile_name,

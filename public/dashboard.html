@@ -313,6 +313,7 @@
           </div>
         </div>
         <ul class="conv-list" id="convList"></ul>
+        <button id="convLoadMore" onclick="loadMoreConversations()" style="display:none;width:100%;padding:10px;border:none;border-top:1px solid var(--border);background:#f5f5f5;color:#555;font-size:13px;font-weight:600;cursor:pointer">Carregar mais</button>
       </div>
       <div class="chat-main" id="chatMain">
         <div class="empty-chat">
@@ -3894,11 +3895,35 @@ function timeAgo(dateStr) {
 }
 
 // ── CONVERSAS ─────────────────────────────────────────────────────────────────
-async function loadConversations() {
-  const url = currentFilter === 'all' ? '/api/conversations' : `/api/conversations?status=${currentFilter}`;
-  allConversations = await api(url) || [];
+const CONV_PAGE_SIZE = 20;
+let convPage = 1;
+let convHasMore = false;
+
+async function loadConversations(reset = true) {
+  if (reset) { convPage = 1; allConversations = []; }
+  const busca = (document.getElementById('searchConv')?.value || '').trim();
+  const params = new URLSearchParams({ page: convPage, limit: CONV_PAGE_SIZE });
+  if (currentFilter !== 'all') params.set('status', currentFilter);
+  if (busca) params.set('busca', busca);
+
+  const page = await api(`/api/conversations?${params.toString()}`) || [];
+  allConversations = reset ? page : allConversations.concat(page);
+  convHasMore = page.length === CONV_PAGE_SIZE;
   renderConversations(allConversations);
-  atualizarBannerParadas();
+  const btn = document.getElementById('convLoadMore');
+  if (btn) btn.style.display = convHasMore ? 'block' : 'none';
+  if (reset) atualizarBannerParadas();
+}
+
+function loadMoreConversations() {
+  convPage++;
+  loadConversations(false);
+}
+
+let _convSearchTimer = null;
+function filterConversations() {
+  clearTimeout(_convSearchTimer);
+  _convSearchTimer = setTimeout(() => loadConversations(true), 300);
 }
 
 async function atualizarBannerParadas() {
@@ -3980,15 +4005,6 @@ function setFilter(f, el) {
   loadConversations();
 }
 
-function filterConversations() {
-  const q = document.getElementById('searchConv').value.toLowerCase();
-  const filtered = allConversations.filter(c =>
-    (c.name || '').toLowerCase().includes(q) ||
-    (c.profile_name || '').toLowerCase().includes(q) ||
-    (c.phone || '').includes(q)
-  );
-  renderConversations(filtered);
-}
 
 async function openConversation(id, el) {
   currentConvId = id;

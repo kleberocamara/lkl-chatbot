@@ -953,14 +953,14 @@
     <div class="card" style="margin-bottom:20px">
       <h3 style="margin-bottom:14px">➕ Novo Usuário</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nome</label>
-          <input id="nu2-name" type="text" placeholder="Nome completo" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Funcionário</label>
+          <select id="nu2-funcionario" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+            <option value="">Carregando...</option>
+          </select></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">E-mail</label>
           <input id="nu2-email" type="email" placeholder="email@lkl.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Senha</label>
           <input id="nu2-password" type="password" placeholder="Senha inicial" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
-        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Celular</label>
-          <input id="nu2-celular" type="tel" placeholder="(21) 99999-9999" oninput="this.value=mascaraCelular(this.value)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Perfil</label>
           <select id="nu2-role" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
             <option value="atendente">Atendente</option>
@@ -971,9 +971,8 @@
             <option value="gestor">Gestor</option>
             <option value="admin">Admin</option>
           </select></div>
-        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Setor</label>
-          <input id="nu2-setor" type="text" placeholder="Ex: Produção" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
       </div>
+      <p style="font-size:11px;color:#999;margin-top:8px">Nome, celular e setor vêm do cadastro do funcionário. Sem funcionário na lista? Cadastre primeiro na aba Funcionários.</p>
       <button class="btn btn-primary" style="margin-top:14px" onclick="criarUsuario2()">Criar Usuário</button>
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
@@ -3795,8 +3794,19 @@ async function submitInutilizar() {
 }
 
 // ── USUÁRIOS (novo) ────────────────────────────────────────────────────────────
+async function loadFuncionariosSemUsuario() {
+  const sel = document.getElementById('nu2-funcionario');
+  if (!sel) return;
+  const data = await api('/api/v2/funcionarios?semUsuario=true&status=ativo&limit=200');
+  const lista = data?.funcionarios || [];
+  sel.innerHTML = lista.length
+    ? `<option value="">Selecione...</option>` + lista.map(f => `<option value="${f.id}" data-celular="${f.celular||''}">${f.matricula} — ${escHtml(f.nome)} (${escHtml(f.cargo)})</option>`).join('')
+    : `<option value="">Nenhum funcionário sem usuário — cadastre em Funcionários</option>`;
+}
+
 async function loadUsuarios2() {
   const el = document.getElementById('users2-body');
+  loadFuncionariosSemUsuario();
   const data = await api('/api/v2/users');
   if (!data || data.error) { el.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:#aaa">Erro ao carregar</td></tr>'; return; }
   const fmt = dt => dt ? new Date(dt).toLocaleDateString('pt-BR') : '—';
@@ -3818,22 +3828,20 @@ async function loadUsuarios2() {
 }
 
 async function criarUsuario2() {
-  const celular = document.getElementById('nu2-celular').value.trim();
   const body = {
-    name:     document.getElementById('nu2-name').value,
-    email:    document.getElementById('nu2-email').value,
-    password: document.getElementById('nu2-password').value,
-    role:     document.getElementById('nu2-role').value,
-    setor:    document.getElementById('nu2-setor').value,
-    celular:  celular.replace(/\D/g,'') || null,
+    funcionario_id: document.getElementById('nu2-funcionario').value,
+    email:          document.getElementById('nu2-email').value,
+    password:       document.getElementById('nu2-password').value,
+    role:           document.getElementById('nu2-role').value,
   };
-  if (!body.name||!body.email||!body.password) return showToast('Preencha nome, email e senha');
-  if (celular && !_validaCelular(celular)) return showToast('Celular inválido — use (XX) 9XXXX-XXXX');
-  if (body.role === 'vendedor' && !body.celular) return showToast('Vendedor precisa de celular para receber notificações por WhatsApp');
+  if (!body.funcionario_id) return showToast('Selecione um funcionário');
+  if (!body.email||!body.password) return showToast('Preencha email e senha');
+  const funcOpt = document.getElementById('nu2-funcionario').selectedOptions[0];
+  if (body.role === 'vendedor' && !funcOpt?.dataset.celular) return showToast('Este funcionário não tem celular cadastrado — vendedor precisa de celular para receber notificações por WhatsApp');
   const r = await api('/api/v2/users', { method:'POST', body: JSON.stringify(body) });
   if (r?.error) return showToast('Erro: ' + r.error);
-  showToast('✅ Usuário criado — Matrícula: ' + (r.matricula||'gerada'));
-  ['nu2-name','nu2-email','nu2-password','nu2-setor','nu2-celular'].forEach(id => document.getElementById(id).value='');
+  showToast('✅ Usuário criado — Matrícula: ' + (r.matricula||'—'));
+  ['nu2-email','nu2-password'].forEach(id => document.getElementById(id).value='');
   loadUsuarios2();
 }
 

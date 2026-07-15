@@ -19,20 +19,40 @@ router.get('/', requireGestorPlus, async (req, res) => {
 });
 
 router.post('/', requireGestorPlus, async (req, res) => {
+  const { funcionario_id, email, password, role } = req.body;
+  if (!funcionario_id || !email || !password) return res.status(400).json({ error: 'funcionario_id, email e senha são obrigatórios' });
+
+  const client = await pool.pool.connect();
   try {
-    const { name, email, password, role, setor, celular } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ error: 'nome, email e senha são obrigatórios' });
-    const hash = await bcrypt.hash(password, 10);
-    const { rows } = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, setor, celular)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, email, role, matricula, setor, celular`,
-      [name, email, hash, role || 'atendente', setor || null, celular || null]
+    await client.query('BEGIN');
+
+    const funcR = await client.query(
+      `SELECT id, nome, celular, setor, user_id FROM funcionarios WHERE id = $1 FOR UPDATE`,
+      [funcionario_id]
     );
-    res.status(201).json(rows[0]);
+    if (!funcR.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Funcionário não encontrado' }); }
+    const func = funcR.rows[0];
+    if (func.user_id) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Este funcionário já possui um usuário vinculado' }); }
+
+    const hash = await bcrypt.hash(password, 10);
+    const userR = await client.query(
+      `INSERT INTO users (name, email, password_hash, role, setor, celular, matricula)
+       VALUES ($1, $2, $3, $4, $5, $6, (SELECT matricula FROM funcionarios WHERE id = $7))
+       RETURNING id, name, email, role, matricula, setor, celular`,
+      [func.nome, email, hash, role || 'atendente', func.setor, func.celular, funcionario_id]
+    );
+    const user = userR.rows[0];
+
+    await client.query(`UPDATE funcionarios SET user_id = $1, updated_at = NOW() WHERE id = $2`, [user.id, funcionario_id]);
+
+    await client.query('COMMIT');
+    res.status(201).json(user);
   } catch (e) {
+    await client.query('ROLLBACK');
     if (e.code === '23505') return res.status(409).json({ error: 'E-mail já cadastrado' });
     res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 

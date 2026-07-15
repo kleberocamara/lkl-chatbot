@@ -6,8 +6,8 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { status, page, limit } = req.query;
-    res.json(await service.listar({ status, page: parseInt(page) || 1, limit: parseInt(limit) || 20 }));
+    const { status, semUsuario, page, limit } = req.query;
+    res.json(await service.listar({ status, semUsuario: semUsuario === 'true', page: parseInt(page) || 1, limit: parseInt(limit) || 20 }));
   }
   catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });

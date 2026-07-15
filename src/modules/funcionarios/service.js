@@ -1,10 +1,11 @@
 const db = require('../../db');
 const { validarCPF } = require('../../utils/validators');
 
-async function listar({ status, page = 1, limit = 20 } = {}) {
+async function listar({ status, semUsuario, page = 1, limit = 20 } = {}) {
   const params = [];
   let where = 'WHERE 1=1';
   if (status) { params.push(status); where += ` AND f.status = $${params.length}`; }
+  if (semUsuario) { where += ` AND f.user_id IS NULL`; }
   const offset = (page - 1) * limit;
   const base = `FROM funcionarios f LEFT JOIN users u ON u.id = f.user_id ${where}`;
   const [rows, count] = await Promise.all([

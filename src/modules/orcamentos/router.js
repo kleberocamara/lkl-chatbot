@@ -529,7 +529,7 @@ const db = require('../../db/index');
 const precificacao = require('../precificacao/service');
 const revendaService = require('../revenda/service');
 
-router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req, res) => {
+router.post('/:id/itens', requireRole('admin','gestor','atendente','analista'), async (req, res) => {
   try {
     const { produto, tipo_producao, especificacao, quantidade, largura_cm, altura_cm, material_id, tem_arte, recalcular,
             revenda_produto_id, revenda_prazo_horas, revenda_acabamentos } = req.body;
@@ -576,7 +576,7 @@ router.post('/:id/itens', requireRole('admin','gestor','atendente'), async (req,
   } catch (e) { res.status(500).json({ erro: [e.message] }); }
 });
 
-router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente'), async (req, res) => {
+router.patch('/:id/itens/:itemId', requireRole('admin','gestor','atendente','analista'), async (req, res) => {
   try {
     const { produto, tipo_producao, especificacao, quantidade, largura_cm, altura_cm, material_id, tem_arte, recalcular,
             revenda_produto_id, revenda_prazo_horas, revenda_acabamentos } = req.body;

@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
 
 // Edição do pedido (contato do cliente + observações/prazo)
 router.patch('/:id',
-  requireRole('admin', 'gestor', 'atendente'),
+  requireRole('admin', 'gestor', 'atendente', 'analista'),
   async (req, res) => {
     try {
       const result = await service.atualizarPedido(req.params.id, req.body);

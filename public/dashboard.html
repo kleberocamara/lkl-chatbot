@@ -1013,10 +1013,10 @@ function buildSidebar(role) {
   const NAV = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊',
       roles: ['admin','gestor','financeiro','atendente','analista','operador'] },
-    { section: 'Atendimento', roles: ['admin','gestor','atendente'], children: [
-      { id: 'conversations', label: 'Conversas',  icon: '💬', roles: ['admin','gestor','atendente'], badge: 'waitingBadge' },
-      { id: 'orders',        label: 'Pedidos',    icon: '🛒', roles: ['admin','gestor','atendente'] },
-      { id: 'orcamentos',    label: 'Orçamentos', icon: '📋', roles: ['admin','gestor','atendente'] },
+    { section: 'Atendimento', roles: ['admin','gestor','atendente','analista'], children: [
+      { id: 'conversations', label: 'Conversas',  icon: '💬', roles: ['admin','gestor','atendente','analista'], badge: 'waitingBadge' },
+      { id: 'orders',        label: 'Pedidos',    icon: '🛒', roles: ['admin','gestor','atendente','analista'] },
+      { id: 'orcamentos',    label: 'Orçamentos', icon: '📋', roles: ['admin','gestor','atendente','analista'] },
     ]},
     { section: 'Operação', roles: ['admin','gestor','analista','operador'], children: [
       { id: 'os',         label: 'Ordens de Serviço',   icon: '📝', roles: ['admin','gestor','analista'] },

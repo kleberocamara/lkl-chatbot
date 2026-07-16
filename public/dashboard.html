@@ -3402,6 +3402,12 @@ function aplicarMascaras() {
   onInput('fn-tel', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{4,5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });
 }
 
+// Seletor nativo de data (ex: Safari) não fecha sozinho após escolher o dia —
+// tira o foco do campo quando o valor muda, o que fecha o calendário.
+document.addEventListener('change', e => {
+  if (e.target.matches && e.target.matches('input[type="date"]')) e.target.blur();
+});
+
 function campoEdit(label, id, val, type='text', extra='') {
   return `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">${label}</label>
     <input id="${id}" type="${type}" value="${val||''}" ${extra} style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box"></div>`;

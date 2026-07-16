@@ -960,7 +960,10 @@
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">E-mail</label>
           <input id="nu2-email" type="email" placeholder="email@lkl.com" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Senha</label>
-          <input id="nu2-password" type="password" placeholder="Senha inicial" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+          <div style="position:relative">
+            <input id="nu2-password" type="password" placeholder="Senha inicial" style="width:100%;padding:8px 34px 8px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+            <button type="button" onclick="toggleSenhaVisivel('nu2-password',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;padding:2px;color:#888">👁</button>
+          </div></div>
         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Perfil</label>
           <select id="nu2-role" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
             <option value="atendente">Atendente</option>
@@ -1141,6 +1144,7 @@ async function api(url, options = {}) {
     if (res.status === 401) { window.location.href = '/login'; return null; }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (res.status === 403 && err.code === 'MUST_CHANGE_PASSWORD') { window.location.href = '/login'; return null; }
       console.error('API error:', res.status, err);
       const msg = err.error || (Array.isArray(err.errors) ? err.errors.join(', ') : null) || (Array.isArray(err.erro) ? err.erro.join(', ') : err.erro) || 'Erro desconhecido';
       return { error: msg, errors: err.errors, status: res.status };
@@ -3802,6 +3806,13 @@ async function loadFuncionariosSemUsuario() {
   sel.innerHTML = lista.length
     ? `<option value="">Selecione...</option>` + lista.map(f => `<option value="${f.id}" data-celular="${f.celular||''}" data-email="${escHtml(f.email||'')}">${f.matricula} — ${escHtml(f.nome)} (${escHtml(f.cargo)})</option>`).join('')
     : `<option value="">Nenhum funcionário sem usuário — cadastre em Funcionários</option>`;
+}
+
+function toggleSenhaVisivel(inputId, btn) {
+  const input = document.getElementById(inputId);
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? '👁' : '🙈';
 }
 
 function preencherEmailFuncionario() {

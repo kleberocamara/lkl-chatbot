@@ -19,12 +19,18 @@ function requireAdmin(req, res, next) {
   });
 }
 
+// Rotas liberadas mesmo com troca de senha pendente (sem elas o usuário fica trancado pra sempre)
+const ROTAS_LIVRES_TROCA_SENHA = ['/auth/change-password', '/auth/logout'];
+
 function requireAuthApi(req, res, next) {
   const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
 
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
+    if (req.user.mustChangePassword && !ROTAS_LIVRES_TROCA_SENHA.includes(req.path)) {
+      return res.status(403).json({ error: 'Troca de senha obrigatória', code: 'MUST_CHANGE_PASSWORD' });
+    }
     next();
   } catch {
     res.status(401).json({ error: 'Token inválido' });

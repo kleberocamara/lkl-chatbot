@@ -36,10 +36,26 @@
     border-radius: 8px;
     font-size: 15px;
     transition: border-color .2s;
-    margin-bottom: 18px;
   }
   input:focus { outline: none; border-color: #1a237e; }
-  button {
+  .field { margin-bottom: 18px; }
+  .password-wrap { position: relative; }
+  .password-wrap input { padding-right: 44px; }
+  .toggle-eye {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px;
+    line-height: 1;
+    color: #888;
+  }
+  .toggle-eye:hover { color: #333; }
+  button[type="submit"] {
     width: 100%;
     padding: 14px;
     background: #1a237e;
@@ -51,8 +67,10 @@
     cursor: pointer;
     transition: background .2s;
   }
-  button:hover { background: #283593; }
+  button[type="submit"]:hover { background: #283593; }
   .error { color: #c62828; font-size: 13px; margin-top: 10px; text-align: center; display: none; }
+  .hint { color: #666; font-size: 13px; margin-bottom: 18px; text-align: center; }
+  #changePasswordForm { display: none; }
 </style>
 </head>
 <body>
@@ -61,16 +79,60 @@
     <img src="/logo.png" alt="Gráfica LKL">
     <p>Painel de Atendimento — Gráfica LKL</p>
   </div>
+
   <form id="loginForm">
-    <label>E-mail</label>
-    <input type="email" id="email" required placeholder="seu@email.com">
-    <label>Senha</label>
-    <input type="password" id="password" required placeholder="••••••••">
+    <div class="field">
+      <label>E-mail</label>
+      <input type="email" id="email" required placeholder="seu@email.com">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <div class="password-wrap">
+        <input type="password" id="password" required placeholder="••••••••">
+        <button type="button" class="toggle-eye" data-target="password">👁</button>
+      </div>
+    </div>
     <button type="submit" id="btn">Entrar</button>
     <p class="error" id="error">Credenciais inválidas. Tente novamente.</p>
   </form>
+
+  <form id="changePasswordForm">
+    <p class="hint">Este é seu primeiro acesso — defina uma nova senha para continuar.</p>
+    <div class="field">
+      <label>Senha atual</label>
+      <div class="password-wrap">
+        <input type="password" id="cp-current" required placeholder="Senha recebida">
+        <button type="button" class="toggle-eye" data-target="cp-current">👁</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Nova senha</label>
+      <div class="password-wrap">
+        <input type="password" id="cp-new" required minlength="6" placeholder="Mínimo 6 caracteres">
+        <button type="button" class="toggle-eye" data-target="cp-new">👁</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Confirmar nova senha</label>
+      <div class="password-wrap">
+        <input type="password" id="cp-confirm" required minlength="6" placeholder="Repita a nova senha">
+        <button type="button" class="toggle-eye" data-target="cp-confirm">👁</button>
+      </div>
+    </div>
+    <button type="submit" id="cp-btn">Trocar senha e entrar</button>
+    <p class="error" id="cp-error"></p>
+  </form>
 </div>
 <script>
+document.querySelectorAll('.toggle-eye').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+  });
+});
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('btn');
@@ -86,11 +148,54 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }),
   });
 
-  if (res.ok) {
+  const data = await res.json().catch(() => ({}));
+
+  if (res.ok && data.user?.mustChangePassword) {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('changePasswordForm').style.display = 'block';
+    document.getElementById('cp-current').value = document.getElementById('password').value;
+  } else if (res.ok) {
     window.location.href = '/dashboard';
   } else {
     document.getElementById('error').style.display = 'block';
     btn.textContent = 'Entrar';
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('cp-error');
+  errorEl.style.display = 'none';
+
+  const newPassword = document.getElementById('cp-new').value;
+  const confirm = document.getElementById('cp-confirm').value;
+  if (newPassword !== confirm) {
+    errorEl.textContent = 'As senhas não coincidem.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('cp-btn');
+  btn.textContent = 'Trocando...';
+  btn.disabled = true;
+
+  const res = await fetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currentPassword: document.getElementById('cp-current').value,
+      newPassword,
+    }),
+  });
+
+  if (res.ok) {
+    window.location.href = '/dashboard';
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errorEl.textContent = data.error || 'Erro ao trocar senha.';
+    errorEl.style.display = 'block';
+    btn.textContent = 'Trocar senha e entrar';
     btn.disabled = false;
   }
 });

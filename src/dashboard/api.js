@@ -41,7 +41,7 @@ router.post('/auth/login', async (req, res) => {
   }
 
   const token = jwt.sign(
-    { id: user.id, name: user.name, email: user.email, role: user.role },
+    { id: user.id, name: user.name, email: user.email, role: user.role, mustChangePassword: user.must_change_password },
     process.env.JWT_SECRET,
     { expiresIn: '12h' }
   );
@@ -49,12 +49,35 @@ router.post('/auth/login', async (req, res) => {
   await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
 
   res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 43200000 });
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, mustChangePassword: user.must_change_password } });
 });
 
 router.post('/auth/logout', (req, res) => {
   res.clearCookie('token');
   res.json({ ok: true });
+});
+
+router.post('/auth/change-password', requireAuthApi, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Nova senha deve ter ao menos 6 caracteres' });
+
+  const result = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+    return res.status(401).json({ error: 'Senha atual incorreta' });
+  }
+
+  const hash = await bcrypt.hash(newPassword, 10);
+  await db.query('UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2', [hash, user.id]);
+
+  const token = jwt.sign(
+    { id: user.id, name: user.name, email: user.email, role: user.role, mustChangePassword: false },
+    process.env.JWT_SECRET,
+    { expiresIn: '12h' }
+  );
+  res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 43200000 });
+  res.json({ ok: true, token });
 });
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────

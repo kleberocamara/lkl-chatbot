@@ -3367,7 +3367,28 @@ async function buscarCEPModal(cep, pfx) {
 }
 function aplicarMascaras() {
   const digits = s => s.replace(/\D/g,'');
-  const onInput = (id, fn) => { const el = document.getElementById(id); if (!el) return; el.addEventListener('input', e => { const p=e.target.selectionStart; e.target.value=fn(e.target.value); try{e.target.setSelectionRange(p,p);}catch(ex){} }); };
+  // Preserva a posição do cursor contando dígitos (não posição bruta) — a mascara
+  // insere/remove caracteres (parênteses, traço) que deslocam o texto, então
+  // restaurar o offset bruto do cursor coloca ele no lugar errado.
+  const onInput = (id, fn) => { const el = document.getElementById(id); if (!el) return; el.addEventListener('input', e => {
+    const old = e.target.value;
+    const oldPos = e.target.selectionStart;
+    const digitsBeforeCursor = digits(old.slice(0, oldPos)).length;
+    const newVal = fn(old);
+    e.target.value = newVal;
+    let newPos = 0;
+    if (digitsBeforeCursor > 0) {
+      let count = 0;
+      newPos = newVal.length;
+      for (let i = 0; i < newVal.length; i++) {
+        if (/\d/.test(newVal[i])) {
+          count++;
+          if (count === digitsBeforeCursor) { newPos = i + 1; break; }
+        }
+      }
+    }
+    try { e.target.setSelectionRange(newPos, newPos); } catch(ex) {}
+  }); };
   // CPF/CNPJ auto-detecta pelo tamanho
   onInput('c-cpfcnpj', s => { const d=digits(s).slice(0,14); return d.length<=11 ? d.replace(/(\d{3})(\d{0,3})(\d{0,3})(\d{0,2})/,(_,a,b,c,e)=>[a,b,c].filter(Boolean).join('.')+(e?'-'+e:'')).replace(/\.$/,'') : d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,'$1.$2.$3/$4-$5').replace(/-$/,''); });
   onInput('c-celular', s => { const d=digits(s).slice(0,11); return d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3').replace(/-$/,''); });

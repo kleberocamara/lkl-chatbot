@@ -48,12 +48,14 @@ Tudo roda num único servidor (VPS). Não há ambiente de staging separado — d
 
 | Domínio | Aponta pra | Observação |
 |---|---|---|
-| `chatbot.klebercamaraconsultoria.cloud` | `2.25.147.243` | Domínio usado durante o desenvolvimento (consultoria). `BASE_URL`/`APP_URL` do `.env` apontam pra ele hoje. |
-| `app.graficalkl.com.br` | `2.25.147.243` | Domínio da própria gráfica, já configurado e respondendo (mesmo app), mas não é o que está definido como URL oficial no `.env` ainda. |
+| **`app.graficalkl.com.br`** | `2.25.147.243` | **Domínio oficial** — definido em 2026-07-16. `BASE_URL`/`APP_URL` do `.env` apontam pra ele. |
+| `chatbot.klebercamaraconsultoria.cloud` | `2.25.147.243` | Domínio usado durante o desenvolvimento (consultoria). Continua respondendo (mesmo app, mesmo certificado válido) por compatibilidade, mas não é mais o oficial. |
 
-Comentário deixado no `.env`: a URL de produção pretendida no futuro é algo como `https://chatbot.lklgrafica.com.br` — **domínio ainda não registrado/configurado**, é só uma indicação de intenção, não existe hoje.
+Comentário antigo no `.env` sugeria `https://chatbot.lklgrafica.com.br` como URL futura — esse domínio nunca chegou a ser registrado; a decisão final foi usar `app.graficalkl.com.br`, que já era da própria empresa.
 
-> **Ação recomendada antes da entrega final**: decidir qual domínio é o oficial (provavelmente `app.graficalkl.com.br`, já que é da própria empresa) e atualizar `BASE_URL`/`APP_URL` no `.env`, além de reconfigurar o webhook do WhatsApp (Meta) e o retorno do Mercado Pago pra apontar pro domínio definitivo.
+> **Pendência remanescente**: os webhooks registrados nos painéis externos (Meta/WhatsApp, Mercado Pago) ainda apontam pro path do domínio antigo (`chatbot.klebercamaraconsultoria.cloud/webhook/...`). Isso **continua funcionando** normalmente porque os dois domínios apontam pro mesmo servidor/app — não é urgente. Mas pra terminar a migração por completo, vale reconfigurar esses webhooks nos painéis da Meta e do Mercado Pago pra usarem `app.graficalkl.com.br`, e depois considerar desativar o domínio antigo.
+>
+> **Nota técnica**: ao trocar `BASE_URL`/`APP_URL` no `.env`, o PM2 **não pega o valor novo automaticamente** mesmo com `pm2 restart --update-env` (ele cacheia o env do processo). É preciso reiniciar exportando a variável inline: `BASE_URL='...' APP_URL='...' pm2 restart lkl-chatbot --update-env && pm2 save`. Ver `reference_vps_pm2_env` na memória do projeto.
 
 ---
 
@@ -222,5 +224,5 @@ Resumo do que já foi endereçado numa auditoria de segurança feita durante o d
 1. **Webhook do Mercado Pago rejeita assinatura real** — pagamentos via link MP não fecham sozinhos até correção (log de diagnóstico já ativo em produção).
 2. **NF-e ainda em homologação** — virada pra produção adiada até o dia oficial da migração de sistemas da gráfica (precisa saber o último número real emitido por CNPJ antes de virar, pra não colidir numeração).
 3. **Sem backup automatizado** de banco de dados nem de arquivos.
-4. **Domínio oficial de produção indefinido** — hoje o app responde em dois domínios (`chatbot.klebercamaraconsultoria.cloud` e `app.graficalkl.com.br`); falta decidir qual é o definitivo e atualizar `BASE_URL`/webhooks de acordo.
+4. **Webhooks externos (Meta/WhatsApp, Mercado Pago) ainda registrados no domínio antigo** — `chatbot.klebercamaraconsultoria.cloud`. Funciona normalmente (mesmo servidor), mas o ideal é reapontar pros painéis usarem `app.graficalkl.com.br` (domínio oficial, definido em 2026-07-16) e depois desativar o domínio antigo.
 5. **`PREFEITURA_LOGIN`/`PREFEITURA_SENHA`** — variáveis órfãs, sem código associado (NFS-e nunca foi implementada).

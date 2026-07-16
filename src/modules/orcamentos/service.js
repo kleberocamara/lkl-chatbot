@@ -978,8 +978,6 @@ async function enviarArteItem(itemId, arquivo_url) {
     `UPDATE orcamento_itens SET arte_status='enviada', arte_arquivo_url=$1, arte_enviada_em=NOW() WHERE id=$2`,
     [arquivo_url, itemId]
   );
-  conversas.sairDeAguardandoHumano(item.cliente_celular, { para: 'resolved', motivo: 'arte_enviada' })
-    .catch(e => console.warn('[AUTO-RESOLVE] arte:', e.message));
   return { ok: true, item_id: itemId, status: 'enviada' };
 }
 

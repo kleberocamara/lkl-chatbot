@@ -48,6 +48,7 @@ test('envio OK → envia imagem sem botões, depois texto com link, e marca arte
   const upd = db.query.mock.calls[1];
   expect(upd[0]).toMatch(/arte_status='enviada'/);
   expect(r).toEqual({ ok: true, item_id: 5, status: 'enviada' });
+  expect(conversas.sairDeAguardandoHumano).not.toHaveBeenCalled();
 });
 
 test('envio falha total → arte_status=erro_envio, não envia texto, e retorna erro', async () => {

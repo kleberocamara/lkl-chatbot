@@ -169,7 +169,10 @@ REGRAS:
    - SEMPRE pergunte o TAMANHO (em metros/cm) — não registre sem tamanho.
    - SEMPRE pergunte a IMPRESSÃO: só frente (4/0) ou frente e verso (4/4). Ex.: "É impresso só na frente ou frente e verso? 😊"
    - Se for FOLDER, pergunte também o Nº DE DOBRAS (1, 2 ou 3). Folheto/flyer não têm dobra.
-   - Ao chamar registrar_pedido, preencha "impressao" ("4/0" ou "4/4") e "dobras" (0 para folheto/flyer; 1–3 para folder) no item.`;
+   - Ao chamar registrar_pedido, preencha "impressao" ("4/0" ou "4/4") e "dobras" (0 para folheto/flyer; 1–3 para folder) no item.
+18. PEDIDO EM ABERTO — leia com atenção se o contexto trouxer "[PEDIDOS EM ABERTO]":
+   - Antes de chamar registrar_pedido, verifique se a mensagem do cliente parece estar relacionada a um dos pedidos já em aberto listados (dúvida sobre arte, instalação, prazo, revisão, acompanhamento). Se sim, NÃO chame registrar_pedido — responda a dúvida normalmente, ou inclua [FALAR_HUMANO] se precisar de alguém da equipe.
+   - Só chame registrar_pedido quando o cliente confirmar EXPLICITAMENTE que é um pedido novo e diferente dos listados. Se não tiver certeza, pergunte antes: "Isso é sobre o pedido [número] que você já tem com a gente, ou é um pedido novo?" Nesse caso, ao chamar registrar_pedido, preencha "pedido_novo_confirmado": true.`;
 
 const TOOLS = [
   {
@@ -214,6 +217,7 @@ const TOOLS = [
             },
           },
           cliente_existente_confirmado: { type: 'boolean', description: 'true se o cliente confirmou ser o cadastro encontrado pelo telefone; false se negou' },
+          pedido_novo_confirmado: { type: 'boolean', description: 'Preencha true SOMENTE se havia pedido(s) em aberto do cliente e ele confirmou explicitamente que este é um pedido NOVO e diferente. Deixe ausente/false se não havia pedido em aberto ou se o cliente não confirmou.' },
         },
         required: ['mensagem_encerramento', 'tipo_servico', 'quantidade'],
       },
@@ -246,6 +250,7 @@ async function processMessage(conversationId, userMessage) {
 
   // Pré-busca: o telefone do contato está cadastrado? (injeta nota de contexto)
   let clienteNota = '';
+  let pedidosAbertos = [];
   try {
     const cinfo = await db.query(
       `SELECT ct.phone FROM conversations c LEFT JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = $1`,
@@ -265,6 +270,22 @@ async function processMessage(conversationId, userMessage) {
           .map((c, i) => `${i + 1}) ${c.nome} (${c.tipo_pessoa === 'PJ' ? 'PJ' : 'PF'})`).join('\n');
         const extra = cands.length > 5 ? '\n(entre outros — confirme o nome/empresa)' : '';
         clienteNota = `\n\n[CLIENTES NA BASE] O telefone está ligado a mais de um cadastro:\n${lista}${extra}\nPergunte para QUAL desses cadastros é este pedido, ou se é um cadastro novo. NÃO escolha por conta própria. Ao registrar, use em "nome_cliente" exatamente o nome do cadastro escolhido.`;
+      }
+
+      if (cands.length) {
+        const ids = cands.map(c => c.id);
+        const rPedidos = await db.query(
+          `SELECT numero_os, status, produto FROM orders
+           WHERE cliente_id = ANY($1) AND status NOT IN ('concluido','entregue','cancelado')
+           ORDER BY created_at DESC`,
+          [ids]);
+        pedidosAbertos = rPedidos.rows;
+        if (pedidosAbertos.length) {
+          const listaPedidos = pedidosAbertos
+            .map(p => `#${p.numero_os} (${p.produto || 'produto não especificado'}, status: ${p.status})`)
+            .join(', ');
+          clienteNota += `\n\n[PEDIDOS EM ABERTO] Este cliente já tem pedido(s) em andamento: ${listaPedidos}. Se a mensagem do cliente parecer estar relacionada a um desses pedidos (dúvida sobre arte, instalação, prazo, revisão, etc.), NÃO chame registrar_pedido — responda a dúvida normalmente ou use [FALAR_HUMANO] se precisar de alguém da equipe. Só chame registrar_pedido se o cliente confirmar explicitamente que é um pedido NOVO e diferente desses. Nesse caso, preencha "pedido_novo_confirmado": true no registrar_pedido.`;
+        }
       }
     }
   } catch (e) { console.warn('[CHATBOT-CLIENTE] lookup falhou:', e.message); }
@@ -294,6 +315,15 @@ async function processMessage(conversationId, userMessage) {
     if (toolCall.function.name === 'registrar_pedido') {
       try {
         const args = JSON.parse(toolCall.function.arguments);
+
+        if (pedidosAbertos.length && args.pedido_novo_confirmado !== true) {
+          const numeros = pedidosAbertos.map(p => `#${p.numero_os}`).join(', ');
+          cleanResponse = `Só pra confirmar: isso é sobre o pedido ${numeros} que você já tem com a gente, ou é um pedido novo? 😊`;
+          history.push({ role: 'tool', tool_call_id: toolCall.id, content: 'Aguardando confirmação: pedido existente ou novo.' });
+          await saveContext(conversationId, history);
+          return { response: cleanResponse, isComplete: false, orderDetails: null };
+        }
+
         orderDetails = args;
         isComplete = true;
 

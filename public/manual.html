@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual do Sistema — Gráfica LKL</title>
+<style>
+  :root{
+    --navy:#1a237e; --navy2:#283593; --navy-deep:#0d47a1;
+    --ink:#1c2333; --muted:#667; --line:#e6e8f0; --bg:#f4f5fa; --card:#ffffff;
+    --amber:#f57f17; --green:#2e7d32; --red:#c62828; --blue:#0277bd; --purple:#5c6bc0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55}
+  a{color:inherit}
+
+  #progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--navy),var(--purple));z-index:100;width:0%;transition:width .1s linear}
+
+  header.hero{
+    background:linear-gradient(135deg,var(--navy) 0%, var(--navy2) 55%, var(--navy-deep) 100%);
+    color:#fff;padding:56px 32px 72px;text-align:center;position:relative;overflow:hidden
+  }
+  header.hero::after{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(circle at 20% 20%, rgba(255,255,255,.08), transparent 40%),
+               radial-gradient(circle at 80% 70%, rgba(255,255,255,.06), transparent 45%);
+  }
+  header.hero img{width:88px;height:88px;object-fit:contain;margin-bottom:14px;position:relative}
+  header.hero h1{font-size:30px;margin:0 0 8px;font-weight:700;position:relative}
+  header.hero p{font-size:15px;opacity:.85;margin:0;position:relative;max-width:560px;margin:0 auto}
+  header.hero .badges{display:flex;gap:10px;justify-content:center;margin-top:22px;flex-wrap:wrap;position:relative}
+  header.hero .badges span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);padding:6px 14px;border-radius:20px;font-size:12.5px;font-weight:600}
+
+  .layout{display:flex;max-width:1280px;margin:-40px auto 60px;padding:0 24px;gap:28px;position:relative}
+
+  nav.toc{
+    width:270px;flex-shrink:0;position:sticky;top:24px;align-self:flex-start;
+    background:var(--card);border-radius:16px;box-shadow:0 8px 30px rgba(26,35,126,.12);
+    max-height:calc(100vh - 48px);overflow-y:auto;padding:10px
+  }
+  nav.toc a{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+    text-decoration:none;color:var(--muted);font-size:13.5px;font-weight:600;
+    transition:background .15s,color .15s;margin-bottom:2px
+  }
+  nav.toc a .n{
+    width:22px;height:22px;border-radius:50%;background:var(--line);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;font-weight:700
+  }
+  nav.toc a:hover{background:#f0f1fb;color:var(--navy)}
+  nav.toc a.active{background:var(--navy);color:#fff}
+  nav.toc a.active .n{background:rgba(255,255,255,.25);color:#fff}
+
+  main{flex:1;min-width:0;display:flex;flex-direction:column;gap:24px}
+
+  section.chapter{
+    background:var(--card);border-radius:18px;box-shadow:0 6px 24px rgba(26,35,126,.08);
+    padding:32px 36px;scroll-margin-top:24px
+  }
+  section.chapter .kicker{
+    display:flex;align-items:center;gap:12px;margin-bottom:6px
+  }
+  section.chapter .kicker .num{
+    width:34px;height:34px;border-radius:10px;background:var(--navy);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0
+  }
+  section.chapter .kicker .emoji{font-size:26px}
+  section.chapter h2{font-size:21px;margin:0;font-weight:700;color:var(--navy)}
+  section.chapter .subtitle{color:var(--muted);font-size:14px;margin:4px 0 18px 46px}
+  section.chapter .roles{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px 46px}
+  section.chapter .roles span{
+    background:#eef0fb;color:var(--navy);font-size:11px;font-weight:700;
+    padding:3px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:.3px
+  }
+  section.chapter .body-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+  @media (max-width:900px){ section.chapter .body-grid{grid-template-columns:1fr} }
+
+  ol.steps{margin:0;padding:0;list-style:none;counter-reset:step}
+  ol.steps li{
+    counter-increment:step;position:relative;padding:0 0 16px 34px;font-size:14px;color:var(--ink)
+  }
+  ol.steps li::before{
+    content:counter(step);position:absolute;left:0;top:-1px;width:24px;height:24px;
+    background:#eef0fb;color:var(--navy);border-radius:50%;font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center
+  }
+  ol.steps li::after{
+    content:'';position:absolute;left:11px;top:24px;bottom:0;width:2px;background:var(--line)
+  }
+  ol.steps li:last-child::after{display:none}
+  ol.steps li b{color:var(--navy)}
+  ol.steps li .tip{
+    display:block;margin-top:6px;background:#fff8e1;border-left:3px solid var(--amber);
+    padding:8px 10px;border-radius:0 8px 8px 0;font-size:12.5px;color:#7a5c00
+  }
+
+  .visual{
+    background:linear-gradient(180deg,#f7f8fd,#eef0fb);border:1px solid var(--line);
+    border-radius:14px;padding:18px;min-height:260px;display:flex;flex-direction:column;justify-content:center
+  }
+  .mockup-card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(26,35,126,.08);padding:12px 14px;margin-bottom:8px}
+  .mockup-card:last-child{margin-bottom:0}
+  .mockup-row{display:flex;align-items:center;gap:10px}
+  .mockup-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .mockup-bar{height:8px;border-radius:4px;background:var(--line)}
+  .mockup-chip{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:10px;white-space:nowrap}
+  .mockup-btn{
+    font-size:11px;font-weight:700;padding:5px 11px;border-radius:7px;color:#fff;
+    display:inline-block;white-space:nowrap
+  }
+  .mockup-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+
+  .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kanban .col{background:#fff;border-radius:10px;padding:8px;box-shadow:0 2px 8px rgba(26,35,126,.06)}
+  .kanban .col h4{font-size:10px;margin:0 0 8px;color:var(--muted);text-transform:uppercase;text-align:center;letter-spacing:.3px}
+  .kanban .card{background:#f5f6fc;border-radius:7px;padding:6px 7px;margin-bottom:6px;font-size:9.5px;color:var(--ink);border-left:3px solid var(--navy)}
+
+  .chat-bubble{max-width:78%;padding:8px 12px;border-radius:14px;font-size:12px;margin-bottom:8px}
+  .chat-bubble.in{background:#fff;border-bottom-left-radius:3px;align-self:flex-start}
+  .chat-bubble.out{background:#dcf3d9;border-bottom-right-radius:3px;align-self:flex-end;margin-left:auto}
+  .chat-flow{display:flex;flex-direction:column}
+
+  footer.end{text-align:center;padding:40px 20px 70px;color:var(--muted);font-size:12.5px}
+
+  .mobile-toc-toggle{display:none}
+  @media (max-width:900px){
+    .layout{flex-direction:column}
+    nav.toc{width:100%;position:relative;top:0;max-height:none}
+    nav.toc .toc-list{display:none}
+    nav.toc.open .toc-list{display:block}
+    .mobile-toc-toggle{
+      display:flex;align-items:center;justify-content:space-between;width:100%;
+      background:none;border:none;padding:8px 12px;font-weight:700;color:var(--navy);cursor:pointer;font-size:14px
+    }
+    section.chapter{padding:24px 20px}
+    section.chapter .subtitle,section.chapter .roles{margin-left:0}
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<header class="hero">
+  <img src="/logo.png" alt="Gráfica LKL">
+  <h1>Manual do Sistema</h1>
+  <p>Guia completo de uso do painel — da conversa com o cliente até a entrega e o financeiro.</p>
+  <div class="badges">
+    <span>🤖 Chatbot IA</span>
+    <span>📋 Orçamentos</span>
+    <span>🏭 Produção</span>
+    <span>💳 Financeiro</span>
+    <span>📄 Fiscal</span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" id="toc">
+    <button class="mobile-toc-toggle" onclick="document.getElementById('toc').classList.toggle('open')">📖 Índice do manual <span>▾</span></button>
+    <div class="toc-list" id="tocList"></div>
+  </nav>
+
+  <main id="content"></main>
+</div>
+
+<footer class="end">
+  Manual do Sistema — Gráfica LKL · Painel interno · Última atualização automática
+  <div style="margin-top:8px"><a href="/dashboard" style="color:var(--navy);font-weight:700;text-decoration:none">← Voltar ao painel</a></div>
+</footer>
+
+<script>
+const CHAPTERS = [
+{
+  id:'conversas', emoji:'💬', title:'Conversas com o bot', roles:['Admin','Gestor','Atendente'],
+  subtitle:'O primeiro contato do cliente — o chatbot de IA atende no WhatsApp, coleta os dados do pedido e já registra tudo no sistema.',
+  steps:[
+    'O cliente manda mensagem no WhatsApp da gráfica. O bot identifica se é <b>cliente novo</b> ou <b>já cadastrado</b> pelo telefone.',
+    'O bot conduz a conversa perguntando produto, dimensões, quantidade, material e se o cliente já tem a arte pronta — sempre convertendo tudo pra metros e confirmando com o cliente antes de seguir.',
+    'Conversa parada há muito tempo? Aparece o botão <b>✓ Resolver</b> pra fechar manualmente, ou <b>👍 Aprovado pelo cliente</b> quando o orçamento foi confirmado fora do fluxo automático.',
+    'Ao final, o bot faz um <b>resumo do pedido</b> e só registra quando o cliente confirmar ("sim", "correto", "pode ser"). Nenhum preço é informado pelo bot — isso fica só com a equipe.',
+    'A conversa aparece em tempo real na aba <b>Conversas</b> do painel. Use os filtros <i>Todas / Aguardando / Ativas / Resolvidas</i> ou a busca por nome/telefone pra encontrar rápido.',
+    'Se o cliente pedir pra falar com uma pessoa, ou o assunto fugir do escopo (financeiro, RH, etc.), a conversa entra em <b>Aguardando Humano</b> — aparece destacada com um alerta de tempo parado.',
+    'Clique numa conversa pra ver o histórico completo e responder manualmente quando precisar assumir o atendimento.',
+  ],
+  tip:'Conversas paradas há mais de 2h aparecem com destaque vermelho ⏱ no topo da lista — é o primeiro lugar pra olhar todo dia.',
+  visual:`<div class="mockup-title">💬 Conversas</div>
+    <div class="chat-flow">
+      <div class="chat-bubble in">Oi! Preciso de 500 adesivos 10x15cm</div>
+      <div class="chat-bubble out">Perfeito! Você já tem a arte pronta ou precisa que a gente faça? 😊</div>
+      <div class="chat-bubble in">Já tenho pronta</div>
+      <div class="chat-bubble out">Show! Confirmando: 500un · 10x15cm · Adesivo · com arte. Correto?</div>
+    </div>`,
+},
+{
+  id:'pedidos', emoji:'🛒', title:'Pedido manual (balcão / vendedor)', roles:['Admin','Gestor','Atendente'],
+  subtitle:'Quando o pedido não vem do bot — cliente no balcão, telefone ou vendedor externo — a equipe cadastra direto no painel.',
+  steps:[
+    'Vá em <b>Pedidos → + Novo Pedido</b>.',
+    'Busque o cliente pelo nome/CPF/celular (autocomplete) ou cadastre um novo na hora, sem sair do formulário.',
+    'Escolha o <b>Canal</b> de origem: Balcão, Vendedor, WhatsApp, Telefone, Site ou Chatbot — ajuda a rastrear de onde vem cada pedido.',
+    'Adicione um ou mais itens: produto, especificação, quantidade, material — o sistema já puxa o catálogo de preços quando existe correspondência.',
+    'Ao salvar, o sistema <b>gera automaticamente um orçamento</b> vinculado, no status <i>Em Orçamento</i>, pronto pra revisão.',
+    'A entrada unificada mostra todos os pedidos — vindos do bot, do balcão ou de vendedor — na mesma lista, com filtro por status e exportação em CSV.',
+  ],
+  tip:'Não existe cadastro duplicado: o pedido manual já nasce ligado a um orçamento, então o próximo passo é só editar/precificar os itens.',
+  visual:`<div class="mockup-title">🛒 Pedidos</div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-weight:700;font-size:12px">+ Novo Pedido</span>
+      <span class="mockup-chip" style="background:#e3f2fd;color:#0277bd">Balcão</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#f57f17"></div><div style="flex:1"><div class="mockup-bar" style="width:70%"></div></div><span class="mockup-chip" style="background:#fff9c4;color:#f57f17">Em orçamento</span></div></div>
+    <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#2e7d32"></div><div style="flex:1"><div class="mockup-bar" style="width:55%"></div></div><span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Aprovado</span></div></div>`,
+},
+{
+  id:'orcamentos', emoji:'📋', title:'Validação, edição e envio do orçamento', roles:['Admin','Gestor','Atendente'],
+  subtitle:'Todo pedido — venha do bot ou manual — passa por aqui antes de virar produção.',
+  steps:[
+    'Na aba <b>Orçamentos</b>, use os chips de status: <i>Em Orçamento, Concluído, Enviado, Aprovado, Reprovado, Todos</i>.',
+    'Clique no orçamento pra expandir os itens. Enquanto estiver <i>Em Orçamento</i>, você pode <b>editar preço/quantidade, adicionar ou excluir itens</b> livremente.',
+    'Quando estiver tudo certo, clique em <b>✅ Concluir</b> — o sistema recalcula o total e <b>envia automaticamente ao cliente</b> por WhatsApp e e-mail, com o PDF do orçamento anexado.',
+    'O cliente aprova ou reprova respondendo <i>SIM/NÃO</i> no WhatsApp ou clicando no link do e-mail — o status muda sozinho no painel.',
+    'Se o cliente reprovar e pedir ajuste, use o botão <b>🔓 Reabrir p/ edição</b> — o orçamento volta pra <i>Em Orçamento</i> com os itens destravados, sem perder o histórico.',
+    'Orçamento aprovado sem cobrança pendente também pode ser <b>Reenviado</b> (↻) se o cliente perdeu a mensagem.',
+  ],
+  tip:'Itens de serviço puro (Arte Final, Instalação, Entrega) não precisam de arte enviada nem geram OS de produção — só compõem o valor do orçamento.',
+  visual:`<div class="mockup-title">📋 Orçamentos</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="mockup-chip" style="background:var(--navy);color:#fff">Em Orçamento</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Enviado</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Aprovado</span>
+    </div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">#58 · Maria Souza</span>
+      <span class="mockup-btn" style="background:#388e3c">✅ Concluir</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">#57 · João Lima</span>
+      <span class="mockup-btn" style="background:#f57f17">🔓 Reabrir</span>
+    </div></div>`,
+},
+{
+  id:'artes', emoji:'🎨', title:'Criação e envio de arte', roles:['Admin','Gestor','Atendente','Analista'],
+  subtitle:'Só os itens que realmente precisam de arte gráfica entram nessa fila — serviços como instalação ficam de fora.',
+  steps:[
+    'Na aba <b>Artes</b>, veja a fila de itens <i>Pendentes</i> — organizados por pedido e cliente.',
+    'Clique em <b>↑ Enviar arte</b> pra subir o arquivo final (imagem/PDF) daquele item.',
+    'O cliente recebe a imagem <b>direto no WhatsApp</b> e aprova respondendo <i>"APROVADO"</i> — não precisa abrir link nenhum.',
+    'Se ele responder pedindo ajuste, o item fica marcado como <i>Ajustes pedidos</i> e volta pra fila até o reenvio.',
+    'Item com arte <b>aprovada</b> libera a geração da OS (ordem de serviço) de produção pra ele.',
+  ],
+  tip:'Um pedido pode ter parte dos itens aprovados e outros ainda pendentes — a OS é gerada item a item, não trava o pedido inteiro.',
+  visual:`<div class="mockup-title">🎨 Artes</div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">Pedido #44 · Adesivo</span>
+      <span class="mockup-chip" style="background:#f5f5f5;color:#888">Pendente</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">Pedido #58 · Banner</span>
+      <span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Aprovada</span>
+    </div></div>`,
+},
+{
+  id:'os', emoji:'📝', title:'Criação da Ordem de Serviço (OS)', roles:['Admin','Gestor','Analista'],
+  subtitle:'A OS é o documento que a produção usa pra executar o serviço — pode nascer sozinha ou ser criada manualmente.',
+  steps:[
+    'Itens de <b>Comunicação Visual</b> (banner, adesivo, placa…) geram OS <b>automaticamente</b> assim que a arte é aprovada — sem ação manual.',
+    'Itens de <b>Offset</b> (cartão de visita, folheto, bloco…) usam o botão <b>+ Gerar OS Offset</b>, na aba Ordens de Serviço — escolha os itens do orçamento aprovado que vão entrar naquela OS.',
+    'Uma mesma OS pode reunir itens de <b>pedidos diferentes</b> quando faz sentido produzir junto (ex: vários cartões de visita na mesma folha).',
+    'Cada OS mostra a ficha técnica completa: quantidade, material, cores, acabamento, prazo — tudo que o operador de produção precisa.',
+    'A partir daqui a OS entra na esteira de produção (próximo capítulo).',
+  ],
+  visual:`<div class="mockup-title">📝 Ordens de Serviço</div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">+ Gerar OS Offset</span>
+      <span class="mockup-chip" style="background:#e3f2fd;color:#0277bd">Offset</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">OS #33 · 3 itens</span>
+      <span class="mockup-chip" style="background:#fff3e0;color:#e65100">Acabamento</span>
+    </div></div>`,
+},
+{
+  id:'formato', emoji:'🔍', title:'Melhor corte e baixa de materiais', roles:['Admin','Gestor','Analista'],
+  subtitle:'Antes de imprimir, o sistema calcula qual formato de papel/bobina aproveita melhor o material pra aquela peça.',
+  steps:[
+    'Na ficha de produção da OS, informe a altura e largura da imagem/peça.',
+    'Clique em <b>🔍 Melhor corte</b> — o sistema testa os formatos de papel/bobina cadastrados e lista as opções ordenadas pelo melhor aproveitamento.',
+    'Clique na opção escolhida: o sistema preenche sozinho o formato, o corte e a quantidade de imagens por folha/impressão na ficha.',
+    'Depois, vincule o <b>material</b> daquela via (busca por nome no campo Material) — é esse vínculo que conecta a ficha ao cadastro em <b>Cadastros → Materiais</b>.',
+  ],
+  tip:'O "Melhor corte" calcula só o aproveitamento de papel — a baixa de estoque do material usado é conferida manualmente no cadastro de Materiais, não é automática.',
+  visual:`<div class="mockup-title">🔍 Melhor corte</div>
+    <div class="mockup-card">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Bobina 1,60m — 4 peças por linha</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px">
+        <div style="background:#c8e6c9;height:26px;border-radius:3px"></div>
+        <div style="background:#c8e6c9;height:26px;border-radius:3px"></div>
+        <div style="background:#c8e6c9;height:26px;border-radius:3px"></div>
+        <div style="background:#ffcdd2;height:26px;border-radius:3px"></div>
+      </div>
+    </div>
+    <div class="mockup-card"><span style="font-size:12px;font-weight:700;color:#2e7d32">✓ Melhor aproveitamento: 92%</span></div>`,
+},
+{
+  id:'producao', emoji:'🏭', title:'Esteira de produção', roles:['Admin','Gestor','Analista','Operador'],
+  subtitle:'Board visual das fases — o operador arrasta ou avança cada OS conforme o trabalho acontece na gráfica.',
+  steps:[
+    'Acesse <b>Produção</b> no painel (ou pelo app mobile do operador).',
+    'O board mostra as fases: <b>Corte → Impressão → Acabamento → Entrega</b> (a sequência muda um pouco pra Comunicação Visual x Offset).',
+    'Alterne entre <i>Em Andamento</i> e <i>Concluídas</i> pra ver o que já foi entregue.',
+    'O operador avança a OS pra próxima fase direto no cartão — o cliente e o vendedor são notificados automaticamente das mudanças relevantes.',
+    'Quando chega em <b>Entrega</b>, a OS aparece pro motorista no app mobile, que confirma com foto de recebimento.',
+  ],
+  visual:`<div class="mockup-title">🏭 Produção</div>
+    <div class="kanban">
+      <div class="col"><h4>Corte</h4><div class="card">OS #33</div><div class="card">OS #35</div></div>
+      <div class="col"><h4>Impressão</h4><div class="card">OS #31</div></div>
+      <div class="col"><h4>Acabamento</h4><div class="card">OS #30</div><div class="card">OS #28</div></div>
+      <div class="col"><h4>Entrega</h4><div class="card">OS #27</div></div>
+    </div>`,
+},
+{
+  id:'contas-pagar', emoji:'📤', title:'Contas a pagar', roles:['Admin','Gestor','Financeiro','Atendente'],
+  subtitle:'Notas de fornecedores viram conta a pagar automaticamente — inclusive por foto direto no WhatsApp do financeiro.',
+  steps:[
+    'Fotos/PDFs de nota fiscal enviados pro número dedicado do financeiro são lidos por OCR e viram uma <b>conta a pagar pendente de confirmação</b> sozinhos.',
+    'Em <b>Contas a Pagar → Lista</b>, acompanhe os KPIs: a pagar em 30 dias, vencendo hoje, vencidos e pago no mês.',
+    'Use <b>+ Nova Conta</b> pra lançar manualmente — descrição, fornecedor, tipo de despesa, valor, vencimento, boleto (linha digitável) ou PIX. Dá pra marcar como <b>recorrente</b> (aluguel, assinaturas) ou <b>parcelada</b>.',
+    'Selecione contas e clique em <b>Adicionar ao Lote C6</b> pra pagar em lote direto pelo C6 Bank — o fluxo guia por 4 passos: <i>Selecionar → Validar no C6 → Revisar → Aprovar no C6</i>.',
+    'Use <b>🔄 Sincronizar DDA</b> pra puxar boletos registrados automaticamente no C6, e <b>⚡ Reconciliar</b> pra bater pagamentos já feitos com o extrato.',
+  ],
+  visual:`<div class="mockup-title">📤 Contas a Pagar</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="mockup-card" style="margin:0;text-align:center"><div style="font-size:9px;color:var(--muted)">VENCENDO HOJE</div><div style="font-size:16px;font-weight:700;color:#c62828">R$ 1.240</div></div>
+      <div class="mockup-card" style="margin:0;text-align:center"><div style="font-size:9px;color:var(--muted)">PAGO NO MÊS</div><div style="font-size:16px;font-weight:700">R$ 18.900</div></div>
+    </div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between"><span style="font-size:11px">Papel A4 — Distribuidora XPTO</span><span class="mockup-chip" style="background:#fff3e0;color:#e65100">Pendente</span></div></div>`,
+},
+{
+  id:'cobrancas', emoji:'💳', title:'Cobranças — boleto, PIX e Mercado Pago', roles:['Admin','Gestor','Financeiro'],
+  subtitle:'Depois do orçamento aprovado, gere a cobrança no formato que o cliente preferir.',
+  steps:[
+    'Na aba <b>Cobranças</b>, veja todos os orçamentos aprovados aguardando forma de pagamento.',
+    'Clique em <b>Boleto</b>, <b>PIX</b> ou <b>Link MP</b> conforme o combinado com o cliente.',
+    '<b>Boleto</b>: defina número de parcelas, vencimento da 1ª e intervalo entre elas — gera e envia automaticamente ao cliente.',
+    '<b>PIX</b>: gera o código copia-e-cola na hora e já envia pelo WhatsApp.',
+    '<b>Link MP</b>: escolha o máximo de parcelas no cartão — o cliente paga pelo checkout do Mercado Pago.',
+    'Cobrança já gerada mostra botões de <b>Copiar</b>/<b>Abrir link</b> e <b>Cancelar</b>, caso precise refazer.',
+    'O status muda pra <i>Pago</i> sozinho assim que o banco ou o Mercado Pago confirmam.',
+  ],
+  visual:`<div class="mockup-title">💳 Cobranças</div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:12px;font-weight:700">#58 · R$ 663,00</span>
+      <span style="display:flex;gap:4px">
+        <span class="mockup-btn" style="background:#5c6bc0;padding:4px 8px">Boleto</span>
+        <span class="mockup-btn" style="background:#00897b;padding:4px 8px">PIX</span>
+        <span class="mockup-btn" style="background:#1565c0;padding:4px 8px">Link MP</span>
+      </span>
+    </div></div>`,
+},
+{
+  id:'nfe', emoji:'📄', title:'Geração de NF-e', roles:['Admin','Gestor','Financeiro'],
+  subtitle:'Emissão fiscal direto do orçamento, já validada com a SEFAZ.',
+  steps:[
+    'No orçamento (ou na aba <b>NF-e</b>), clique em <b>Emitir NF-e</b>.',
+    'Confira os itens, o CFOP e os dados do destinatário puxados automaticamente do cadastro do cliente.',
+    'Clique em <b>Emitir NF-e</b> no modal — o sistema monta o XML, assina digitalmente e transmite pra SEFAZ.',
+    'Acompanhe o status: <i>pendente → autorizada</i> (ou <i>erro</i>, com o motivo da rejeição pra corrigir e reemitir).',
+    'Depois de autorizada, baixe o <b>DANFE</b> (PDF) pra impressão ou envio ao cliente.',
+  ],
+  tip:'O sistema já roda em homologação até a virada oficial pra produção — notas emitidas nesse modo não têm valor fiscal.',
+  visual:`<div class="mockup-title">📄 NF-e</div>
+    <div class="mockup-card">
+      <div style="font-size:11px;font-weight:700;margin-bottom:8px">Emitir NF-e — Pedido #58</div>
+      <div class="mockup-row" style="margin-bottom:6px"><div class="mockup-bar" style="width:60%"></div></div>
+      <div class="mockup-row"><span class="mockup-btn" style="background:#1a237e">Emitir NF-e</span></div>
+    </div>
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between"><span style="font-size:11px">NF 111</span><span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Autorizada</span></div></div>`,
+},
+{
+  id:'cadastros', emoji:'🗂️', title:'Cadastros — fornecedores, clientes, materiais, funcionários e máquinas', roles:['Admin','Gestor','Analista','Atendente'],
+  subtitle:'Toda a base de apoio do sistema fica reunida em <b>Cadastros</b>, com sub-abas pra cada tipo.',
+  steps:[
+    '<b>Clientes</b>: nome, CPF/CNPJ, contato, endereço — busca rápida por nome, documento ou celular.',
+    '<b>Fornecedores</b>: usados em contas a pagar e compras de revenda — CNPJ, contato, dados bancários.',
+    '<b>Materiais</b>: nome, unidade de medida, estoque — base pra baixa automática na produção.',
+    '<b>Funcionários</b>: nome, CPF, cargo, setor, telefone, e-mail, data de admissão. Recebem <b>matrícula automática</b> (LKL-XXX) ao cadastrar.',
+    '<b>Máquinas</b>: equipamentos de produção, fabricante, capacidade.',
+    'Todas as telas seguem o mesmo padrão: busca no topo, botão <b>+ Novo</b>, lista paginada e edição por clique.',
+  ],
+  visual:`<div class="mockup-title">🗂️ Cadastros</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="mockup-chip" style="background:var(--navy);color:#fff">Clientes</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Fornecedores</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Materiais</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Funcionários</span>
+      <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">Máquinas</span>
+    </div>
+    <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#5c6bc0"></div><div style="flex:1"><div class="mockup-bar" style="width:80%"></div></div></div></div>
+    <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#5c6bc0"></div><div style="flex:1"><div class="mockup-bar" style="width:60%"></div></div></div></div>`,
+},
+{
+  id:'usuarios', emoji:'👤', title:'Liberação de acesso a usuários', roles:['Admin'],
+  subtitle:'O acesso ao sistema sempre parte de um funcionário já cadastrado — sem duplicar dados de nome, celular ou matrícula.',
+  steps:[
+    'Cadastre a pessoa primeiro em <b>Cadastros → Funcionários</b> (se ainda não estiver lá).',
+    'Vá em <b>Usuários → Novo Usuário</b> e escolha o funcionário no dropdown — só aparecem quem ainda não tem login.',
+    'Nome, celular, setor e matrícula vêm automaticamente do cadastro; o e-mail é preenchido sozinho se já existir. Defina só <b>e-mail final, senha inicial e perfil de acesso</b> (Atendente, Vendedor, Analista, Operador, Financeiro, Gestor, Admin).',
+    'No <b>primeiro login</b>, o próprio usuário é obrigado a trocar a senha inicial — o sistema bloqueia qualquer outra ação até isso ser feito.',
+    'Pra desativar alguém, use o botão <b>Desativar</b> na listagem — o acesso é bloqueado na hora, sem apagar o histórico.',
+  ],
+  tip:'Cada perfil de acesso enxerga só os menus liberados pra ele — um Operador não vê Financeiro, por exemplo.',
+  visual:`<div class="mockup-title">👤 Novo Usuário</div>
+    <div class="mockup-card">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Funcionário</div>
+      <div class="mockup-bar" style="width:90%;margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px">
+        <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">E-mail auto</span>
+        <span class="mockup-chip" style="background:#eef0fb;color:var(--navy)">🔓 Senha</span>
+      </div>
+    </div>
+    <div class="mockup-card"><span class="mockup-btn" style="background:#1a237e">Criar Usuário</span></div>`,
+},
+];
+
+function render(){
+  const tocList = document.getElementById('tocList');
+  const content = document.getElementById('content');
+  tocList.innerHTML = CHAPTERS.map((c,i)=>`<a href="#${c.id}" data-id="${c.id}"><span class="n">${i+1}</span>${c.emoji} ${c.title}</a>`).join('');
+  content.innerHTML = CHAPTERS.map((c,i)=>`
+    <section class="chapter" id="${c.id}">
+      <div class="kicker"><span class="num">${i+1}</span><span class="emoji">${c.emoji}</span><h2>${c.title}</h2></div>
+      <p class="subtitle">${c.subtitle}</p>
+      <div class="roles">${c.roles.map(r=>`<span>${r}</span>`).join('')}</div>
+      <div class="body-grid">
+        <ol class="steps">${c.steps.map(s=>`<li>${s}</li>`).join('')}${c.tip?`<li style="padding-bottom:0"><span class="tip">💡 ${c.tip}</span></li>`:''}</ol>
+        <div class="visual">${c.visual}</div>
+      </div>
+    </section>`).join('');
+}
+render();
+
+const links = [...document.querySelectorAll('#tocList a')];
+const sections = [...document.querySelectorAll('section.chapter')];
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      links.forEach(l=>l.classList.remove('active'));
+      const l = links.find(l=>l.dataset.id===e.target.id);
+      if(l) l.classList.add('active');
+    }
+  });
+},{rootMargin:'-20% 0px -70% 0px'});
+sections.forEach(s=>io.observe(s));
+
+window.addEventListener('scroll',()=>{
+  const h = document.documentElement;
+  const pct = (h.scrollTop)/(h.scrollHeight-h.clientHeight)*100;
+  document.getElementById('progress').style.width = pct+'%';
+});
+
+links.forEach(l=>l.addEventListener('click',(e)=>{
+  document.getElementById('toc').classList.remove('open');
+}));
+</script>
+</body>
+</html>

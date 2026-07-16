@@ -4139,14 +4139,14 @@ async function loadMessages(id) {
         }).join('');
       })()}
     </div>
-    ${c.status !== 'resolved' ? `
+    ${c.status === 'resolved' ? '<div style="padding:8px 12px;text-align:center;color:var(--muted);font-size:12px;border-top:1px solid var(--border)">Conversa marcada como resolvida — responder aqui reabre automaticamente</div>' : ''}
     <div class="chat-input">
       <textarea id="replyText" rows="2" placeholder="Digite sua resposta como analista..." onkeydown="if(event.ctrlKey&&event.key==='Enter')sendReply('${c.id}','${c.phone}')"></textarea>
       <label class="btn btn-outline" style="cursor:pointer;display:flex;align-items:center;justify-content:center" title="Anexar imagem ou documento">
         📎<input type="file" accept="image/*,.pdf,.doc,.docx" style="display:none" onchange="enviarAnexo(this,'${c.id}')">
       </label>
       <button class="btn btn-primary" onclick="sendReply('${c.id}','${c.phone}')">Enviar</button>
-    </div>` : '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">Conversa resolvida</div>'}
+    </div>
   `;
 
   const area = document.getElementById('messagesArea');

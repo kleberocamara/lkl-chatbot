@@ -141,6 +141,7 @@
   .btn-primary:hover { background: var(--primary-light); }
   .btn-success { background: var(--green); color: white; }
   .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .chip-cp { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:white; font-size:13px; cursor:pointer; font-weight:500; }
   .chip-cp.active { background: var(--primary); color: white; border-color: var(--primary); }
   .step-cp.done { color: #16a34a; border-bottom-color: #16a34a !important; }
   .step-cp.active { color: var(--primary); border-bottom-color: var(--primary) !important; }
@@ -559,7 +560,7 @@
   <div class="page" id="page-contas_pagar">
     <div class="page-header"><h1>📤 Contas a Pagar</h1><p>Gestão de pagamentos e lotes C6 Bank</p></div>
     <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="showSubPage('cp-lista')">📋 Lista</button>
+      <button class="btn btn-primary" id="btn-cp-lista" onclick="showSubPage('cp-lista')">📋 Lista</button>
       <button class="btn btn-outline" id="btn-cp-lote" onclick="showSubPage('cp-lote')">💳 Lote C6</button>
       <button class="btn btn-outline" id="btn-cp-historico" onclick="showSubPage('cp-historico')">🕓 Histórico</button>
     </div>
@@ -584,13 +585,13 @@
       </div>
 
       <div id="cp-chips-prazo" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-        <div class="chip-cp active" data-dias="" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Todos</div>
-        <div class="chip-cp" data-status="vencido" onclick="cpFiltrarStatus(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Vencidos</div>
-        <div class="chip-cp" data-dias="0" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Hoje</div>
-        <div class="chip-cp" data-dias="1" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">Amanhã</div>
-        <div class="chip-cp" data-dias="7" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">7 dias</div>
-        <div class="chip-cp" data-dias="15" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">15 dias</div>
-        <div class="chip-cp" data-dias="30" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;font-weight:500">30 dias</div>
+        <div class="chip-cp active" data-dias="" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">Todos</div>
+        <div class="chip-cp" data-status="vencido" onclick="cpFiltrarStatus(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">Vencidos</div>
+        <div class="chip-cp" data-dias="0" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">Hoje</div>
+        <div class="chip-cp" data-dias="1" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">Amanhã</div>
+        <div class="chip-cp" data-dias="7" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">7 dias</div>
+        <div class="chip-cp" data-dias="15" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">15 dias</div>
+        <div class="chip-cp" data-dias="30" onclick="cpFiltrarDias(this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:13px;cursor:pointer;font-weight:500">30 dias</div>
       </div>
 
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
@@ -1168,6 +1169,8 @@ function debounce(fn, ms) {
 function showSubPage(id) {
   ['cp-lista','cp-lote','cp-historico'].forEach(s => {
     document.getElementById(s).style.display = s === id ? '' : 'none';
+    const btn = document.getElementById('btn-' + s);
+    if (btn) { btn.classList.toggle('btn-primary', s === id); btn.classList.toggle('btn-outline', s !== id); }
   });
   if (id === 'cp-lista')     loadContasPagar();
   if (id === 'cp-lote')      cpCarregarLote();
@@ -2515,7 +2518,7 @@ function cpRenderTabela(contas) {
       <td>${cpBadgeStatus(c.status)}</td>
       <td>${cpBadgeOrigem(c.tipo_entrada)}</td>
       <td style="white-space:nowrap">
-        ${['pendente','pendente_classificacao'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="cpAbrirModalEditar(${c.id})">✏️</button>` : ''}
+        ${['pendente','pendente_classificacao','vencido'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="cpAbrirModalEditar(${c.id})">✏️</button>` : ''}
         ${!['pago','cancelado'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="cpPagar(${c.id})">Pagar</button>` : ''}
         ${['pendente','pendente_classificacao','vencido'].includes(c.status) ? `<button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-left:4px;color:#dc2626;border-color:#dc2626" onclick="cpCancelar(${c.id})">✕</button>` : ''}
       </td>
@@ -2615,7 +2618,8 @@ function cpAbrirModalNova() {
 async function cpAbrirModalEditar(id) {
   const pendentes = await api('/api/v2/contas-pagar?status=pendente');
   const pendentesClassificar = await api('/api/v2/contas-pagar?status=pendente_classificacao');
-  const c = [...(Array.isArray(pendentes) ? pendentes : []), ...(Array.isArray(pendentesClassificar) ? pendentesClassificar : [])];
+  const vencidas = await api('/api/v2/contas-pagar?status=vencido');
+  const c = [...(Array.isArray(pendentes) ? pendentes : []), ...(Array.isArray(pendentesClassificar) ? pendentesClassificar : []), ...(Array.isArray(vencidas) ? vencidas : [])];
   const conta = c.find(x => x.id === id);
   if (!conta) { showToast('❌ Conta não encontrada'); return; }
   cpEditandoId = id;
@@ -2803,8 +2807,11 @@ async function cpSalvarConta() {
 }
 
 async function cpCarregarLote() {
-  const contas = await api('/api/v2/contas-pagar?status=pendente');
-  if (!contas || contas.error) return;
+  const [pendentes, vencidas] = await Promise.all([
+    api('/api/v2/contas-pagar?status=pendente'),
+    api('/api/v2/contas-pagar?status=vencido'),
+  ]);
+  const contas = [...(Array.isArray(pendentes) ? pendentes : []), ...(Array.isArray(vencidas) ? vencidas : [])];
   cpLoteItens = contas.filter(c => c.linha_digitavel || c.pix_content);
   cpRenderTabelaLote(cpLoteItens);
   loadHistoricoLotes();

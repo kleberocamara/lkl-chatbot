@@ -176,6 +176,38 @@ describe('sincronizarDDA', () => {
   });
 });
 
+describe('editar', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  test('conta vencida → permite editar (ex: classificar/corrigir uma conta atrasada)', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 38, status: 'vencido', fornecedor_id: null }] }) // buscarPorId
+      .mockResolvedValueOnce({ rows: [{ id: 38, status: 'vencido', tipo_despesa_id: 5 }] });  // UPDATE
+
+    const r = await service.editar(38, { tipo_despesa_id: 5 });
+
+    expect(r.erro).toBeUndefined();
+    expect(db.query.mock.calls[1][0]).toMatch(/UPDATE contas_pagar/);
+  });
+
+  test('conta paga → não permite editar', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 1, status: 'pago' }] }); // buscarPorId
+
+    const r = await service.editar(1, { valor: 100 });
+
+    expect(r.erro).toEqual(['Só é possível editar contas com status pendente ou vencido']);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('conta cancelada → não permite editar', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 1, status: 'cancelado' }] });
+
+    const r = await service.editar(1, { valor: 100 });
+
+    expect(r.erro).toEqual(['Só é possível editar contas com status pendente ou vencido']);
+  });
+});
+
 describe('criar', () => {
   afterEach(() => jest.clearAllMocks());
 

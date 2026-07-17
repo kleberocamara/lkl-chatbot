@@ -87,8 +87,8 @@ async function criar({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, va
 async function editar(id, campos) {
   const conta = await buscarPorId(id);
   if (!conta) return { erro: ['Conta não encontrada'] };
-  if (!['pendente', 'pendente_classificacao'].includes(conta.status)) {
-    return { erro: ['Só é possível editar contas com status pendente'] };
+  if (!['pendente', 'pendente_classificacao', 'vencido'].includes(conta.status)) {
+    return { erro: ['Só é possível editar contas com status pendente ou vencido'] };
   }
 
   const permitidos = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo',

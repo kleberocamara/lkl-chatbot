@@ -411,7 +411,7 @@
         <td>${badgeStatus(c.status)}</td>
         <td>${badgeOrigem(c.tipo_entrada)}</td>
         <td style="white-space:nowrap">
-          ${['pendente','pendente_classificacao'].includes(c.status) ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="abrirModalEditar(${c.id})">✏️</button>` : ''}
+          ${['pendente','pendente_classificacao','vencido'].includes(c.status) ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="abrirModalEditar(${c.id})">✏️</button>` : ''}
           ${c.status !== 'pago' && c.status !== 'cancelado' ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="pagarManual(${c.id})">Pagar</button>` : ''}
           ${c.status === 'pendente' || c.status === 'vencido' ? `<button class="btn btn-red" style="padding:4px 10px;font-size:11px;margin-left:4px" onclick="cancelarConta(${c.id})">✕</button>` : ''}
         </td>
@@ -503,7 +503,8 @@
   async function abrirModalEditar(id) {
     const pendentes = await api('GET', `/contas-pagar?status=pendente`);
     const pendentesClassificar = await api('GET', `/contas-pagar?status=pendente_classificacao`);
-    const c = [...(pendentes || []), ...(pendentesClassificar || [])];
+    const vencidas = await api('GET', `/contas-pagar?status=vencido`);
+    const c = [...(pendentes || []), ...(pendentesClassificar || []), ...(vencidas || [])];
     const conta = c.find(x => x.id === id);
     if (!conta) { showToast('❌ Conta não encontrada'); return; }
     editandoId = id;
@@ -572,8 +573,11 @@
   }
 
   async function carregarLote() {
-    const contas = await api('GET', '/contas-pagar?status=pendente');
-    if (!contas) return;
+    const [pendentes, vencidas] = await Promise.all([
+      api('GET', '/contas-pagar?status=pendente'),
+      api('GET', '/contas-pagar?status=vencido'),
+    ]);
+    const contas = [...(pendentes || []), ...(vencidas || [])];
     loteItens = contas.filter(c => c.linha_digitavel || c.pix_content);
     renderTabelaLote(loteItens);
     carregarHistoricoLotes();

@@ -172,6 +172,7 @@ router.post('/conversations/:id/reply', requireAuthApi, async (req, res) => {
   );
   await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
   await db.query(`UPDATE conversations SET status='active', updated_at=NOW() WHERE id = $1 AND status='resolved'`, [convId]);
+  await db.query(`UPDATE conversations SET updated_at=NOW() WHERE id = $1`, [convId]);
   await log('human_reply', `${req.user.name} respondeu em ${convId}`, {
     conversationId: convId, userId: req.user.id,
     metadata: { message: message.substring(0, 100) },
@@ -224,6 +225,7 @@ router.post('/conversations/:id/reply-media', requireAuthApi, uploadResposta.sin
     );
     await db.query('UPDATE conversations SET alerta_humano_em = NULL WHERE id = $1 AND alerta_humano_em IS NOT NULL', [convId]);
     await db.query(`UPDATE conversations SET status='active', updated_at=NOW() WHERE id = $1 AND status='resolved'`, [convId]);
+    await db.query(`UPDATE conversations SET updated_at=NOW() WHERE id = $1`, [convId]);
     await log('human_reply', `${req.user.name} enviou um ${tipo} em ${convId}`, {
       conversationId: convId, userId: req.user.id,
       metadata: { tipo, filename: req.file.originalname },
@@ -376,6 +378,7 @@ router.post('/conversations/send-message', requireAuthApi, async (req, res) => {
          VALUES ($1, $2, $3, 'outbound', 'human')`,
         [conversation_id, conv.rows[0].contact_id, message]
       );
+      await db.query(`UPDATE conversations SET updated_at=NOW() WHERE id = $1`, [conversation_id]);
     }
   }
   res.json({ ok: true });

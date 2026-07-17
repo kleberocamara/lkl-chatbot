@@ -70,6 +70,7 @@ async function registrarMensagemCliente(celular, conteudo, opts = {}) {
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [conversa.id, contato.id, conteudo, 'outbound', waId, sentBy]
   );
+  await db.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [conversa.id]);
 
   if (global.io) {
     global.io.emit('new_message', {

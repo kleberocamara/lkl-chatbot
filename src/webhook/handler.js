@@ -77,6 +77,7 @@ async function saveMessage(conversationId, contactId, content, direction, waMess
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [conversationId, contactId, content, direction, waMessageId, sentBy]
   );
+  await db.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [conversationId]);
   await db.query(
     'UPDATE contacts SET total_conversations = total_conversations + 1, last_contact = NOW() WHERE id = $1',
     [contactId]

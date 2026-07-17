@@ -255,6 +255,11 @@
         </select>
       </div>
     </div>
+    <div class="form-group">
+      <label>Data de entrega (competência)</label>
+      <input type="date" id="f-competencia">
+      <small style="color:#888">Preencha quando a conta chegou sem NF (ex: boleto do DDA) — usa a data real de entrega/recebimento pra definir o período da despesa no DRE, em vez da data de importação. Deixe em branco se já tem NF vinculada.</small>
+    </div>
     <div class="form-group" id="grupo-linha-digitavel">
       <label>Linha Digitável</label>
       <input type="text" id="f-linha-digitavel" placeholder="44 dígitos do boleto">
@@ -486,6 +491,7 @@
     document.getElementById('f-tipo-despesa').value = '';
     document.getElementById('f-valor').value = '';
     document.getElementById('f-vencimento').value = '';
+    document.getElementById('f-competencia').value = '';
     document.getElementById('f-tipo').value = 'boleto';
     document.getElementById('f-recorrente').checked = false;
     document.getElementById('grupo-recorrente').style.display = 'none';
@@ -509,6 +515,7 @@
     document.getElementById('f-tipo-despesa').value = conta.tipo_despesa_id || '';
     document.getElementById('f-valor').value = conta.valor || '';
     document.getElementById('f-vencimento').value = String(conta.vencimento).substring(0, 10);
+    document.getElementById('f-competencia').value = conta.competencia ? String(conta.competencia).substring(0, 10) : '';
     document.getElementById('f-tipo').value = conta.tipo || 'boleto';
     document.getElementById('f-linha-digitavel').value = conta.linha_digitavel || '';
     document.getElementById('f-pix-content').value = conta.pix_content || '';
@@ -544,6 +551,8 @@
       pix_content: document.getElementById('f-pix-content').value.trim() || null,
       observacao: document.getElementById('f-observacao').value.trim() || null,
     };
+    const competencia = document.getElementById('f-competencia').value;
+    if (competencia) body.competencia = competencia;
     if (editandoId) {
       const r = await api('PATCH', `/contas-pagar/${editandoId}`, body);
       if (r) { showToast('✅ Conta atualizada'); fecharModal(); carregarContas(); }

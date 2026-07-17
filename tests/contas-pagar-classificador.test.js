@@ -5,8 +5,8 @@ const { classificarPorPalavraChave, classificarDespesa } = require('../src/modul
 
 describe('classificarPorPalavraChave', () => {
   test('papel/substrato → 01', () => { expect(classificarPorPalavraChave('Compra de Papel Couché 90g')).toBe('01'); });
-  test('posto de combustível → 29', () => { expect(classificarPorPalavraChave('Posto Ipiranga - combustível')).toBe('29'); });
-  test('Enel → 17 (luz)', () => { expect(classificarPorPalavraChave('ENEL DISTRIBUICAO')).toBe('17'); });
+  test('posto de combustível → 31', () => { expect(classificarPorPalavraChave('Posto Ipiranga - combustível')).toBe('31'); });
+  test('Enel → 19 (luz)', () => { expect(classificarPorPalavraChave('ENEL DISTRIBUICAO')).toBe('19'); });
   test('sem termo conhecido → null', () => { expect(classificarPorPalavraChave('xyz aleatorio')).toBeNull(); });
 });
 

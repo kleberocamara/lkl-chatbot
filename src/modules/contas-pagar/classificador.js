@@ -3,16 +3,18 @@ const db = require('../../db');
 // Fallback por palavra-chave — só usado quando o fornecedor é novo/sem memória.
 // Tipos sem termo léxico natural (Pró-Labore, Depreciação etc.) ficam de fora —
 // só a memória de fornecedor ou a classificação manual resolvem esses.
+// Códigos alinhados à planilha "TIPOS DE DESPESAS.xlsx" (migration 055 — CHAPAS OFFSET
+// e INSUMOS COMUNICAÇAO VISUAL entraram nas posições 3/4, empurrando os códigos seguintes em +2).
 const KEYWORDS = {
   '01': ['PAPEL', 'SUBSTRATO', 'COUCHE', 'COUCHÊ', 'OFFSET'],
   '02': ['TINTA', 'QUIMICO', 'QUÍMICO', 'TONER'],
-  '13': ['MANUTENCAO', 'MANUTENÇÃO', 'CONSERTO', 'PECA', 'PEÇA', 'MAQUINA', 'MÁQUINA'],
-  '16': ['SABESP', 'COPASA', 'AGUA', 'ÁGUA'],
-  '17': ['ENEL', 'CEMIG', 'LUZ', 'ENERGIA'],
-  '18': ['VIVO', 'CLARO', 'TIM', 'INTERNET', 'TELEFONIA'],
-  '27': ['HOSPEDAGEM', 'DOMINIO', 'DOMÍNIO', 'SAAS', 'ASSINATURA', 'SOFTWARE'],
-  '29': ['POSTO', 'COMBUSTIVEL', 'COMBUSTÍVEL', 'GASOLINA', 'ETANOL'],
-  '30': ['PEDAGIO', 'PEDÁGIO', 'SEM PARAR', 'CONECTCAR'],
+  '15': ['MANUTENCAO', 'MANUTENÇÃO', 'CONSERTO', 'PECA', 'PEÇA', 'MAQUINA', 'MÁQUINA'],
+  '18': ['SABESP', 'COPASA', 'AGUA', 'ÁGUA'],
+  '19': ['ENEL', 'CEMIG', 'LUZ', 'ENERGIA'],
+  '20': ['VIVO', 'CLARO', 'TIM', 'INTERNET', 'TELEFONIA'],
+  '29': ['HOSPEDAGEM', 'DOMINIO', 'DOMÍNIO', 'SAAS', 'ASSINATURA', 'SOFTWARE'],
+  '31': ['POSTO', 'COMBUSTIVEL', 'COMBUSTÍVEL', 'GASOLINA', 'ETANOL'],
+  '32': ['PEDAGIO', 'PEDÁGIO', 'SEM PARAR', 'CONECTCAR'],
 };
 
 function _normTexto(s) {

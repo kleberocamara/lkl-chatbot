@@ -161,6 +161,19 @@ describe('sincronizarDDA', () => {
     const r = await service.sincronizarDDA();
     expect(r).toEqual({ total: 1, importados: 0, ignorados: 1 });
   });
+
+  test('fornecedor bloqueado (fraude) → ignora e não cria conta a pagar', async () => {
+    c6bank.consultarDDA.mockResolvedValueOnce([
+      { content: 'LD-FRAUDE', beneficiary_name: 'Itev - Informacoes Tributarias Para Empr', amount: 719.80, due_date: '2026-08-01' },
+    ]);
+    db.query.mockResolvedValueOnce({ rows: [] }); // linha_digitavel ainda não importada
+    fornecedorMatcher.encontrarOuCriarFornecedor.mockResolvedValueOnce({ id: 'uuid-fraude', nome: 'Itev', status: 'bloqueado' });
+
+    const r = await service.sincronizarDDA();
+
+    expect(r).toEqual({ total: 1, importados: 0, ignorados: 1 });
+    expect(db.pool.connect).not.toHaveBeenCalled();
+  });
 });
 
 describe('criar', () => {

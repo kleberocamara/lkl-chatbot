@@ -289,6 +289,7 @@ async function sincronizarDDA() {
       if (jaImportado.rows.length) { ignorados++; continue; }
 
       const fornecedor = await fornecedorMatcher.encontrarOuCriarFornecedor({ nome: b.beneficiary_name });
+      if (fornecedor?.status === 'bloqueado') { ignorados++; continue; }
       await criarOuReconciliarContaPagar({
         fornecedorId: fornecedor?.id || null,
         fornecedorNome: fornecedor?.nome || b.beneficiary_name || 'Boleto DDA',

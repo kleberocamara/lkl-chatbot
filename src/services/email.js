@@ -158,6 +158,7 @@ async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, numer
   const info = await transporter.sendMail({
     from: `"Gráfica LKL" <${process.env.SMTP_USER}>`,
     to: clienteEmail,
+    bcc: process.env.SMTP_USER,
     subject: `Pedido Gráfica LKL #${numeroPedido || numero} — aguardando sua aprovação`,
     html,
     attachments,

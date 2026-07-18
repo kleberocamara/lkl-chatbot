@@ -352,18 +352,22 @@ async function _dispararNotificacoesEnvio(orc) {
 
   // E-mail
   if (orc.cliente_email) {
-    await enviarOrcamentoCliente({
-      clienteNome:   orc.cliente_nome,
-      clienteEmail:  orc.cliente_email,
-      numero:        orc.numero,
-      numeroPedido:  orc.pedido_numero,
-      total:         orc.total,
-      validade_dias: orc.validade_dias,
-      prazo_entrega: orc.prazo_entrega,
-      itens:         orc.itens,
-      token:         orc.token_aprovacao,
-      pdfBuffer,
-    });
+    try {
+      await enviarOrcamentoCliente({
+        clienteNome:   orc.cliente_nome,
+        clienteEmail:  orc.cliente_email,
+        numero:        orc.numero,
+        numeroPedido:  orc.pedido_numero,
+        total:         orc.total,
+        validade_dias: orc.validade_dias,
+        prazo_entrega: orc.prazo_entrega,
+        itens:         orc.itens,
+        token:         orc.token_aprovacao,
+        pdfBuffer,
+      });
+    } catch (e) {
+      console.warn(`[ORC] Falha ao enviar e-mail do orçamento #${orc.numero} para ${orc.cliente_email}:`, e.message);
+    }
   }
 }
 

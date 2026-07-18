@@ -155,13 +155,14 @@ async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, numer
     ? [{ filename: `orcamento-${numero}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
     : [];
 
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: `"Gráfica LKL" <${process.env.SMTP_USER}>`,
     to: clienteEmail,
     subject: `Pedido Gráfica LKL #${numeroPedido || numero} — aguardando sua aprovação`,
     html,
     attachments,
   });
+  console.log(`[EMAIL] Orçamento #${numero} enviado para ${clienteEmail} (messageId: ${info.messageId})`);
 }
 
 module.exports = { notifyAnalyst, enviarOrcamentoCliente };

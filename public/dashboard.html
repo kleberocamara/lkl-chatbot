@@ -3112,8 +3112,9 @@ function _formFornecedor(f={}) {
       <div><label style="${LBL}">Categoria</label>${inp('f-categoria',f.categoria)}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-      <div><label style="${LBL}">Status</label>${sel('f-status',f.status||'ativo',['ativo','inativo'])}</div>
-    </div>`;
+      <div><label style="${LBL}">Status</label>${sel('f-status',f.status||'ativo',['ativo','inativo','bloqueado'])}</div>
+    </div>
+    ${f.status==='bloqueado' ? '<p style="color:#c62828;font-size:12px;margin-top:8px">⚠️ Fornecedor bloqueado — boletos desse fornecedor são ignorados automaticamente na sincronização com o DDA.</p>' : ''}`;
 }
 function _salvarFornecedor() {
   const cnpj = v('f-cnpj').replace(/\D/g,'');

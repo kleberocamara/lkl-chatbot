@@ -24,7 +24,9 @@ async function handleMercadoPagoWebhook(req, res) {
       const expected = crypto.createHmac('sha256', secret).update(signedTemplate).digest('hex');
       const received = _extractV1(xSignature);
       if (received && received !== expected) {
-        console.warn('[MP-WEBHOOK] Assinatura inválida — ignorando');
+        console.warn('[MP-WEBHOOK] Assinatura inválida — ignorando', {
+          xSignature, xRequestId, dataId, query: req.query, template: signedTemplate, expected, received,
+        });
         return;
       }
     }

@@ -77,9 +77,19 @@ async function scheduleFollowUps(conversationId, sentAt) {
   const values = [];
   const params = [];
   let paramIndex = 1;
+  let anterior = null;
 
   for (let attempt = 1; attempt <= 5; attempt++) {
-    const scheduledAt = calcScheduledAt(sentAtUtc, attempt);
+    let scheduledAt = calcScheduledAt(sentAtUtc, attempt);
+    // O ajuste de fim de semana de cada tentativa é calculado de forma independente a
+    // partir do envio original — isso pode fazer duas tentativas diferentes convergirem
+    // pro mesmo dia útil (ex: tentativa 2 cai no sábado e é empurrada pra segunda 10h,
+    // colidindo com a tentativa 3 que já cairia numa segunda-feira 10h por conta própria).
+    // Garante que cada tentativa fique estritamente depois da anterior.
+    while (anterior && scheduledAt.getTime() <= anterior.getTime()) {
+      scheduledAt = nextBizDayAt10(anterior);
+    }
+    anterior = scheduledAt;
     values.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
     params.push(conversationId, attempt, scheduledAt.toISOString());
   }

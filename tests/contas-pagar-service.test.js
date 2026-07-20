@@ -208,6 +208,71 @@ describe('editar', () => {
   });
 });
 
+describe('criarRecorrente', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  // Regressão: cada parcela recorrente (ex: 12 meses de aluguel) tinha a coluna
+  // competencia deixada de fora do INSERT, então o banco usava o DEFAULT (data de
+  // criação) para as 12 — inflando a DRE do mês em que a recorrência foi cadastrada
+  // com um ano inteiro de despesa de uma vez. Cada parcela deve reconhecer a
+  // despesa no próprio mês de vencimento, não no dia em que foi cadastrada.
+  test('cada parcela grava competencia igual ao próprio mês de vencimento, não a data de criação', async () => {
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        expect(sql).toContain('competencia');
+        const vencimento = params[5];
+        const competencia = params[12];
+        expect(competencia).toBe(vencimento);
+        return Promise.resolve({ rows: [{ id: 1 }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarRecorrente({
+      descricao: 'ALUGUEL GALPAO', fornecedor_id: 'uuid-1', tipo_despesa_id: 15,
+      valor: 12699.84, recorrencia_dia: 15,
+    });
+
+    expect(r.criadas).toHaveLength(12);
+    // as 12 parcelas não podem ter todas a mesma competencia (meses diferentes)
+    const competencias = client.query.mock.calls
+      .filter(c => c[0].startsWith('INSERT INTO contas_pagar'))
+      .map(c => c[1][12]);
+    expect(new Set(competencias).size).toBe(12);
+  });
+});
+
+describe('gerarRecorrentesProximoMes', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  test('parcela gerada pro próximo mês grava competencia igual ao vencimento (mesmo mês)', async () => {
+    db.query.mockImplementation((sql, params) => {
+      if (sql.startsWith('SELECT DISTINCT ON')) {
+        return Promise.resolve({ rows: [{
+          descricao: 'ALUGUEL GALPAO', fornecedor: null, fornecedor_id: 'uuid-1', tipo_despesa_id: 15,
+          valor: 12699.84, tipo: 'outro', linha_digitavel: null, pix_content: null,
+          recorrencia_dia: 15, recorrencia_valor_fixo: true, observacao: null,
+        }] });
+      }
+      if (sql.startsWith('SELECT 1 FROM contas_pagar')) return Promise.resolve({ rowCount: 0 });
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        expect(sql).toContain('competencia');
+        const vencimento = params[5];
+        const competencia = params[12];
+        expect(competencia).toBe(vencimento);
+        return Promise.resolve({ rows: [] });
+      }
+      throw new Error('query inesperada: ' + sql);
+    });
+
+    const r = await service.gerarRecorrentesProximoMes();
+    expect(r.geradas).toBe(1);
+  });
+});
+
 describe('criar', () => {
   afterEach(() => jest.clearAllMocks());
 

@@ -153,12 +153,12 @@ async function criarRecorrente({ descricao, fornecedor, fornecedor_id, tipo_desp
       const r = await client.query(
         `INSERT INTO contas_pagar
            (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo, linha_digitavel, pix_content,
-            tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12) RETURNING *`,
+            tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao, competencia)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12,$13) RETURNING *`,
         [descricao, fornecedor || null, fornecedor_id || null, tipo_despesa_id, valorInst,
          format(data, 'yyyy-MM-dd'), tipo || 'outro',
          linha_digitavel || null, pix_content || null,
-         recorrencia_dia, recorrencia_valor_fixo !== false, observacao || null]
+         recorrencia_dia, recorrencia_valor_fixo !== false, observacao || null, format(data, 'yyyy-MM-dd')]
       );
       criadas.push(r.rows[0]);
     }
@@ -504,12 +504,12 @@ async function gerarRecorrentesProximoMes() {
     if (existe.rowCount) continue;
     await query(
       `INSERT INTO contas_pagar (descricao, fornecedor, fornecedor_id, tipo_despesa_id, valor, vencimento, tipo,
-        linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12)`,
+        linha_digitavel, pix_content, tipo_entrada, recorrente, recorrencia_dia, recorrencia_valor_fixo, observacao, competencia)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',true,$10,$11,$12,$13)`,
       [c.descricao, c.fornecedor, c.fornecedor_id, c.tipo_despesa_id,
        c.recorrencia_valor_fixo ? c.valor : 0,
        format(venc, 'yyyy-MM-dd'), c.tipo,
-       c.linha_digitavel, c.pix_content, c.recorrencia_dia, c.recorrencia_valor_fixo, c.observacao]
+       c.linha_digitavel, c.pix_content, c.recorrencia_dia, c.recorrencia_valor_fixo, c.observacao, format(venc, 'yyyy-MM-dd')]
     );
     geradas++;
   }

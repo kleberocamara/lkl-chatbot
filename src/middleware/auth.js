@@ -56,7 +56,10 @@ function requireRole(...roles) {
 }
 
 function requireAuthFornecedor(req, res, next) {
-  const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+  // Nunca usa req.cookies?.token: esse cookie é do login de FUNCIONÁRIO (src/dashboard/api.js)
+  // e é enviado automaticamente em toda requisição same-origin. Se um funcionário estiver logado
+  // no painel no mesmo navegador, o cookie dele sobrescreveria o Bearer token do fornecedor.
+  const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Não autenticado' });
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);

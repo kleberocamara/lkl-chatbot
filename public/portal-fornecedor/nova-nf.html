@@ -127,38 +127,62 @@
     let arquivoNfPath = null;
 
     function token() { return localStorage.getItem('lkl_fornecedor_token'); }
-    function sair() { localStorage.removeItem('lkl_fornecedor_token'); window.location.href = '/portal-fornecedor/login.html'; }
+    function sair(msg) {
+      localStorage.removeItem('lkl_fornecedor_token');
+      if (msg) { toast(msg); setTimeout(() => { window.location.href = '/portal-fornecedor/login.html'; }, 1800); }
+      else { window.location.href = '/portal-fornecedor/login.html'; }
+    }
     function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3500); }
 
     async function api(path, opts = {}) {
-      const r = await fetch('/api/v2/portal-fornecedor' + path, {
-        ...opts,
-        headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + token() },
-      });
-      if (r.status === 401) { sair(); return null; }
+      let r;
+      try {
+        r = await fetch('/api/v2/portal-fornecedor' + path, {
+          ...opts,
+          headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + token() },
+        });
+      } catch (err) {
+        toast('❌ Falha de conexão — verifique a internet e tente de novo');
+        return null;
+      }
+      if (r.status === 401) { sair('Sessão expirada — faça login novamente'); return null; }
       return r;
+    }
+
+    async function apiJson(path, opts = {}) {
+      const r = await api(path, opts);
+      if (!r) return { r: null, data: null };
+      let data;
+      try { data = await r.json(); } catch { data = { error: 'Resposta inesperada do servidor' }; }
+      return { r, data };
     }
 
     function renderItens() {
       document.getElementById('itens').innerHTML = itens.map((it, i) => `
         <div class="item-row">
           <input value="${it.produto || ''}" placeholder="Nome do produto" oninput="itens[${i}].produto=this.value">
-          <input type="number" value="${it.quantidade || ''}" oninput="itens[${i}].quantidade=parseFloat(this.value)||0;recalcularItem(${i})">
-          <input type="number" step="0.01" value="${it.valor_unitario || ''}" oninput="itens[${i}].valor_unitario=parseFloat(this.value)||0;recalcularItem(${i})">
-          <input type="number" step="0.01" value="${it.valor_total || ''}" readonly>
+          <input type="number" id="qtd-${i}" value="${it.quantidade || ''}" oninput="atualizarQtd(${i},this.value)">
+          <input type="number" step="0.01" id="vu-${i}" value="${it.valor_unitario || ''}" oninput="atualizarValorUnit(${i},this.value)">
+          <input type="number" step="0.01" id="tot-${i}" value="${it.valor_total || ''}" readonly>
           <button class="btn-sec" onclick="itens.splice(${i},1);renderItens()">✕</button>
         </div>`).join('');
     }
-    function recalcularItem(i) { itens[i].valor_total = Math.round((itens[i].quantidade || 0) * (itens[i].valor_unitario || 0) * 100) / 100; renderItens(); }
+    function recalcularItem(i) {
+      itens[i].valor_total = Math.round((itens[i].quantidade || 0) * (itens[i].valor_unitario || 0) * 100) / 100;
+      const totEl = document.getElementById('tot-' + i);
+      if (totEl) totEl.value = itens[i].valor_total || '';
+    }
+    function atualizarQtd(i, valor) { itens[i].quantidade = parseFloat(valor) || 0; recalcularItem(i); }
+    function atualizarValorUnit(i, valor) { itens[i].valor_unitario = parseFloat(valor) || 0; recalcularItem(i); }
     function adicionarItem() { itens.push({ produto: '', quantidade: 0, valor_unitario: 0, valor_total: 0 }); renderItens(); }
 
     async function anexarNF(input) {
       if (!input.files[0]) return;
       const fd = new FormData(); fd.append('arquivo', input.files[0]);
-      document.getElementById('status-nf').textContent = 'Lendo dados da NF...';
-      const r = await api('/nf/extrair', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (!r.ok) { document.getElementById('status-nf').textContent = data.error; return; }
+      document.getElementById('status-nf').textContent = 'Lendo dados da NF... (pode levar até 1 minuto)';
+      const { r, data } = await apiJson('/nf/extrair', { method: 'POST', body: fd });
+      if (!r) { document.getElementById('status-nf').textContent = ''; return; }
+      if (!r.ok) { document.getElementById('status-nf').textContent = '❌ ' + (data.error || 'Falha ao ler a NF — preencha manualmente'); return; }
       arquivoNfPath = data.arquivo_nf_path;
       document.getElementById('nnf').value = data.nnf || '';
       document.getElementById('emitida_em').value = data.emitida_em || '';
@@ -170,9 +194,10 @@
     async function anexarBoleto(input) {
       if (!input.files[0]) return;
       const fd = new FormData(); fd.append('arquivo', input.files[0]);
-      const r = await api('/boleto/extrair', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (!r.ok) { toast(data.error); return; }
+      toast('Lendo boleto...');
+      const { r, data } = await apiJson('/boleto/extrair', { method: 'POST', body: fd });
+      if (!r) return;
+      if (!r.ok) { toast('❌ ' + (data.error || 'Falha ao ler o boleto — preencha manualmente')); return; }
       boletos.push({ arquivo_path: data.arquivo_path, linha_digitavel: data.linha_digitavel, valor: data.valor, vencimento: data.vencimento });
       renderBoletos();
       input.value = '';
@@ -213,9 +238,9 @@
       }
       if (pagamentoAtivo === 'link_mp') body.link_mp_url = document.getElementById('link_mp_url').value;
 
-      const r = await api('/submissoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await r.json();
-      if (!r.ok) { toast(data.error || 'Erro ao enviar'); return; }
+      const { r, data } = await apiJson('/submissoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r) return;
+      if (!r.ok) { toast('❌ ' + (data.error || 'Erro ao enviar')); return; }
       toast('✅ NF enviada pra Gráfica LKL!');
       setTimeout(() => window.location.reload(), 1500);
     }

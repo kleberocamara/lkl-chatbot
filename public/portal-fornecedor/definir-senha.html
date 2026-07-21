@@ -1,0 +1,48 @@
+<!-- public/portal-fornecedor/definir-senha.html -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Definir senha — Portal do Fornecedor</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #f5f5f7; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #1a237e; }
+  p.sub { color: #888; font-size: 13px; margin: 0 0 24px; }
+  input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; font-size: 14px; box-sizing: border-box; }
+  button { width: 100%; padding: 12px; background: #1a237e; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .msg { font-size: 13px; margin-top: 8px; display: none; }
+  .erro { color: #c62828; } .sucesso { color: #2e7d32; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🏭 Gráfica LKL</h1>
+    <p class="sub">Defina sua senha de acesso ao portal</p>
+    <input type="password" id="senha" placeholder="Nova senha (mín. 8 caracteres)">
+    <input type="password" id="senha2" placeholder="Confirme a senha">
+    <button onclick="definir()">Definir senha</button>
+    <p class="msg" id="msg"></p>
+  </div>
+  <script>
+    async function definir() {
+      const token = new URLSearchParams(window.location.search).get('token');
+      const senha = document.getElementById('senha').value;
+      const senha2 = document.getElementById('senha2').value;
+      const msgEl = document.getElementById('msg');
+      msgEl.style.display = 'none'; msgEl.className = 'msg';
+      if (senha.length < 8) { msgEl.textContent = 'A senha precisa ter pelo menos 8 caracteres'; msgEl.classList.add('erro'); msgEl.style.display = 'block'; return; }
+      if (senha !== senha2) { msgEl.textContent = 'As senhas não coincidem'; msgEl.classList.add('erro'); msgEl.style.display = 'block'; return; }
+      const r = await fetch('/api/v2/portal-fornecedor/definir-senha', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, senha }),
+      });
+      const data = await r.json();
+      if (!r.ok) { msgEl.textContent = data.error || 'Erro ao definir senha'; msgEl.classList.add('erro'); msgEl.style.display = 'block'; return; }
+      msgEl.textContent = 'Senha definida! Redirecionando pro login...'; msgEl.classList.add('sucesso'); msgEl.style.display = 'block';
+      setTimeout(() => { window.location.href = '/portal-fornecedor/login.html'; }, 1500);
+    }
+  </script>
+</body>
+</html>

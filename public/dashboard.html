@@ -556,6 +556,18 @@
     </div>
   </div>
 
+  <!-- SUBMISSÕES DE FORNECEDORES -->
+  <div class="page" id="page-fornecedor_submissoes">
+    <div class="page-header"><h1>📥 Submissões de Fornecedores</h1><p>Notas fiscais declaradas pelos fornecedores no portal</p></div>
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap" id="fs-filtros">
+      <button class="btn btn-primary" id="fs-filtro-todas" onclick="filtrarSubmissoes(null, this)">Todas</button>
+      <button class="btn btn-outline" onclick="filtrarSubmissoes('pendente', this)">Pendentes</button>
+      <button class="btn btn-outline" onclick="filtrarSubmissoes('alerta_dado_bancario', this)">Com alerta</button>
+      <button class="btn btn-outline" onclick="filtrarSubmissoes('aceita', this)">Aceitas</button>
+    </div>
+    <div id="fs-lista" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
   <!-- CONTAS A PAGAR -->
   <div class="page" id="page-contas_pagar">
     <div class="page-header"><h1>📤 Contas a Pagar</h1><p>Gestão de pagamentos e lotes C6 Bank</p></div>
@@ -1030,6 +1042,7 @@ function buildSidebar(role) {
       { id: 'contas_pagar', label: 'Contas a Pagar',        icon: '📤', roles: ['admin','gestor','financeiro','atendente'] },
       { id: 'cobrancas',   label: 'Cobranças / Boletos / PIX', icon: '💳', roles: ['admin','gestor','financeiro'] },
       { id: 'analises',    label: 'Análises Gerenciais',    icon: '📈', roles: ['admin','gestor','financeiro'] },
+      { id: 'fornecedor_submissoes', label: 'Submissões de Fornecedores', icon: '📥', roles: ['admin','gestor','financeiro','atendente'] },
     ]},
     { section: 'Fiscal', roles: ['admin','gestor','financeiro'], children: [
       { id: 'nfe', label: 'NF-e', icon: '📄', roles: ['admin','gestor','financeiro'] },
@@ -1221,6 +1234,7 @@ function showPage(page, el) {
     revenda_compras: loadComprasRevenda,
     os:           loadOsMain,
     contas_pagar: () => { showSubPage('cp-lista'); },
+    fornecedor_submissoes: () => loadFornecedorSubmissoes(),
     clientes:     () => loadClientesMain(1),
     fornecedores: () => loadFornecedoresMain(1),
     materiais:    () => loadMateriaisMain(1),
@@ -3114,6 +3128,7 @@ function _formFornecedor(f={}) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
       <div><label style="${LBL}">Status</label>${sel('f-status',f.status||'ativo',['ativo','inativo','bloqueado'])}</div>
     </div>
+    ${f.id ? `<div style="margin-top:12px"><button class="btn btn-outline" onclick="liberarPortalFornecedor('${f.id}')">🔓 Liberar acesso ao Portal do Fornecedor</button></div>` : ''}
     ${f.status==='bloqueado' ? '<p style="color:#c62828;font-size:12px;margin-top:8px">⚠️ Fornecedor bloqueado — boletos desse fornecedor são ignorados automaticamente na sincronização com o DDA.</p>' : ''}`;
 }
 function _salvarFornecedor() {
@@ -3153,6 +3168,17 @@ function editarFornecedor(f) {
     showToast('Fornecedor atualizado'); fecharModalCadastro(); loadFornecedoresMain(_fornPag);
   };
   document.getElementById('modal-cadastro').style.display = 'block';
+}
+async function liberarPortalFornecedor(fornecedorId) {
+  const email = prompt('E-mail do fornecedor pra enviar o convite:');
+  if (!email) return;
+  const r = await api(`/api/v2/fornecedores/${fornecedorId}/portal/liberar`, { method: 'POST', body: JSON.stringify({ email }) });
+  if (r?.conviteUrl) {
+    showToast('✅ Convite gerado! Envie este link ao fornecedor:');
+    prompt('Link de convite (copie e envie ao fornecedor):', r.conviteUrl);
+  } else {
+    showToast('❌ ' + (r?.error || 'Erro ao liberar portal'));
+  }
 }
 
 // ── MATERIAIS ──────────────────────────────────────────────────────────────────
@@ -5785,6 +5811,55 @@ function closeModal() {
   document.getElementById('generic-modal').style.display = 'none';
 }
 
+// ── SUBMISSÕES DE FORNECEDORES ──────────────────────────────────────────────────
+
+let fsFiltroAtivo = null;
+
+async function loadFornecedorSubmissoes() {
+  const params = fsFiltroAtivo ? '?status=' + fsFiltroAtivo : '';
+  const lista = await api('/api/v2/fornecedor-submissoes' + params);
+  if (!lista) return;
+  const badgeCor = { pendente: '#f1f5f9|#64748b', alerta_dado_bancario: '#fee2e2|#dc2626', aguardando_entrega: '#fef3c7|#b45309', aceita: '#dbeafe|#1d4ed8', rejeitada: '#f1f5f9|#64748b' };
+  const badgeLabel = { pendente: 'Pendente', alerta_dado_bancario: '⚠ Dado bancário mudou', aguardando_entrega: '🕓 Aguardando entrega', aceita: '📦 Aceita', rejeitada: 'Rejeitada' };
+  document.getElementById('fs-lista').innerHTML = lista.length ? lista.map(s => {
+    const [bg, col] = (badgeCor[s.status] || badgeCor.pendente).split('|');
+    return `
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700;font-size:14px">${s.fornecedor_nome} — NF ${s.nnf || 's/nº'} — R$ ${parseFloat(s.valor_total).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px">Entrega agendada: ${s.data_entrega_agendada ? new Date(s.data_entrega_agendada).toLocaleDateString('pt-BR') : '—'}</div>
+        <div style="margin-top:6px"><span style="background:${bg};color:${col};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${badgeLabel[s.status] || s.status}</span></div>
+      </div>
+      <button class="btn btn-outline" onclick="verDetalheSubmissao('${s.id}')">Ver detalhes</button>
+    </div>`;
+  }).join('') : '<p style="text-align:center;color:#888;padding:40px">Nenhuma submissão encontrada</p>';
+}
+
+function filtrarSubmissoes(status, el) {
+  fsFiltroAtivo = status;
+  document.querySelectorAll('#fs-filtros button').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline'); });
+  el.classList.remove('btn-outline'); el.classList.add('btn-primary');
+  loadFornecedorSubmissoes();
+}
+
+async function verDetalheSubmissao(id) {
+  const s = await api('/api/v2/fornecedor-submissoes/' + id);
+  if (!s) return;
+  if (s.status === 'alerta_dado_bancario') {
+    if (!confirm(`Fornecedor ${s.fornecedor_nome} mudou o dado bancário nessa submissão.\n\nAprovar essa mudança?`)) return;
+    const r = await api('/api/v2/fornecedor-submissoes/' + id + '/aprovar-dado-bancario', { method: 'POST' });
+    if (r?.ok) { showToast('✅ Dado bancário aprovado'); loadFornecedorSubmissoes(); }
+    return;
+  }
+  // Reaproveita o MESMO modal de preview que a importação de XML de NF-e já usa
+  // (abrirPreviewNfe/_previewNfe/confirmarNfe, definidas mais abaixo no arquivo) —
+  // só troca a origem dos dados (endpoint do portal em vez do parser de XML).
+  const data = await api('/api/v2/entradas/pre-preenchido/' + id);
+  if (!data) return;
+  _previewNfe = data;
+  abrirPreviewNfe(data);
+}
+
 // ── ENTRADA NF-e ──────────────────────────────────────────────────────────────
 
 let _previewNfe = null;
@@ -5867,6 +5942,8 @@ async function confirmarNfe() {
     valor_total:  _previewNfe.valor_total,
     fornecedor_id: _previewNfe.fornecedor ? _previewNfe.fornecedor.id : null,
     itens,
+    fornecedor_submissao_id: _previewNfe.fornecedor_submissao_id || undefined,
+    boletos: _previewNfe.boletos && _previewNfe.boletos.length ? _previewNfe.boletos : undefined,
   };
   const res = await api('/api/v2/entradas', { method: 'POST', body: JSON.stringify(payload) });
   if (!res || res.errors || res.error) { showToast('Erro: ' + (res?.errors?.[0] || res?.error || 'Falha ao confirmar')); return; }

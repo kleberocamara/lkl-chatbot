@@ -12,6 +12,7 @@
   main { max-width: 640px; margin: 24px auto; padding: 0 16px 40px; }
   .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
   label.lbl { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #666; display: block; margin-bottom: 6px; }
+  label.sublbl { font-size: 11px; color: #888; display: block; margin-bottom: 4px; }
   input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin-bottom: 10px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .grid3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; }
@@ -48,11 +49,27 @@
     <div class="card">
       <label class="lbl">2. Dados da NF</label>
       <div class="grid3">
-        <input id="nnf" placeholder="Número da NF">
-        <input id="emitida_em" type="date" placeholder="Emissão">
-        <input id="data_entrega_agendada" type="date" placeholder="Agendamento de entrega">
+        <div>
+          <label class="sublbl">Número da NF</label>
+          <input id="nnf" placeholder="Número da NF">
+        </div>
+        <div>
+          <label class="sublbl">Data de emissão</label>
+          <input id="emitida_em" type="date">
+        </div>
+        <div>
+          <label class="sublbl">Agendamento de entrega</label>
+          <input id="data_entrega_agendada" type="date">
+        </div>
       </div>
       <label class="lbl" style="margin-top:10px">Itens</label>
+      <div class="item-row" style="margin-bottom:2px">
+        <label class="sublbl">Produto</label>
+        <label class="sublbl">Qtd.</label>
+        <label class="sublbl">Valor unit.</label>
+        <label class="sublbl">Total</label>
+        <span></span>
+      </div>
       <div id="itens"></div>
       <button class="btn-sec" onclick="adicionarItem()">+ Adicionar item</button>
     </div>
@@ -125,7 +142,7 @@
     function renderItens() {
       document.getElementById('itens').innerHTML = itens.map((it, i) => `
         <div class="item-row">
-          <input value="${it.produto || ''}" oninput="itens[${i}].produto=this.value">
+          <input value="${it.produto || ''}" placeholder="Nome do produto" oninput="itens[${i}].produto=this.value">
           <input type="number" value="${it.quantidade || ''}" oninput="itens[${i}].quantidade=parseFloat(this.value)||0;recalcularItem(${i})">
           <input type="number" step="0.01" value="${it.valor_unitario || ''}" oninput="itens[${i}].valor_unitario=parseFloat(this.value)||0;recalcularItem(${i})">
           <input type="number" step="0.01" value="${it.valor_total || ''}" readonly>

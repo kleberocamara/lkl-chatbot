@@ -105,3 +105,61 @@ describe('_validarDadosExtraidos', () => {
     expect(r).toBeNull();
   });
 });
+
+describe('extrairDadosNFCompra', () => {
+  let tmpNfFile;
+  beforeAll(() => {
+    tmpNfFile = path.join(os.tmpdir(), 'nf-teste.pdf');
+    fs.writeFileSync(tmpNfFile, Buffer.from('%PDF-1.4'));
+  });
+  afterAll(() => { fs.unlinkSync(tmpNfFile); });
+  afterEach(() => jest.clearAllMocks());
+
+  test('extrai número, emissão e itens da NF a partir da imagem', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({
+        nnf: '4521', emitida_em: '2026-07-21', valor_total: 425.00,
+        itens: [{ produto: 'Vinil Fosco 1,20m', quantidade: 50, valor_unitario: 8.50, valor_total: 425.00 }],
+      }) } }],
+    });
+
+    const { extrairDadosNFCompra } = require('../src/modules/contas-pagar/ocr');
+    const r = await extrairDadosNFCompra(tmpNfFile);
+
+    expect(r.nnf).toBe('4521');
+    expect(r.itens).toHaveLength(1);
+    expect(r.itens[0].produto).toBe('Vinil Fosco 1,20m');
+  });
+
+  test('resposta sem JSON válido → retorna null', async () => {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content: 'não consegui ler' } }] });
+
+    const { extrairDadosNFCompra } = require('../src/modules/contas-pagar/ocr');
+    const r = await extrairDadosNFCompra(tmpNfFile);
+    expect(r).toBeNull();
+  });
+});
+
+describe('extrairLinhaDigitavel', () => {
+  let tmpBoletoFile;
+  beforeAll(() => {
+    tmpBoletoFile = path.join(os.tmpdir(), 'boleto-teste.jpg');
+    fs.writeFileSync(tmpBoletoFile, Buffer.from([0xff, 0xd8, 0xff]));
+  });
+  afterAll(() => { fs.unlinkSync(tmpBoletoFile); });
+  afterEach(() => jest.clearAllMocks());
+
+  test('extrai a linha digitável de uma imagem de boleto', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({
+        linha_digitavel: '34191790010104351004791020150008291070026000', valor: 425.00, vencimento: '2026-08-10',
+      }) } }],
+    });
+
+    const { extrairLinhaDigitavel } = require('../src/modules/contas-pagar/ocr');
+    const r = await extrairLinhaDigitavel(tmpBoletoFile);
+
+    expect(r.linha_digitavel).toBe('34191790010104351004791020150008291070026000');
+    expect(r.valor).toBe(425.00);
+  });
+});

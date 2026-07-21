@@ -88,4 +88,63 @@ async function extrairDadosComprovante(absPath) {
   return _validarDadosExtraidos(dados);
 }
 
-module.exports = { extrairDadosComprovante, _validarDadosExtraidos, _cnpjsProprios };
+function _promptNFCompra() {
+  return `Você recebe a imagem/PDF de uma Nota Fiscal de compra de mercadoria. Extraia em JSON:
+{
+  "nnf": "número da NF (string)",
+  "emitida_em": "data de emissão no formato YYYY-MM-DD",
+  "valor_total": número (valor total da nota),
+  "itens": [{ "produto": "descrição do produto", "quantidade": número, "valor_unitario": número, "valor_total": número }]
+}
+Responda APENAS o JSON, sem texto adicional. Se não conseguir identificar um campo, use null.`;
+}
+
+async function extrairDadosNFCompra(absPath) {
+  const dataUri = _dataUri(absPath);
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o',
+    messages: [
+      { role: 'system', content: _promptNFCompra() },
+      { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
+    ],
+    temperature: 0,
+    max_tokens: 800,
+  });
+  const texto = response.choices[0]?.message?.content || '';
+  const match = texto.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+function _promptLinhaDigitavel() {
+  return `Você recebe a imagem de um boleto bancário. Extraia em JSON:
+{ "linha_digitavel": "os dígitos da linha digitável, sem espaços", "valor": número, "vencimento": "YYYY-MM-DD" }
+Responda APENAS o JSON. Se não conseguir ler algum campo, use null.`;
+}
+
+async function extrairLinhaDigitavel(absPath) {
+  const dataUri = _dataUri(absPath);
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o',
+    messages: [
+      { role: 'system', content: _promptLinhaDigitavel() },
+      { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
+    ],
+    temperature: 0,
+    max_tokens: 300,
+  });
+  const texto = response.choices[0]?.message?.content || '';
+  const match = texto.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { extrairDadosComprovante, _validarDadosExtraidos, _cnpjsProprios, extrairDadosNFCompra, extrairLinhaDigitavel };

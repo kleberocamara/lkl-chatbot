@@ -197,7 +197,11 @@
       document.getElementById('status-nf').textContent = 'Lendo dados da NF... (pode levar até 1 minuto)';
       const { r, data } = await apiJson('/nf/extrair', { method: 'POST', body: fd });
       if (!r) { document.getElementById('status-nf').textContent = ''; return; }
-      if (!r.ok) { document.getElementById('status-nf').textContent = '❌ ' + (data.error || 'Falha ao ler a NF — preencha manualmente'); return; }
+      if (!r.ok) {
+        arquivoNfPath = data.arquivo_nf_path || arquivoNfPath;
+        document.getElementById('status-nf').textContent = '⚠️ ' + (data.error || 'Falha ao ler a NF — preencha os campos manualmente abaixo');
+        return;
+      }
       arquivoNfPath = data.arquivo_nf_path;
       document.getElementById('nnf').value = data.nnf || '';
       document.getElementById('emitida_em').value = data.emitida_em || '';

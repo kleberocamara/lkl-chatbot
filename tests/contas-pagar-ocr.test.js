@@ -92,6 +92,18 @@ describe('extrairDadosComprovante', () => {
     expect(promptEnviado).toMatch(/19\.296\.723\/0001-08/);
     expect(promptEnviado).toMatch(/44\.448\.899\/0001-85/);
   });
+
+  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+    const tmpPdfFile = path.join(os.tmpdir(), 'comprovante-teste.pdf');
+    fs.writeFileSync(tmpPdfFile, Buffer.from('%PDF-1.4'));
+    try {
+      const r = await extrairDadosComprovante(tmpPdfFile);
+      expect(r).toBeNull();
+      expect(mockCreate).not.toHaveBeenCalled();
+    } finally {
+      fs.unlinkSync(tmpPdfFile);
+    }
+  });
 });
 
 describe('_validarDadosExtraidos', () => {
@@ -108,12 +120,22 @@ describe('_validarDadosExtraidos', () => {
 
 describe('extrairDadosNFCompra', () => {
   let tmpNfFile;
+  let tmpNfPdfFile;
   beforeAll(() => {
-    tmpNfFile = path.join(os.tmpdir(), 'nf-teste.pdf');
-    fs.writeFileSync(tmpNfFile, Buffer.from('%PDF-1.4'));
+    tmpNfFile = path.join(os.tmpdir(), 'nf-teste.jpg');
+    fs.writeFileSync(tmpNfFile, Buffer.from([0xff, 0xd8, 0xff]));
+    tmpNfPdfFile = path.join(os.tmpdir(), 'nf-teste.pdf');
+    fs.writeFileSync(tmpNfPdfFile, Buffer.from('%PDF-1.4'));
   });
-  afterAll(() => { fs.unlinkSync(tmpNfFile); });
+  afterAll(() => { fs.unlinkSync(tmpNfFile); fs.unlinkSync(tmpNfPdfFile); });
   afterEach(() => jest.clearAllMocks());
+
+  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+    const { extrairDadosNFCompra } = require('../src/modules/contas-pagar/ocr');
+    const r = await extrairDadosNFCompra(tmpNfPdfFile);
+    expect(r).toBeNull();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
 
   test('extrai número, emissão e itens da NF a partir da imagem', async () => {
     mockCreate.mockResolvedValueOnce({
@@ -142,11 +164,14 @@ describe('extrairDadosNFCompra', () => {
 
 describe('extrairLinhaDigitavel', () => {
   let tmpBoletoFile;
+  let tmpBoletoPdfFile;
   beforeAll(() => {
     tmpBoletoFile = path.join(os.tmpdir(), 'boleto-teste.jpg');
     fs.writeFileSync(tmpBoletoFile, Buffer.from([0xff, 0xd8, 0xff]));
+    tmpBoletoPdfFile = path.join(os.tmpdir(), 'boleto-teste.pdf');
+    fs.writeFileSync(tmpBoletoPdfFile, Buffer.from('%PDF-1.4'));
   });
-  afterAll(() => { fs.unlinkSync(tmpBoletoFile); });
+  afterAll(() => { fs.unlinkSync(tmpBoletoFile); fs.unlinkSync(tmpBoletoPdfFile); });
   afterEach(() => jest.clearAllMocks());
 
   test('extrai a linha digitável de uma imagem de boleto', async () => {
@@ -161,5 +186,12 @@ describe('extrairLinhaDigitavel', () => {
 
     expect(r.linha_digitavel).toBe('34191790010104351004791020150008291070026000');
     expect(r.valor).toBe(425.00);
+  });
+
+  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+    const { extrairLinhaDigitavel } = require('../src/modules/contas-pagar/ocr');
+    const r = await extrairLinhaDigitavel(tmpBoletoPdfFile);
+    expect(r).toBeNull();
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });

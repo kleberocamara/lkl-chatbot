@@ -42,9 +42,12 @@ router.use(requireAuthFornecedor);
 
 router.post('/nf/extrair', upload.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  const arquivo_nf_path = `/uploads/fornecedor-submissoes/${req.file.filename}`;
   const dados = await ocr.extrairDadosNFCompra(req.file.path);
-  if (!dados) return res.status(422).json({ error: 'Não consegui ler os dados da NF — preencha manualmente' });
-  res.json({ ...dados, arquivo_nf_path: `/uploads/fornecedor-submissoes/${req.file.filename}` });
+  if (!dados) {
+    return res.status(422).json({ error: 'Não consegui ler os dados da NF — preencha manualmente', arquivo_nf_path });
+  }
+  res.json({ ...dados, arquivo_nf_path });
 });
 
 router.post('/boleto/extrair', upload.single('arquivo'), async (req, res) => {

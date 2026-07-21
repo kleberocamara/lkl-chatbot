@@ -65,17 +65,30 @@ function _validarDadosExtraidos(dados) {
   };
 }
 
+// GPT-4o Vision rejeita PDF via image_url (só aceita png/jpeg/gif/webp) —
+// evita a chamada (custa tempo+tokens) e falha rápido com uma mensagem clara.
+function _isPdf(absPath) {
+  return path.extname(absPath).toLowerCase() === '.pdf';
+}
+
 async function extrairDadosComprovante(absPath) {
+  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
   const dataUri = _dataUri(absPath);
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o',
-    messages: [
-      { role: 'system', content: _prompt() },
-      { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
-    ],
-    temperature: 0,
-    max_tokens: 500,
-  });
+  let response;
+  try {
+    response = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: [
+        { role: 'system', content: _prompt() },
+        { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
+      ],
+      temperature: 0,
+      max_tokens: 500,
+    });
+  } catch (err) {
+    console.error('[OCR] erro ao extrair dados do comprovante:', err.message);
+    return null;
+  }
   const texto = response.choices[0]?.message?.content || '';
   const match = texto.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -100,16 +113,23 @@ Responda APENAS o JSON, sem texto adicional. Se não conseguir identificar um ca
 }
 
 async function extrairDadosNFCompra(absPath) {
+  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
   const dataUri = _dataUri(absPath);
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o',
-    messages: [
-      { role: 'system', content: _promptNFCompra() },
-      { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
-    ],
-    temperature: 0,
-    max_tokens: 800,
-  });
+  let response;
+  try {
+    response = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: [
+        { role: 'system', content: _promptNFCompra() },
+        { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
+      ],
+      temperature: 0,
+      max_tokens: 800,
+    });
+  } catch (err) {
+    console.error('[OCR] erro ao extrair dados da NF:', err.message);
+    return null;
+  }
   const texto = response.choices[0]?.message?.content || '';
   const match = texto.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -127,16 +147,23 @@ Responda APENAS o JSON. Se não conseguir ler algum campo, use null.`;
 }
 
 async function extrairLinhaDigitavel(absPath) {
+  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
   const dataUri = _dataUri(absPath);
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o',
-    messages: [
-      { role: 'system', content: _promptLinhaDigitavel() },
-      { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
-    ],
-    temperature: 0,
-    max_tokens: 300,
-  });
+  let response;
+  try {
+    response = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: [
+        { role: 'system', content: _promptLinhaDigitavel() },
+        { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUri } }] },
+      ],
+      temperature: 0,
+      max_tokens: 300,
+    });
+  } catch (err) {
+    console.error('[OCR] erro ao extrair linha digitável:', err.message);
+    return null;
+  }
   const texto = response.choices[0]?.message?.content || '';
   const match = texto.match(/\{[\s\S]*\}/);
   if (!match) return null;

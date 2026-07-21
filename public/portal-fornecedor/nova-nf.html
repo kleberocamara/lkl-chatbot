@@ -72,6 +72,15 @@
       </div>
       <div id="itens"></div>
       <button class="btn-sec" onclick="adicionarItem()">+ Adicionar item</button>
+
+      <div class="grid2" style="margin-top:14px;align-items:end">
+        <div>
+          <label class="sublbl">Valor total da NF (com frete/outras despesas, se houver)</label>
+          <input id="valor_total_nf" type="number" step="0.01" placeholder="0,00">
+        </div>
+        <button type="button" class="btn-sec" style="margin-bottom:10px" onclick="recalcularValorTotalPelosItens()">Recalcular pela soma dos itens</button>
+      </div>
+      <p style="font-size:11px;color:#888;margin-top:-4px">Confira esse valor contra o "Valor Total da Nota" da NF — ele pode ser maior que a soma dos itens se houver frete ou outras despesas.</p>
     </div>
 
     <div class="card">
@@ -175,6 +184,8 @@
     function atualizarQtd(i, valor) { itens[i].quantidade = parseFloat(valor) || 0; recalcularItem(i); }
     function atualizarValorUnit(i, valor) { itens[i].valor_unitario = parseFloat(valor) || 0; recalcularItem(i); }
     function adicionarItem() { itens.push({ produto: '', quantidade: 0, valor_unitario: 0, valor_total: 0 }); renderItens(); }
+    function somaItens() { return Math.round(itens.reduce((s, it) => s + (it.valor_total || 0), 0) * 100) / 100; }
+    function recalcularValorTotalPelosItens() { document.getElementById('valor_total_nf').value = somaItens() || ''; }
 
     async function anexarNF(input) {
       if (!input.files[0]) return;
@@ -188,7 +199,10 @@
       document.getElementById('emitida_em').value = data.emitida_em || '';
       itens = (data.itens || []).map(it => ({ produto: it.produto, quantidade: it.quantidade, valor_unitario: it.valor_unitario, valor_total: it.valor_total }));
       renderItens();
-      document.getElementById('status-nf').textContent = '✓ Dados extraídos — confira abaixo';
+      // O valor total da NF pode ser MAIOR que a soma dos itens (frete, outras despesas) —
+      // usa o valor total extraído pela leitura da NF quando disponível, em vez de recalcular só pelos itens.
+      document.getElementById('valor_total_nf').value = (data.valor_total != null ? data.valor_total : somaItens()) || '';
+      document.getElementById('status-nf').textContent = '✓ Dados extraídos — confira o valor total da NF abaixo';
     }
 
     async function anexarBoleto(input) {
@@ -216,7 +230,8 @@
 
     async function enviar() {
       if (!pagamentoAtivo) { toast('Escolha uma forma de pagamento'); return; }
-      const valorTotal = itens.reduce((s, it) => s + (it.valor_total || 0), 0);
+      const valorTotalInformado = parseFloat(document.getElementById('valor_total_nf').value);
+      const valorTotal = valorTotalInformado > 0 ? valorTotalInformado : somaItens();
       const body = {
         nnf: document.getElementById('nnf').value || null,
         emitida_em: document.getElementById('emitida_em').value || null,

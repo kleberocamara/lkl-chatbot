@@ -143,6 +143,33 @@ describe('criarOuReconciliarContaPagar', () => {
       tipoDespesaId: 1, tipoEntrada: 'manual',
     });
   });
+
+  test('com parcelaGrupoId, zero correspondências → INSERT inclui colunas de parcela', async () => {
+    const client = mockClient((sql, params) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('SELECT * FROM contas_pagar')) return Promise.resolve({ rows: [] });
+      if (sql.startsWith('INSERT INTO contas_pagar')) {
+        expect(sql).toContain('parcela_grupo_id');
+        expect(sql).toContain('parcela_numero');
+        expect(sql).toContain('parcela_total');
+        expect(params).toContain('grupo-uuid-1');
+        expect(params).toContain(1);
+        expect(params).toContain(2);
+        return Promise.resolve({ rows: [{ id: 90 }] });
+      }
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+
+    const r = await service.criarOuReconciliarContaPagar({
+      fornecedorId: 'uuid-9', fornecedorNome: 'Vinil Line', descricao: 'NF 4521 — boleto 1/2',
+      valor: 212.50, vencimento: '2026-08-10', tipoDespesaId: 4, tipoEntrada: 'entrada_estoque',
+      linhaDigitavel: '341...', parcelaGrupoId: 'grupo-uuid-1', parcelaNumero: 1, parcelaTotal: 2,
+    });
+
+    expect(r.id).toBe(90);
+  });
 });
 
 describe('sincronizarDDA', () => {

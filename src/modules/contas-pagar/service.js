@@ -538,7 +538,7 @@ async function gravarMemoriaFornecedor(fornecedorId, tipoDespesaId) {
 // conta pendente do mesmo fornecedor com o mesmo valor (sem linha digitável ainda),
 // mescla nela em vez de criar uma nova. Zero ou 2+ candidatas → cria nova (mais seguro
 // que arriscar mesclar errado).
-async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo, competencia }) {
+async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo, competencia, parcelaGrupoId, parcelaNumero, parcelaTotal }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -585,6 +585,10 @@ async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valo
       const valores = [descricao, fornecedorNome || null, fornecedorId || null, tipoFinal, valor,
                         vencimento, tipo || 'boleto', linhaDigitavel || null, tipoEntrada, status];
       if (competencia) { colunas.push('competencia'); valores.push(competencia); }
+      if (parcelaGrupoId) {
+        colunas.push('parcela_grupo_id', 'parcela_numero', 'parcela_total');
+        valores.push(parcelaGrupoId, parcelaNumero, parcelaTotal);
+      }
       const placeholders = valores.map((_, i) => `$${i + 1}`).join(',');
       const r = await client.query(
         `INSERT INTO contas_pagar (${colunas.join(', ')}) VALUES (${placeholders}) RETURNING *`,

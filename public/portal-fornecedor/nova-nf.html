@@ -22,7 +22,11 @@
   .pagamento-opcoes .opt { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; font-size: 12px; }
   .pagamento-opcoes .opt.ativo { border-color: #1a237e; background: #f0f4ff; font-weight: 700; }
   .painel-pagamento { background: #f0f4ff; border-radius: 8px; padding: 14px; display: none; }
-  .boleto-chip { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin: 4px 4px 0 0; }
+  .boleto-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .boleto-card .status { font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+  .boleto-card .status.ok { color: #2e7d32; }
+  .boleto-card .status.manual { color: #b45309; }
+  .boleto-card input { margin-bottom: 8px; }
   button.btn { padding: 12px 20px; background: #1a237e; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   button.btn-sec { background: #f1f5f9; color: #333; padding: 6px 12px; font-size: 12px; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a237e; color: #fff; padding: 10px 20px; border-radius: 8px; display: none; }
@@ -211,15 +215,41 @@
       toast('Lendo boleto...');
       const { r, data } = await apiJson('/boleto/extrair', { method: 'POST', body: fd });
       if (!r) return;
-      if (!r.ok) { toast('❌ ' + (data.error || 'Falha ao ler o boleto — preencha manualmente')); return; }
-      boletos.push({ arquivo_path: data.arquivo_path, linha_digitavel: data.linha_digitavel, valor: data.valor, vencimento: data.vencimento });
+      if (!r.ok) {
+        toast('⚠️ ' + (data.error || 'Não consegui ler o boleto — preencha os dados manualmente abaixo'));
+        boletos.push({ arquivo_path: data.arquivo_path || null, linha_digitavel: '', valor: '', vencimento: '' });
+        renderBoletos();
+        input.value = '';
+        return;
+      }
+      boletos.push({ arquivo_path: data.arquivo_path, linha_digitavel: data.linha_digitavel || '', valor: data.valor || '', vencimento: data.vencimento || '' });
       renderBoletos();
+      const valorFmt = data.valor ? 'R$ ' + Number(data.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'valor não lido';
+      const vencFmt = data.vencimento ? new Date(data.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : 'vencimento não lido';
+      toast(`✓ Boleto adicionado — ${valorFmt}, venc. ${vencFmt}. Confira abaixo.`);
       input.value = '';
     }
+    function atualizarBoleto(i, campo, valor) {
+      boletos[i][campo] = campo === 'valor' ? (parseFloat(valor) || 0) : valor;
+    }
     function renderBoletos() {
-      document.getElementById('lista-boletos').innerHTML = boletos.map(b =>
-        `<span class="boleto-chip">✓ ${b.linha_digitavel ? b.linha_digitavel.slice(0, 15) + '...' : 'sem leitura automática'}</span>`
-      ).join('');
+      document.getElementById('lista-boletos').innerHTML = boletos.length ? boletos.map((b, i) => `
+        <div class="boleto-card">
+          <div class="status ${b.linha_digitavel ? 'ok' : 'manual'}">${b.linha_digitavel ? '✓ Lido automaticamente — confira os dados' : '⚠️ Não lido automaticamente — preencha os campos abaixo'}</div>
+          <label class="sublbl">Linha digitável</label>
+          <input value="${b.linha_digitavel || ''}" placeholder="Digite a linha digitável do boleto" oninput="atualizarBoleto(${i},'linha_digitavel',this.value)">
+          <div class="grid2">
+            <div>
+              <label class="sublbl">Valor</label>
+              <input type="number" step="0.01" value="${b.valor || ''}" placeholder="0,00" oninput="atualizarBoleto(${i},'valor',this.value)">
+            </div>
+            <div>
+              <label class="sublbl">Vencimento</label>
+              <input type="date" value="${b.vencimento || ''}" oninput="atualizarBoleto(${i},'vencimento',this.value)">
+            </div>
+          </div>
+          <button class="btn-sec" onclick="boletos.splice(${i},1);renderBoletos()">✕ Remover este boleto</button>
+        </div>`).join('') : '';
     }
 
     function selecionarPagamento(tipo) {

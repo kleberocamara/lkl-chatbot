@@ -1,4 +1,5 @@
 const db = require('../../db');
+const crypto = require('crypto');
 const { XMLParser } = require('fast-xml-parser');
 const { format, addDays } = require('date-fns');
 const contasPagarService = require('../contas-pagar/service');
@@ -76,7 +77,7 @@ async function preview(xml) {
 }
 
 // Confirma a entrada: grava cabeçalho+itens, dá entrada no estoque e recalcula custo médio.
-async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, itens }) {
+async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, itens, fornecedor_submissao_id, boletos }) {
   if (!Array.isArray(itens)) return { erro: ['itens é obrigatório'] };
   if (chave) {
     const dup = await db.query('SELECT id FROM entradas_estoque WHERE chave = $1', [chave]);
@@ -121,15 +122,43 @@ async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, i
         const vencimentoProvisorio = emitida_em
           ? format(addDays(new Date(`${emitida_em}T00:00:00`), 30), 'yyyy-MM-dd')
           : format(addDays(new Date(), 30), 'yyyy-MM-dd');
-        const conta = await contasPagarService.criarOuReconciliarContaPagar({
-          fornecedorId: fornecedor_id,
-          fornecedorNome: fornecedorR.rows[0]?.nome || null,
-          descricao: `NF ${nnf || 's/nº'} — entrada de estoque`,
-          valor: valor_total,
-          vencimento: vencimentoProvisorio,
-          tipoEntrada: 'entrada_estoque',
-        });
-        await db.query('UPDATE entradas_estoque SET conta_pagar_id=$1 WHERE id=$2', [conta.id, entrada.id]);
+
+        if (Array.isArray(boletos) && boletos.length > 1) {
+          const parcelaGrupoId = crypto.randomUUID();
+          for (let i = 0; i < boletos.length; i++) {
+            await contasPagarService.criarOuReconciliarContaPagar({
+              fornecedorId: fornecedor_id,
+              fornecedorNome: fornecedorR.rows[0]?.nome || null,
+              descricao: `NF ${nnf || 's/nº'} — boleto ${i + 1}/${boletos.length}`,
+              valor: boletos[i].valor,
+              vencimento: boletos[i].vencimento || vencimentoProvisorio,
+              linhaDigitavel: boletos[i].linha_digitavel,
+              tipoEntrada: 'entrada_estoque',
+              parcelaGrupoId, parcelaNumero: i + 1, parcelaTotal: boletos.length,
+            });
+          }
+        } else {
+          const conta = await contasPagarService.criarOuReconciliarContaPagar({
+            fornecedorId: fornecedor_id,
+            fornecedorNome: fornecedorR.rows[0]?.nome || null,
+            descricao: `NF ${nnf || 's/nº'} — entrada de estoque`,
+            valor: (Array.isArray(boletos) && boletos.length === 1) ? boletos[0].valor : valor_total,
+            vencimento: (Array.isArray(boletos) && boletos.length === 1) ? (boletos[0].vencimento || vencimentoProvisorio) : vencimentoProvisorio,
+            linhaDigitavel: (Array.isArray(boletos) && boletos.length === 1) ? boletos[0].linha_digitavel : undefined,
+            tipoEntrada: 'entrada_estoque',
+          });
+          if (!fornecedor_submissao_id) {
+            await db.query('UPDATE entradas_estoque SET conta_pagar_id=$1 WHERE id=$2', [conta.id, entrada.id]);
+          }
+        }
+
+        if (fornecedor_submissao_id) {
+          await db.query('UPDATE entradas_estoque SET fornecedor_submissao_id=$1 WHERE id=$2', [fornecedor_submissao_id, entrada.id]);
+          await db.query(
+            `UPDATE fornecedor_submissoes SET status = 'aceita', entrada_estoque_id=$1, revisada_em=NOW() WHERE id=$2`,
+            [entrada.id, fornecedor_submissao_id]
+          );
+        }
       } catch (e) {
         console.error('[ENTRADAS] Erro ao gerar conta a pagar da NF:', e.message);
       }

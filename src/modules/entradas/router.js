@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const { requireRole } = require('../../middleware/auth');
 const service = require('./service');
+const submissaoService = require('../portal-fornecedor/submissao-service');
+const db = require('../../db');
 
 const router = express.Router();
 const uploadXml = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -44,6 +46,30 @@ router.post('/:id/estornar', requireRole('admin', 'gestor'), async (req, res) =>
 router.get('/', requireRole('admin', 'gestor'), async (req, res) => {
   try { res.json(await service.listar()); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// GET /pre-preenchido/:submissaoId — devolve os dados de uma submissão do portal do
+// fornecedor no mesmo formato do preview de importação de XML de NF-e (abrirPreviewNfe),
+// pra reaproveitar o mesmo modal do painel.
+router.get('/pre-preenchido/:submissaoId', requireRole('admin', 'gestor'), async (req, res) => {
+  try {
+    const sub = await submissaoService.buscarSubmissaoDetalhe(req.params.submissaoId);
+    if (!sub) return res.status(404).json({ error: 'Submissão não encontrada' });
+    const forn = await db.query('SELECT id, nome FROM fornecedores WHERE id = $1', [sub.fornecedor_id]);
+    res.json({
+      chave: null,
+      nnf: sub.nnf,
+      emitida_em: sub.emitida_em,
+      valor_total: sub.valor_total,
+      fornecedor: forn.rows[0] || null,
+      itens: sub.itens.map(it => ({
+        xprod: it.produto, cprod: null, cean: null, ucom: 'UN',
+        qcom: Number(it.quantidade), vun: Number(it.valor_unitario), material_id: null,
+      })),
+      fornecedor_submissao_id: sub.id,
+      boletos: sub.boletos.map(b => ({ linha_digitavel: b.linha_digitavel, valor: Number(b.valor), vencimento: b.vencimento })),
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
 router.get('/:id', requireRole('admin', 'gestor'), async (req, res) => {

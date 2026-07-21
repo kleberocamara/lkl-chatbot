@@ -31,5 +31,6 @@ router.use('/nfe', requireAuthApi, require('./nfe/router'));
 router.use('/contas-pagar', requireAuthApi, require('./contas-pagar/router'));
 router.use('/analises', requireAuthApi, require('./analises/router'));
 router.use('/users', requireAuthApi, require('./users/router'));
+router.use('/portal-fornecedor', require('./portal-fornecedor/router'));
 
 module.exports = router;

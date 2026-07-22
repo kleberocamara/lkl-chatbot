@@ -156,7 +156,7 @@ router.patch('/:id/producao', requireRole('admin','gestor','analista','operador'
 });
 
 // OS-3C: baixa manual de materiais
-router.post('/:id/requisicao', requireRole('admin','gestor','atendente'), async (req, res) => {
+router.post('/:id/requisicao', requireRole('admin','gestor','atendente','analista'), async (req, res) => {
   try {
     const result = await service.baixarMateriais(req.params.id, { userId: req.user.id });
     if (result.erro) {

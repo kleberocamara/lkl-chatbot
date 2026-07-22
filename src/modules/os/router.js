@@ -168,7 +168,7 @@ router.post('/:id/requisicao', requireRole('admin','gestor','atendente','analist
 });
 
 // OS-3C: estorno da requisição ativa
-router.post('/:id/requisicao/estornar', requireRole('admin','gestor'), async (req, res) => {
+router.post('/:id/requisicao/estornar', requireRole('admin','gestor','analista'), async (req, res) => {
   try {
     const result = await service.estornarRequisicao(req.params.id, { userId: req.user.id });
     if (result.erro) return res.status(400).json({ errors: result.erro });

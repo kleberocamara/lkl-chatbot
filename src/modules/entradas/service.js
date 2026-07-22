@@ -83,6 +83,10 @@ async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, i
     const dup = await db.query('SELECT id FROM entradas_estoque WHERE chave = $1', [chave]);
     if (dup.rows[0]) return { erro: ['NF já lançada'] };
   }
+  if (fornecedor_submissao_id) {
+    const sub = await db.query('SELECT status, entrada_estoque_id FROM fornecedor_submissoes WHERE id = $1', [fornecedor_submissao_id]);
+    if (sub.rows[0]?.status === 'aceita') return { erro: ['Essa submissão já foi aceita — recarregue a fila de submissões'] };
+  }
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -119,9 +123,9 @@ async function confirmar({ chave, nnf, emitida_em, valor_total, fornecedor_id, i
     if (fornecedor_id && valor_total) {
       try {
         const fornecedorR = await db.query('SELECT nome FROM fornecedores WHERE id=$1', [fornecedor_id]);
-        const vencimentoProvisorio = emitida_em
-          ? format(addDays(new Date(`${emitida_em}T00:00:00`), 30), 'yyyy-MM-dd')
-          : format(addDays(new Date(), 30), 'yyyy-MM-dd');
+        let dataBase = emitida_em ? new Date(`${emitida_em}T00:00:00`) : new Date();
+        if (isNaN(dataBase)) dataBase = new Date();
+        const vencimentoProvisorio = format(addDays(dataBase, 30), 'yyyy-MM-dd');
 
         if (Array.isArray(boletos) && boletos.length > 1) {
           const parcelaGrupoId = crypto.randomUUID();

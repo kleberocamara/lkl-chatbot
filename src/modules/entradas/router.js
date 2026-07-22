@@ -56,10 +56,13 @@ router.get('/pre-preenchido/:submissaoId', requireRole('admin', 'gestor'), async
     const sub = await submissaoService.buscarSubmissaoDetalhe(req.params.submissaoId);
     if (!sub) return res.status(404).json({ error: 'Submissão não encontrada' });
     const forn = await db.query('SELECT id, nome FROM fornecedores WHERE id = $1', [sub.fornecedor_id]);
+    // colunas DATE do pg viram objeto Date em JS; Express serializa via toISOString() (com hora+Z),
+    // formato que quebra a montagem de data em confirmar() (entradas/service.js) — normaliza pra YYYY-MM-DD.
+    const emitidaEmStr = sub.emitida_em ? new Date(sub.emitida_em).toISOString().slice(0, 10) : null;
     res.json({
       chave: null,
       nnf: sub.nnf,
-      emitida_em: sub.emitida_em,
+      emitida_em: emitidaEmStr,
       valor_total: sub.valor_total,
       fornecedor: forn.rows[0] || null,
       itens: sub.itens.map(it => ({

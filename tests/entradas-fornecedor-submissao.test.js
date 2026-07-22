@@ -22,6 +22,7 @@ describe('confirmar — com fornecedor_submissao_id e múltiplos boletos', () =>
     });
     db.pool.connect.mockResolvedValueOnce(client);
     db.query
+      .mockResolvedValueOnce({ rows: [{ status: 'aguardando_entrega' }] }) // checa idempotência (submissão ainda não aceita)
       .mockResolvedValueOnce({ rows: [{ nome: 'Vinil Line' }] }) // busca nome do fornecedor
       .mockResolvedValueOnce({ rows: [] }) // UPDATE entradas_estoque SET fornecedor_submissao_id
       .mockResolvedValueOnce({ rows: [] }); // UPDATE fornecedor_submissoes SET status='aceita'
@@ -73,5 +74,48 @@ describe('confirmar — com fornecedor_submissao_id e múltiplos boletos', () =>
 
     expect(contasPagarService.criarOuReconciliarContaPagar).toHaveBeenCalledTimes(1);
     expect(contasPagarService.criarOuReconciliarContaPagar.mock.calls[0][0].parcelaGrupoId).toBeUndefined();
+  });
+
+  test('submissão já aceita → recusa e não cria entrada nem conta a pagar (evita duplicidade em retry)', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ status: 'aceita', entrada_estoque_id: 'entrada-1' }] });
+
+    const r = await service.confirmar({
+      fornecedor_id: 'forn-1', nnf: '4521', valor_total: 425, itens: [],
+      fornecedor_submissao_id: 'sub-1',
+    });
+
+    expect(r.erro).toBeDefined();
+    expect(r.erro[0]).toMatch(/já foi aceita/);
+    expect(db.pool.connect).not.toHaveBeenCalled();
+    expect(contasPagarService.criarOuReconciliarContaPagar).not.toHaveBeenCalled();
+  });
+
+  test('emitida_em em formato ISO com hora (bug real de produção) não quebra a geração da conta a pagar', async () => {
+    const client = mockClient((sql) => {
+      if (sql.startsWith('BEGIN')) return Promise.resolve();
+      if (sql.startsWith('INSERT INTO entradas_estoque')) return Promise.resolve({ rows: [{ id: 'entrada-3' }] });
+      if (sql.startsWith('INSERT INTO entradas_estoque_itens')) return Promise.resolve({ rows: [] });
+      if (sql.startsWith('COMMIT')) return Promise.resolve();
+      throw new Error('query inesperada: ' + sql);
+    });
+    db.pool.connect.mockResolvedValueOnce(client);
+    db.query
+      .mockResolvedValueOnce({ rows: [{ status: 'aguardando_entrega' }] })
+      .mockResolvedValueOnce({ rows: [{ nome: 'Fornecedor Y' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    contasPagarService.criarOuReconciliarContaPagar.mockResolvedValueOnce({ id: 400 });
+
+    // formato que o pg devolve pra coluna DATE depois de serializado via res.json() (Date.toISOString())
+    const r = await service.confirmar({
+      fornecedor_id: 'forn-3', nnf: '111', valor_total: 100, itens: [],
+      emitida_em: '2026-05-13T00:00:00.000Z',
+      fornecedor_submissao_id: 'sub-2',
+    });
+
+    expect(r.erro).toBeUndefined();
+    expect(r.entrada.id).toBe('entrada-3');
+    expect(contasPagarService.criarOuReconciliarContaPagar).toHaveBeenCalledTimes(1);
+    expect(contasPagarService.criarOuReconciliarContaPagar.mock.calls[0][0].vencimento).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

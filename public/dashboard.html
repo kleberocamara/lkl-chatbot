@@ -3170,15 +3170,18 @@ function editarFornecedor(f) {
   document.getElementById('modal-cadastro').style.display = 'block';
 }
 async function liberarPortalFornecedor(fornecedorId) {
-  const email = prompt('E-mail do fornecedor pra enviar o convite:');
-  if (!email) return;
-  const r = await api(`/api/v2/fornecedores/${fornecedorId}/portal/liberar`, { method: 'POST', body: JSON.stringify({ email }) });
-  if (r?.conviteUrl) {
-    showToast('✅ Convite gerado! Envie este link ao fornecedor:');
-    prompt('Link de convite (copie e envie ao fornecedor):', r.conviteUrl);
-  } else {
+  const r = await api(`/api/v2/fornecedores/${fornecedorId}/portal/liberar`, { method: 'POST', body: JSON.stringify({}) });
+  if (!r?.conviteUrl) {
     showToast('❌ ' + (r?.error || 'Erro ao liberar portal'));
+    return;
   }
+  const canais = [];
+  if (r.enviadoEmail) canais.push('e-mail');
+  if (r.enviadoWhatsapp) canais.push('WhatsApp');
+  const resumo = canais.length ? `✅ Convite enviado por ${canais.join(' e ')}` : '⚠️ Convite gerado, mas não foi possível enviar por nenhum canal';
+  const avisos = (r.avisos || []).length ? '\n\n' + r.avisos.join('\n') : '';
+  showToast(resumo + avisos);
+  prompt('Link de convite (backup — copie e envie manualmente se precisar):', r.conviteUrl);
 }
 
 // ── MATERIAIS ──────────────────────────────────────────────────────────────────

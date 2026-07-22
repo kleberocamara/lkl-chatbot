@@ -568,12 +568,12 @@ async function atualizarFichaProducao(osId, dados) {
 // OS-3C: coleta o consumo de materiais da OS (offset; CV é adicionado na fase 2)
 async function _coletarConsumo(client, osId) {
   const consumo = []; // { material_id, quantidade, unidade }
-  // Fonte OFFSET: vias da ficha com material e folhas_total
+  // Fonte OFFSET: vias da ficha com material e folhas_a_cortar
   const off = await client.query(
-    `SELECT material_id, folhas_total FROM os_materiais
-     WHERE os_id=$1 AND material_id IS NOT NULL AND folhas_total > 0`, [osId]);
+    `SELECT material_id, folhas_a_cortar FROM os_materiais
+     WHERE os_id=$1 AND material_id IS NOT NULL AND folhas_a_cortar > 0`, [osId]);
   for (const r of off.rows) {
-    consumo.push({ material_id: r.material_id, quantidade: Number(r.folhas_total), unidade: 'folha' });
+    consumo.push({ material_id: r.material_id, quantidade: Number(r.folhas_a_cortar), unidade: 'folha' });
   }
   // Fonte CV: itens da OS com material e dimensões → m²
   const cv = await client.query(

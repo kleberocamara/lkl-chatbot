@@ -1984,6 +1984,7 @@ async function loadOsMain() {
 
 // ── DETALHE DA OS + FICHA DE PRODUÇÃO ──────────────────────────────────────────
 let _osDetalheId = null;
+let _osDetalheData = null;
 let _osMateriais = [];
 const _VIA_COLS = '1.5fr 0.8fr 0.95fr 0.55fr 0.95fr 0.4fr 0.4fr auto';
 const _viaInp = 'padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;width:100%';
@@ -2134,6 +2135,7 @@ async function abrirDetalheOS(id) {
   _osDetalheId = id;
   const os = await api(`/api/v2/os/${id}`);
   if (!os || os.error) { showToast('Erro ao carregar OS'); return; }
+  _osDetalheData = os;
   _osMateriais = (os.materiais || []).map(m => ({ ...m }));
 
   const itensTxt = (os.itens||[]).map(i => `${escHtml(i.descricao)} (${i.quantidade})`).join(' · ') || '—';
@@ -2170,10 +2172,11 @@ async function abrirDetalheOS(id) {
     <button onclick="salvarFichaOS()" class="btn btn-primary" style="width:100%;margin-top:14px">💾 Salvar ficha de produção</button>`;
 
   const pills = isOffset ? `
-    <div style="display:flex;gap:8px;margin:12px 0">
+    <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap">
       <button id="osdtab-producao" class="btn btn-primary" onclick="osDetalheTab('producao')">🏭 Produção</button>
       <button id="osdtab-materiais" class="btn btn-outline" onclick="osDetalheTab('materiais')">📦 Materiais</button>
       <button id="osdtab-requisicao" class="btn btn-outline" onclick="osDetalheTab('requisicao')">📥 Requisição</button>
+      <button class="btn btn-outline" onclick="imprimirFichaOS()" style="margin-left:auto">🖨️ Imprimir ficha</button>
     </div>` : '';
 
   const html = `
@@ -2220,6 +2223,100 @@ async function salvarFichaOS() {
   closeModal();
   showToast('✅ Ficha de produção salva');
   loadOsMain();
+}
+
+const FV_LABEL = { so_frente: 'Só Frente', fv_iguais: 'Frente e Verso Iguais', fv_diferentes: 'Frente e Verso Diferentes' };
+
+function imprimirFichaOS() {
+  const os = _osDetalheData;
+  if (!os) { showToast('Carregue a OS antes de imprimir'); return; }
+
+  const campo = (label, val) => `<div class="pf-campo"><span class="pf-label">${label}</span><span class="pf-val">${val!=null && val!=='' ? escHtml(String(val)) : '—'}</span></div>`;
+
+  const itensTxt = (os.itens||[]).map(i => `${escHtml(i.descricao)} (${i.quantidade})`).join(' · ') || '—';
+  const especsTxt = (os.especificacoes||[]).map(e => escHtml(e.nome)).join(', ') || '—';
+
+  const artes = (os.itens||[]).filter(i => i.arte_arquivo_url);
+  const artesHtml = artes.length ? `
+    <div class="pf-secao">ARTE APROVADA</div>
+    <div class="pf-artes">${artes.map(i => `
+      <div class="pf-arte-box">
+        <img src="${location.origin}${i.arte_arquivo_url}" alt="Arte">
+        <div class="pf-arte-legenda">${escHtml(i.descricao||'')}</div>
+      </div>`).join('')}</div>` : '';
+
+  const viasRows = (_osMateriais||[]).map(m => `
+    <tr>
+      <td>${escHtml(m.descricao || m.material_nome || '—')}</td>
+      <td>${escHtml(m.cor_papel || '—')}</td>
+      <td style="text-align:right">${m.folhas_a_cortar!=null && m.folhas_a_cortar!=='' ? m.folhas_a_cortar : '—'}</td>
+      <td style="text-align:right">${m.perda_percentual!=null && m.perda_percentual!=='' ? m.perda_percentual+'%' : '—'}</td>
+      <td style="text-align:right">${m.folhas_total!=null && m.folhas_total!=='' ? m.folhas_total : '—'}</td>
+      <td style="text-align:right">${m.cores_frente!=null && m.cores_frente!=='' ? m.cores_frente : '—'}</td>
+      <td style="text-align:right">${m.cores_verso!=null && m.cores_verso!=='' ? m.cores_verso : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:#999">Nenhuma via cadastrada</td></tr>';
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ficha de Produção — OS #${os.numero_os||''}</title>
+  <style>
+    * { box-sizing:border-box; }
+    body { font-family:Arial,Helvetica,sans-serif; color:#111; margin:24px; }
+    h1 { font-size:18px; margin:0 0 2px; color:#1a237e; }
+    .pf-sub { font-size:12px; color:#555; margin-bottom:14px; }
+    .pf-secao { font-size:11px; font-weight:700; letter-spacing:.5px; color:#3949ab; margin:16px 0 6px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+    .pf-linha { font-size:13px; margin-bottom:3px; }
+    .pf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px; }
+    .pf-campo { border-bottom:1px solid #ddd; padding:4px 0; display:flex; flex-direction:column; }
+    .pf-label { font-size:10px; color:#777; text-transform:uppercase; letter-spacing:.3px; }
+    .pf-val { font-size:14px; font-weight:600; }
+    table { width:100%; border-collapse:collapse; font-size:12px; margin-top:4px; }
+    th, td { border:1px solid #ccc; padding:5px 7px; }
+    th { background:#f0f2fa; text-align:left; font-size:10px; text-transform:uppercase; color:#555; }
+    .pf-artes { display:flex; gap:12px; flex-wrap:wrap; }
+    .pf-arte-box { border:1px solid #ccc; padding:6px; text-align:center; }
+    .pf-arte-box img { max-width:220px; max-height:220px; display:block; }
+    .pf-arte-legenda { font-size:11px; color:#555; margin-top:4px; }
+    .pf-footer { margin-top:24px; font-size:10px; color:#999; text-align:right; }
+    @media print { body { margin:10mm; } }
+  </style></head><body>
+    <h1>Ficha de Produção — Pedido #${os.numero_pedido||'—'} · OS #${os.numero_os||'—'}</h1>
+    <div class="pf-sub">Offset · ${escHtml(os.cliente_nome||'(multi-cliente)')} · status: ${escHtml(os.status||'—')}</div>
+    <div class="pf-linha"><b>Itens:</b> ${itensTxt}</div>
+    <div class="pf-linha"><b>Especificações:</b> ${especsTxt}</div>
+    ${artesHtml}
+    <div class="pf-secao">DADOS DA FICHA</div>
+    <div class="pf-grid">
+      ${campo('Nº Jogos', os.nro_jogos)}
+      ${campo('Nº Vias', os.nro_vias)}
+      ${campo('Tipo unidade', os.tipo_unidade)}
+      ${campo('Frente e Verso', FV_LABEL[os.frente_verso] || os.frente_verso)}
+      ${campo('Numeração inicial', os.numeracao_inicial)}
+      ${campo('Numeração final', os.numeracao_final)}
+      ${campo('Quantidade (itens)', os.quantidade)}
+      ${campo('Cores das tintas', os.cores_tintas)}
+      ${campo('Máquina', os.maquina_nome)}
+      ${campo('Operador', os.operador_nome)}
+      ${campo('Imagem Alt', os.imagem_alt)}
+      ${campo('Imagem Larg', os.imagem_larg)}
+      ${campo('Nº formato corte', os.formato_corte)}
+      ${campo('Corte Alt', os.formato_corte_alt)}
+      ${campo('Corte Larg', os.formato_corte_larg)}
+      ${campo('Imagens/impressão', os.imagens_impressao)}
+      ${campo('Imagens/folha', os.imagens_folha)}
+      ${campo('Total de impressões', os.total_impressoes)}
+    </div>
+    <div class="pf-secao">MATERIAIS / VIAS</div>
+    <table>
+      <thead><tr><th>Material</th><th>Cor</th><th>Folhas a cortar</th><th>Perda</th><th>Folhas total</th><th>Fre</th><th>Ver</th></tr></thead>
+      <tbody>${viasRows}</tbody>
+    </table>
+    <div class="pf-footer">Impresso em ${new Date().toLocaleString('pt-BR')}</div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Permita pop-ups para imprimir a ficha'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
 }
 
 function renderRequisicaoOS(os) {

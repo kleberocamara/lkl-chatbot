@@ -21,6 +21,49 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const SMTP_FORNECEDOR_PORT = parseInt(process.env.SMTP_FORNECEDOR_PORT);
+const transporterFornecedor = nodemailer.createTransport({
+  host: process.env.SMTP_FORNECEDOR_HOST,
+  port: SMTP_FORNECEDOR_PORT,
+  secure: SMTP_FORNECEDOR_PORT === 465,
+  auth: {
+    user: process.env.SMTP_FORNECEDOR_USER,
+    pass: process.env.SMTP_FORNECEDOR_PASS,
+  },
+});
+
+async function enviarConvitePortalFornecedor({ email, nome, conviteUrl }) {
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#222">
+      <div style="background:#1a237e;padding:20px 24px;text-align:center">
+        <img src="${getLogoBase64()}" alt="Gráfica LKL" style="height:56px;display:inline-block">
+        <div style="color:white;font-size:16px;font-weight:700;margin-top:8px">Portal do Fornecedor</div>
+      </div>
+      <div style="padding:28px;background:#f9f9f9">
+        <p style="font-size:15px">Olá, <strong>${nome}</strong>!</p>
+        <p>A Gráfica LKL liberou seu acesso ao Portal do Fornecedor. Por lá você pode declarar Notas Fiscais, itens e forma de pagamento antes da entrega da mercadoria.</p>
+        <div style="margin:28px 0;text-align:center">
+          <a href="${conviteUrl}"
+             style="background:#1a237e;color:white;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:bold;display:inline-block">
+            Definir minha senha e acessar
+          </a>
+        </div>
+        <p style="font-size:13px;color:#555">Este link é válido por 7 dias. Se expirar, peça um novo convite à Gráfica LKL.</p>
+      </div>
+      <div style="padding:12px;text-align:center;color:#aaa;font-size:11px">
+        Gráfica LKL — Portal do Fornecedor
+      </div>
+    </div>`;
+
+  const info = await transporterFornecedor.sendMail({
+    from: `"Gráfica LKL — Fornecedores" <${process.env.SMTP_FORNECEDOR_USER}>`,
+    to: email,
+    subject: 'Acesso ao Portal do Fornecedor — Gráfica LKL',
+    html,
+  });
+  console.log(`[EMAIL] Convite do portal do fornecedor enviado para ${email} (messageId: ${info.messageId})`);
+}
+
 async function notifyAnalyst({ contact, conversation, orderDetails }) {
   const detailsHtml = orderDetails
     ? Object.entries(orderDetails)
@@ -166,4 +209,4 @@ async function enviarOrcamentoCliente({ clienteNome, clienteEmail, numero, numer
   console.log(`[EMAIL] Orçamento #${numero} enviado para ${clienteEmail} (messageId: ${info.messageId})`);
 }
 
-module.exports = { notifyAnalyst, enviarOrcamentoCliente };
+module.exports = { notifyAnalyst, enviarOrcamentoCliente, enviarConvitePortalFornecedor };

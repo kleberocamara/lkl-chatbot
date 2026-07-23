@@ -69,13 +69,13 @@ def _assinar_evento(evento_el, cert_pem, key_pem, id_evento):
     return signed
 
 
-def _montar_evento(chave, cnpj, tp_evento, n_seq, det_evento_el, dh_evento):
+def _montar_evento(chave, cnpj, tp_evento, n_seq, det_evento_el, dh_evento, c_uf):
     """Monta o XML envEvento com um único evento."""
     id_evento = f'ID{tp_evento}{chave}{str(n_seq).zfill(2)}'
 
     evento = etree.Element(f'{{{NS}}}evento', versao='1.00')
     inf_ev = etree.SubElement(evento, f'{{{NS}}}infEvento', versao='1.00', Id=id_evento)
-    _texto(inf_ev, 'cOrgao', '91')   # 91 = SVRS (ambiente nacional)
+    _texto(inf_ev, 'cOrgao', c_uf)   # código da UF do emitente (mesmo valor usado em cUF na autorização/inutilização)
     _texto(inf_ev, 'tpAmb', NFE_AMBIENTE)
     _texto(inf_ev, 'CNPJ', cnpj)
     _texto(inf_ev, 'chNFe', chave)
@@ -164,7 +164,7 @@ def cancelar_nfe(dados):
     _texto(det, 'nProt', dados['protocolo_autorizacao'])
     _texto(det, 'xJust', just)
 
-    env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110111', 1, det, dh)
+    env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110111', 1, det, dh, emitente['c_uf'])
     resp_text, xml_evento = _enviar_evento(
         env_el, evento_el, id_evento, emitente,
         cert_pem, key_pem, cert_pem_path, key_pem_path
@@ -211,7 +211,7 @@ def corrigir_nfe(dados):
            'II - a correcao de dados cadastrais que implique mudanca do remetente ou do '
            'destinatario; III - a data de emissao ou de saida.')
 
-    env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110110', n_seq, det, dh)
+    env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110110', n_seq, det, dh, emitente['c_uf'])
     resp_text, xml_evento = _enviar_evento(
         env_el, evento_el, id_evento, emitente,
         cert_pem, key_pem, cert_pem_path, key_pem_path

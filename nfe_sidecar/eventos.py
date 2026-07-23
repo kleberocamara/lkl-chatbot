@@ -159,21 +159,27 @@ def cancelar_nfe(dados):
     )
     dh = _now_br()
 
-    det = etree.Element(f'{{{NS}}}detEvento', versao='1.00', nsmap={None: NS})
-    _texto(det, 'descEvento', 'Cancelamento')
-    _texto(det, 'nProt', dados['protocolo_autorizacao'])
-    _texto(det, 'xJust', just)
+    n_seq = int(dados.get('n_seq_evento', 1))
+    for _tentativa in range(3):
+        det = etree.Element(f'{{{NS}}}detEvento', versao='1.00', nsmap={None: NS})
+        _texto(det, 'descEvento', 'Cancelamento')
+        _texto(det, 'nProt', dados['protocolo_autorizacao'])
+        _texto(det, 'xJust', just)
 
-    env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110111', 1, det, dh, emitente['c_uf'])
-    resp_text, xml_evento = _enviar_evento(
-        env_el, evento_el, id_evento, emitente,
-        cert_pem, key_pem, cert_pem_path, key_pem_path
-    )
+        env_el, evento_el, id_evento = _montar_evento(chave, cnpj, '110111', n_seq, det, dh, emitente['c_uf'])
+        resp_text, xml_evento = _enviar_evento(
+            env_el, evento_el, id_evento, emitente,
+            cert_pem, key_pem, cert_pem_path, key_pem_path
+        )
 
-    c_stat, x_motivo, n_prot = _parsear_retorno_evento(resp_text)
-    if c_stat in ('135', '155'):
-        return {'status': 'cancelada', 'c_stat': c_stat, 'x_motivo': x_motivo,
-                'protocolo': n_prot, 'xml_evento': xml_evento}
+        c_stat, x_motivo, n_prot = _parsear_retorno_evento(resp_text)
+        if c_stat == '573':   # Duplicidade de Evento: já existe registro com este nSeqEvento — tenta o próximo
+            n_seq += 1
+            continue
+        if c_stat in ('135', '155'):
+            return {'status': 'cancelada', 'c_stat': c_stat, 'x_motivo': x_motivo,
+                    'protocolo': n_prot, 'xml_evento': xml_evento}
+        return {'status': 'rejeitado', 'c_stat': c_stat, 'x_motivo': x_motivo, 'xml_evento': xml_evento}
     return {'status': 'rejeitado', 'c_stat': c_stat, 'x_motivo': x_motivo, 'xml_evento': xml_evento}
 
 

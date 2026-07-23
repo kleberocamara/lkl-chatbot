@@ -200,7 +200,7 @@ def gerar_danfe(xml_str, output_path):
     dups = []
     if cobr is not None:
         for dup in cobr.findall(f'{{{NS}}}dup'):
-            dups.append((_find(dup, 'nDup'), _find(dup, 'dVenc'), _fmt_val(_find(dup, 'vDup'))))
+            dups.append((_find(dup, 'nDup'), _fmt_data(_find(dup, 'dVenc')), _fmt_val(_find(dup, 'vDup'))))
 
     inf_adic = _find(root, 'infCpl')
 

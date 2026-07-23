@@ -12,9 +12,9 @@ from emitentes import EMITENTES, NFE_AMBIENTE
 NS = 'http://www.portalfiscal.inf.br/nfe'
 
 _URL_EVENTO_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
-_URL_EVENTO_PRD = 'https://nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
+_URL_EVENTO_PRD = 'https://nfe.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
 _URL_INUT_HOM   = 'https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
-_URL_INUT_PRD   = 'https://nfe.fazenda.gov.br/NfeInutilizacao4/NfeInutilizacao4.asmx'
+_URL_INUT_PRD   = 'https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
 
 _CA_BUNDLE = os.path.join(os.path.dirname(__file__), 'sefaz_ca_bundle.pem')
 

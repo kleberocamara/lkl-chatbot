@@ -39,7 +39,7 @@ EMITENTES = {
 }
 
 SEFAZ_URL = {
-    '1': 'https://nfe.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx',
+    '1': 'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
     '2': 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
 }
 

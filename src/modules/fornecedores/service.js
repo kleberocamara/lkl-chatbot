@@ -47,6 +47,18 @@ async function atualizar(id, dados) {
      dados.uf || null, dados.categoria || null, dados.status || null, id]
   );
   if (!r.rows[0]) return { erro: ['Fornecedor não encontrado'] };
+
+  // Bloquear um fornecedor (ex: boleto indevido) também cancela as contas a
+  // pagar pendentes que já tinham sido lançadas antes do bloqueio — senão a
+  // cobrança indevida continua ativa mesmo com o fornecedor bloqueado.
+  if (dados.status === 'bloqueado') {
+    await db.query(
+      `UPDATE contas_pagar SET status='cancelado', updated_at=NOW()
+       WHERE fornecedor_id=$1 AND status IN ('pendente','pendente_classificacao','vencido')`,
+      [id]
+    );
+  }
+
   return { fornecedor: r.rows[0] };
 }
 

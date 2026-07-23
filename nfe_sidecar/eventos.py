@@ -12,7 +12,7 @@ from emitentes import EMITENTES, NFE_AMBIENTE
 NS = 'http://www.portalfiscal.inf.br/nfe'
 
 _URL_EVENTO_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
-_URL_EVENTO_PRD = 'https://nfe.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
+_URL_EVENTO_PRD = 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx'
 _URL_INUT_HOM   = 'https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
 _URL_INUT_PRD   = 'https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
 

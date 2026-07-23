@@ -1,5 +1,8 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
 const { format } = require('date-fns');
 const OpenAI = require('openai');
 
@@ -66,14 +69,37 @@ function _validarDadosExtraidos(dados) {
 }
 
 // GPT-4o Vision rejeita PDF via image_url (só aceita png/jpeg/gif/webp) —
-// evita a chamada (custa tempo+tokens) e falha rápido com uma mensagem clara.
+// por isso convertemos a 1ª página do PDF pra JPEG antes de mandar pro OCR,
+// pra o fornecedor não precisar converter nada na mão.
 function _isPdf(absPath) {
   return path.extname(absPath).toLowerCase() === '.pdf';
 }
 
+function _pdfParaImagem(absPath) {
+  return new Promise((resolve) => {
+    const outBase = path.join(os.tmpdir(), `ocr-pdf-${crypto.randomBytes(8).toString('hex')}`);
+    execFile('pdftoppm', ['-jpeg', '-r', '150', '-singlefile', '-f', '1', '-l', '1', absPath, outBase], (err) => {
+      if (err) { console.error('[OCR] falha ao converter PDF em imagem:', err.message); resolve(null); return; }
+      const outPath = `${outBase}.jpg`;
+      resolve(fs.existsSync(outPath) ? outPath : null);
+    });
+  });
+}
+
+// Resolve o caminho de imagem a usar no OCR: converte PDF pra JPEG temporário
+// (removido logo em seguida) ou retorna o próprio caminho se já for imagem.
+async function _resolverImagem(absPath) {
+  if (!_isPdf(absPath)) return { imgPath: absPath, temporario: false };
+  const imgPath = await _pdfParaImagem(absPath);
+  if (!imgPath) return { imgPath: null, temporario: false };
+  return { imgPath, temporario: true };
+}
+
 async function extrairDadosComprovante(absPath) {
-  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
-  const dataUri = _dataUri(absPath);
+  const { imgPath, temporario } = await _resolverImagem(absPath);
+  if (!imgPath) { console.warn('[OCR] não foi possível ler o arquivo:', absPath); return null; }
+  const dataUri = _dataUri(imgPath);
+  if (temporario) fs.unlink(imgPath, () => {});
   let response;
   try {
     response = await openai.chat.completions.create({
@@ -113,8 +139,10 @@ Responda APENAS o JSON, sem texto adicional. Se não conseguir identificar um ca
 }
 
 async function extrairDadosNFCompra(absPath) {
-  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
-  const dataUri = _dataUri(absPath);
+  const { imgPath, temporario } = await _resolverImagem(absPath);
+  if (!imgPath) { console.warn('[OCR] não foi possível ler o arquivo:', absPath); return null; }
+  const dataUri = _dataUri(imgPath);
+  if (temporario) fs.unlink(imgPath, () => {});
   let response;
   try {
     response = await openai.chat.completions.create({
@@ -147,8 +175,10 @@ Responda APENAS o JSON. Se não conseguir ler algum campo, use null.`;
 }
 
 async function extrairLinhaDigitavel(absPath) {
-  if (_isPdf(absPath)) { console.warn('[OCR] PDF não suportado pela leitura automática:', absPath); return null; }
-  const dataUri = _dataUri(absPath);
+  const { imgPath, temporario } = await _resolverImagem(absPath);
+  if (!imgPath) { console.warn('[OCR] não foi possível ler o arquivo:', absPath); return null; }
+  const dataUri = _dataUri(imgPath);
+  if (temporario) fs.unlink(imgPath, () => {});
   let response;
   try {
     response = await openai.chat.completions.create({

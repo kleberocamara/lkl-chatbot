@@ -9,6 +9,13 @@ jest.mock('openai', () => jest.fn().mockImplementation(() => ({
 
 const { extrairDadosComprovante, _validarDadosExtraidos } = require('../src/modules/contas-pagar/ocr');
 
+// PDF de 1 página válido (mínimo) — usado nos testes que exercitam a conversão
+// real via pdftoppm antes do OCR.
+const PDF_MINIMO = Buffer.from(
+  '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 100 100]>>endobj\ntrailer<</Size 4/Root 1 0 R>>\n%%EOF\n'
+);
+
 describe('extrairDadosComprovante', () => {
   let tmpFile;
   beforeAll(() => {
@@ -93,9 +100,26 @@ describe('extrairDadosComprovante', () => {
     expect(promptEnviado).toMatch(/44\.448\.899\/0001-85/);
   });
 
-  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+  test('PDF é convertido em imagem antes de chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
     const tmpPdfFile = path.join(os.tmpdir(), 'comprovante-teste.pdf');
-    fs.writeFileSync(tmpPdfFile, Buffer.from('%PDF-1.4'));
+    fs.writeFileSync(tmpPdfFile, PDF_MINIMO);
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"fornecedor":"Papelaria X","parcelas":[{"valor":100,"vencimento":"2026-08-10"}]}' } }],
+    });
+    try {
+      const r = await extrairDadosComprovante(tmpPdfFile);
+      expect(r.fornecedor).toBe('Papelaria X');
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      const dataUri = mockCreate.mock.calls[0][0].messages[1].content[0].image_url.url;
+      expect(dataUri).toMatch(/^data:image\/jpeg;base64,/);
+    } finally {
+      fs.unlinkSync(tmpPdfFile);
+    }
+  });
+
+  test('PDF inválido (não renderizável) → null sem chamar a API', async () => {
+    const tmpPdfFile = path.join(os.tmpdir(), 'comprovante-invalido.pdf');
+    fs.writeFileSync(tmpPdfFile, Buffer.from('isso não é um PDF de verdade'));
     try {
       const r = await extrairDadosComprovante(tmpPdfFile);
       expect(r).toBeNull();
@@ -125,16 +149,19 @@ describe('extrairDadosNFCompra', () => {
     tmpNfFile = path.join(os.tmpdir(), 'nf-teste.jpg');
     fs.writeFileSync(tmpNfFile, Buffer.from([0xff, 0xd8, 0xff]));
     tmpNfPdfFile = path.join(os.tmpdir(), 'nf-teste.pdf');
-    fs.writeFileSync(tmpNfPdfFile, Buffer.from('%PDF-1.4'));
+    fs.writeFileSync(tmpNfPdfFile, PDF_MINIMO);
   });
   afterAll(() => { fs.unlinkSync(tmpNfFile); fs.unlinkSync(tmpNfPdfFile); });
   afterEach(() => jest.clearAllMocks());
 
-  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+  test('PDF é convertido em imagem antes de chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ nnf: '1', emitida_em: '2026-01-01', valor_total: 1, itens: [] }) } }],
+    });
     const { extrairDadosNFCompra } = require('../src/modules/contas-pagar/ocr');
     const r = await extrairDadosNFCompra(tmpNfPdfFile);
-    expect(r).toBeNull();
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(r.nnf).toBe('1');
+    expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
   test('extrai número, emissão e itens da NF a partir da imagem', async () => {
@@ -169,7 +196,7 @@ describe('extrairLinhaDigitavel', () => {
     tmpBoletoFile = path.join(os.tmpdir(), 'boleto-teste.jpg');
     fs.writeFileSync(tmpBoletoFile, Buffer.from([0xff, 0xd8, 0xff]));
     tmpBoletoPdfFile = path.join(os.tmpdir(), 'boleto-teste.pdf');
-    fs.writeFileSync(tmpBoletoPdfFile, Buffer.from('%PDF-1.4'));
+    fs.writeFileSync(tmpBoletoPdfFile, PDF_MINIMO);
   });
   afterAll(() => { fs.unlinkSync(tmpBoletoFile); fs.unlinkSync(tmpBoletoPdfFile); });
   afterEach(() => jest.clearAllMocks());
@@ -188,10 +215,13 @@ describe('extrairLinhaDigitavel', () => {
     expect(r.valor).toBe(425.00);
   });
 
-  test('PDF retorna null sem chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+  test('PDF é convertido em imagem antes de chamar a API — GPT-4o Vision não aceita PDF via image_url', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ linha_digitavel: '123', valor: 1, vencimento: '2026-01-01' }) } }],
+    });
     const { extrairLinhaDigitavel } = require('../src/modules/contas-pagar/ocr');
     const r = await extrairLinhaDigitavel(tmpBoletoPdfFile);
-    expect(r).toBeNull();
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(r.linha_digitavel).toBe('123');
+    expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 });

@@ -3719,12 +3719,16 @@ function renderNfeLista() {
 
 // ── NF-e AÇÕES ────────────────────────────────────────────────────────────────
 let _nfeItens = [];
+let _nfeDuplicatas = [];
 
 async function abrirEmitirNfe(orcId) {
   showModal('Emitir NF-e', '<p style="color:#888;font-size:13px">Carregando itens do orçamento…</p>', '640px');
   const orc = await api('/api/v2/orcamentos/' + orcId);
   if (!orc || orc.error) { showToast('Erro ao carregar orçamento'); return; }
   _nfeItens = orc.itens || [];
+  const totalNfe = _nfeItens.reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
+  const vencInicial = orc.boleto_vencimento ? new Date(orc.boleto_vencimento).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  _nfeDuplicatas = [{ numero: '001', vencimento: vencInicial, valor: totalNfe }];
 
   let ncmInputs = '<div style="margin-bottom:12px"><strong style="display:block;margin-bottom:8px;font-size:13px">NCM por item *</strong>';
   _nfeItens.forEach(item => {
@@ -3776,12 +3780,86 @@ async function abrirEmitirNfe(orcId) {
         <label style="font-size:12px">Espécie <input type="text" id="nfe-transp-especie" value="VOLUME" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box"></label>
       </div>
     </div>
+    <div style="border:1px solid #eee;border-radius:6px;padding:12px;margin-bottom:12px">
+      <strong style="display:block;margin-bottom:8px;font-size:13px">Condição de Pagamento (Duplicatas)</strong>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+        <label style="font-size:12px">Nº parcelas
+          <input type="number" id="nfe-dup-qtd" min="1" max="12" value="1" style="display:block;width:70px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
+        </label>
+        <label style="font-size:12px">Intervalo entre parcelas (dias)
+          <input type="number" id="nfe-dup-intervalo" min="1" value="30" style="display:block;width:100px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
+        </label>
+        <button type="button" class="btn btn-outline" onclick="gerarParcelasNfe()" style="padding:6px 10px">Gerar parcelas</button>
+      </div>
+      <div id="nfe-dup-area"></div>
+      <div id="nfe-dup-total" style="font-size:12px;margin-top:6px;color:#666"></div>
+    </div>
     <div id="nfe-resultado" style="margin-bottom:8px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" id="btn-emitir-nfe" onclick="submitEmitirNfe('${orcId}')">Emitir NF-e</button>
     </div>`;
   showModal('Emitir NF-e', html, '640px');
+  renderNfeDuplicatas();
+}
+
+function renderNfeDuplicatas() {
+  const area = document.getElementById('nfe-dup-area');
+  if (!area) return;
+  const totalNfe = _nfeItens.reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
+  const cols = '0.6fr 1fr 1fr auto';
+  const linhas = _nfeDuplicatas.map((d, idx) => `
+    <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;margin-bottom:6px">
+      <input value="${escHtml(d.numero)}" readonly style="padding:6px;border:1px solid #eee;border-radius:4px;font-size:12px;background:#f8f9fa;box-sizing:border-box">
+      <input type="date" value="${d.vencimento||''}" oninput="_nfeDuplicatas[${idx}].vencimento=this.value" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+      <input type="number" step="0.01" min="0" value="${d.valor!=null?Number(d.valor).toFixed(2):''}" oninput="_nfeDuplicatas[${idx}].valor=parseFloat(this.value)||0;renderNfeDuplicatasTotal()" style="padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+      <button type="button" onclick="removerParcelaNfe(${idx})" title="Remover parcela" style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer;font-size:12px">−</button>
+    </div>`).join('');
+  area.innerHTML = `
+    <div style="font-size:10px;color:#999;display:grid;grid-template-columns:${cols};gap:6px;margin-bottom:4px">
+      <span>Nº</span><span>Vencimento</span><span>Valor (R$)</span><span></span></div>
+    ${linhas || '<p style="font-size:12px;color:#999">Nenhuma parcela — venda à vista, sem duplicata na NF-e.</p>'}
+    <button type="button" onclick="adicionarParcelaNfe()" style="background:#43a047;border:none;border-radius:6px;color:white;font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer;margin-top:4px">+ Parcela</button>`;
+  renderNfeDuplicatasTotal(totalNfe);
+}
+
+function renderNfeDuplicatasTotal(totalNfe) {
+  const el = document.getElementById('nfe-dup-total');
+  if (!el) return;
+  if (totalNfe == null) totalNfe = _nfeItens.reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
+  const somaDup = _nfeDuplicatas.reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+  const diff = Math.round((somaDup - totalNfe) * 100) / 100;
+  const cor = Math.abs(diff) < 0.01 ? '#2e7d32' : '#c62828';
+  el.innerHTML = `Total dos itens: <b>R$ ${totalNfe.toFixed(2)}</b> · Soma das parcelas: <b style="color:${cor}">R$ ${somaDup.toFixed(2)}</b>${Math.abs(diff) >= 0.01 ? ` · <span style="color:${cor}">diferença de R$ ${diff.toFixed(2)}</span>` : ''}`;
+}
+
+function gerarParcelasNfe() {
+  const qtd = Math.max(1, parseInt(document.getElementById('nfe-dup-qtd')?.value) || 1);
+  const intervalo = Math.max(1, parseInt(document.getElementById('nfe-dup-intervalo')?.value) || 30);
+  const totalNfe = _nfeItens.reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
+  const valorBase = Math.floor((totalNfe / qtd) * 100) / 100;
+  const hoje = new Date();
+  _nfeDuplicatas = [];
+  let somaAcumulada = 0;
+  for (let i = 0; i < qtd; i++) {
+    const venc = new Date(hoje);
+    venc.setDate(venc.getDate() + intervalo * (i + 1));
+    const valor = i === qtd - 1 ? Math.round((totalNfe - somaAcumulada) * 100) / 100 : valorBase;
+    somaAcumulada += valor;
+    _nfeDuplicatas.push({ numero: String(i + 1).padStart(3, '0'), vencimento: venc.toISOString().split('T')[0], valor });
+  }
+  renderNfeDuplicatas();
+}
+
+function adicionarParcelaNfe() {
+  _nfeDuplicatas.push({ numero: String(_nfeDuplicatas.length + 1).padStart(3, '0'), vencimento: new Date().toISOString().split('T')[0], valor: 0 });
+  renderNfeDuplicatas();
+}
+
+function removerParcelaNfe(idx) {
+  _nfeDuplicatas.splice(idx, 1);
+  _nfeDuplicatas.forEach((d, i) => { d.numero = String(i + 1).padStart(3, '0'); });
+  renderNfeDuplicatas();
 }
 
 function toggleTransporteNfe() {
@@ -3815,6 +3893,7 @@ async function submitEmitirNfe(orcId) {
       quantidade: document.getElementById('nfe-transp-qtd')?.value,
       especie: document.getElementById('nfe-transp-especie')?.value,
     } : null,
+    duplicatas: _nfeDuplicatas.filter(d => d.vencimento && parseFloat(d.valor) > 0),
   };
   try {
     const data = await api('/api/v2/nfe/' + orcId + '/emitir', { method: 'POST', body: JSON.stringify(body) });

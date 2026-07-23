@@ -28,7 +28,7 @@ async function proximoNumero(cnpj) {
 }
 
 async function emitir(orcamentoId, body) {
-  const { cnpj_emitente, cfop, ncm_por_item, frete_por_conta, frete_valor, transportador } = body;
+  const { cnpj_emitente, cfop, ncm_por_item, frete_por_conta, frete_valor, transportador, duplicatas: duplicatasBody } = body;
 
   if (!cnpj_emitente || !cfop || !ncm_por_item) {
     return { erro: ['cnpj_emitente, cfop e ncm_por_item são obrigatórios'] };
@@ -76,8 +76,16 @@ async function emitir(orcamentoId, body) {
   const uf_dest = orc.uf || 'RJ';
   const c_mun_dest = C_MUN_CAPITAL[uf_dest] || '3301702';
 
-  const duplicatas = [];
-  if (orc.boleto_vencimento) {
+  let duplicatas = [];
+  if (Array.isArray(duplicatasBody) && duplicatasBody.length) {
+    duplicatas = duplicatasBody
+      .filter(d => d && d.vencimento && parseFloat(d.valor) > 0)
+      .map((d, idx) => ({
+        numero: String(d.numero || idx + 1).padStart(3, '0'),
+        vencimento: d.vencimento,
+        valor: parseFloat(d.valor),
+      }));
+  } else if (orc.boleto_vencimento) {
     duplicatas.push({
       numero: '001',
       vencimento: new Date(orc.boleto_vencimento).toISOString().split('T')[0],

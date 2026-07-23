@@ -4,6 +4,7 @@ const c6bank = require('../../services/c6bank');
 const { format, subDays } = require('date-fns');
 const fornecedorMatcher = require('./fornecedor-matcher');
 const classificador = require('./classificador');
+const { normalizarLinhaDigitavel } = require('./linha-digitavel');
 
 // ─── LEITURA ──────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ async function criar({ descricao, fornecedor, fornecedor_id, tipo_despesa_id, va
   if (!descricao || !tipo_despesa_id || !valor || !vencimento) {
     return { erro: ['descricao, tipo_despesa_id, valor e vencimento são obrigatórios'] };
   }
+  linha_digitavel = normalizarLinhaDigitavel(linha_digitavel);
   const colunas = ['descricao','fornecedor','fornecedor_id','tipo_despesa_id','valor','vencimento','tipo',
                     'linha_digitavel','pix_content','tipo_entrada','recorrente','recorrencia_dia',
                     'recorrencia_valor_fixo','observacao'];
@@ -282,9 +284,13 @@ async function sincronizarDDA() {
   for (const b of boletos) {
     if (!b.content) { ignorados++; continue; }
     try {
+      // O conteúdo do DDA vem como código de barras (44 dígitos); um boleto pode já
+      // ter sido cadastrado com a linha digitável (47 dígitos) lida por OCR de uma
+      // NF/comprovante — normaliza pra forma canônica antes de checar duplicidade.
+      const linhaNormalizada = normalizarLinhaDigitavel(b.content);
       const jaImportado = await query(
         `SELECT id FROM contas_pagar WHERE linha_digitavel = $1 AND status != 'cancelado'`,
-        [b.content]
+        [linhaNormalizada]
       );
       if (jaImportado.rows.length) { ignorados++; continue; }
 
@@ -539,6 +545,7 @@ async function gravarMemoriaFornecedor(fornecedorId, tipoDespesaId) {
 // mescla nela em vez de criar uma nova. Zero ou 2+ candidatas → cria nova (mais seguro
 // que arriscar mesclar errado).
 async function criarOuReconciliarContaPagar({ fornecedorId, fornecedorNome, valor, vencimento, descricao, tipoDespesaId, tipoEntrada, linhaDigitavel, tipo, competencia, parcelaGrupoId, parcelaNumero, parcelaTotal }) {
+  linhaDigitavel = normalizarLinhaDigitavel(linhaDigitavel);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

@@ -11,10 +11,12 @@ from emitentes import EMITENTES, NFE_AMBIENTE
 
 NS = 'http://www.portalfiscal.inf.br/nfe'
 
-_URL_EVENTO_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
-_URL_EVENTO_PRD = 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx'
-_URL_INUT_HOM   = 'https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
-_URL_INUT_PRD   = 'https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
+_URL_EVENTO_HOM   = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NFeRecepcaoEvento/NFeRecepcaoEvento4.asmx'
+_URL_EVENTO_PRD   = 'https://nfe.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx'
+_URL_INUT_HOM     = 'https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
+_URL_INUT_PRD     = 'https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx'
+_URL_CONSULTA_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'
+_URL_CONSULTA_PRD = 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'
 
 _CA_BUNDLE = os.path.join(os.path.dirname(__file__), 'sefaz_ca_bundle.pem')
 
@@ -141,6 +143,76 @@ def _enviar_evento(env_el, evento_el, id_evento, emitente, cert_pem, key_pem,
     return resp.text, env_bytes.decode('utf-8')
 
 
+def consultar_situacao(chave, cnpj):
+    """
+    Consulta a situação atual da NF-e direto na SEFAZ (NfeConsulta4).
+    Usada como fallback quando um evento retorna rejeição ambígua (573/580) —
+    nesses casos o evento pode já ter sido registrado numa tentativa anterior
+    e a rejeição só está confirmando isso, não indicando falha real.
+    Retorna {c_stat, x_motivo, cancelamento: {c_stat, x_motivo, protocolo} | None}
+    """
+    emitente = EMITENTES.get(cnpj)
+    if not emitente:
+        return None
+    cert_pem_path, key_pem_path, _, _ = _extrair_cert_key(emitente['cert_path'], emitente['cert_password'])
+
+    cons = (
+        f'<consSitNFe xmlns="{NS}" versao="4.00">'
+        f'<tpAmb>{NFE_AMBIENTE}</tpAmb><xServ>CONSULTAR</xServ><chNFe>{chave}</chNFe>'
+        f'</consSitNFe>'
+    )
+    soap = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+        ' xmlns:xsd="http://www.w3.org/2001/XMLSchema"'
+        ' xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+        '<soap12:Header>'
+        '<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">'
+        f'<cUF>{emitente["c_uf"]}</cUF><versaoDados>4.00</versaoDados>'
+        '</nfeCabecMsg>'
+        '</soap12:Header>'
+        '<soap12:Body>'
+        '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">'
+        + cons +
+        '</nfeDadosMsg>'
+        '</soap12:Body>'
+        '</soap12:Envelope>'
+    )
+    url = _URL_CONSULTA_PRD if NFE_AMBIENTE == '1' else _URL_CONSULTA_HOM
+    resp = requests.post(
+        url,
+        data=soap.encode('utf-8'),
+        headers={
+            'Content-Type': 'application/soap+xml; charset=utf-8',
+            'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF',
+        },
+        cert=(cert_pem_path, key_pem_path),
+        verify=_CA_BUNDLE,
+        timeout=30,
+    )
+    try:
+        root = etree.fromstring(resp.text.encode('utf-8'))
+    except etree.XMLSyntaxError:
+        return None
+
+    def find(scope, tag):
+        el = scope.find(f'.//{{{NS}}}{tag}')
+        return el.text if el is not None else None
+
+    ret = root.find(f'.//{{{NS}}}retConsSitNFe')
+    if ret is None:
+        return None
+    resultado = {'c_stat': find(ret, 'cStat'), 'x_motivo': find(ret, 'xMotivo'), 'cancelamento': None}
+    ret_evento = root.find(f'.//{{{NS}}}retEvento/{{{NS}}}infEvento')
+    if ret_evento is not None and find(ret_evento, 'tpEvento') == '110111':
+        resultado['cancelamento'] = {
+            'c_stat': find(ret_evento, 'cStat'),
+            'x_motivo': find(ret_evento, 'xMotivo'),
+            'protocolo': find(ret_evento, 'nProt'),
+        }
+    return resultado
+
+
 def cancelar_nfe(dados):
     """
     dados = {chave, cnpj_emitente, justificativa, protocolo_autorizacao}
@@ -175,13 +247,21 @@ def cancelar_nfe(dados):
         )
 
         c_stat, x_motivo, n_prot = _parsear_retorno_evento(resp_text)
-        import sys; print(f'[CANCELAR] tentativa n_seq={n_seq} c_stat={c_stat} x_motivo={x_motivo}', file=sys.stderr, flush=True)
         if c_stat == '573':   # Duplicidade de Evento: já existe registro com este nSeqEvento — tenta o próximo
             n_seq += 1
             continue
         if c_stat in ('135', '155'):
             return {'status': 'cancelada', 'c_stat': c_stat, 'x_motivo': x_motivo,
                     'protocolo': n_prot, 'xml_evento': xml_evento}
+        # Rejeição ambígua (ex: 573 esgotado, 580 "exige NF-e autorizada" porque já
+        # foi cancelada numa tentativa anterior) — confirma a situação real na SEFAZ
+        # antes de reportar falha.
+        if c_stat in ('573', '580'):
+            situacao = consultar_situacao(chave, cnpj)
+            canc = situacao and situacao.get('cancelamento')
+            if canc and canc.get('c_stat') in ('135', '155'):
+                return {'status': 'cancelada', 'c_stat': canc['c_stat'], 'x_motivo': canc['x_motivo'],
+                        'protocolo': canc['protocolo'], 'xml_evento': xml_evento}
         return {'status': 'rejeitado', 'c_stat': c_stat, 'x_motivo': x_motivo, 'xml_evento': xml_evento}
     return {'status': 'rejeitado', 'c_stat': c_stat, 'x_motivo': x_motivo, 'xml_evento': xml_evento}
 

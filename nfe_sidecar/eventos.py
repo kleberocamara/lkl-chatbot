@@ -73,7 +73,7 @@ def _montar_evento(chave, cnpj, tp_evento, n_seq, det_evento_el, dh_evento, c_uf
     """Monta o XML envEvento com um único evento."""
     id_evento = f'ID{tp_evento}{chave}{str(n_seq).zfill(2)}'
 
-    evento = etree.Element(f'{{{NS}}}evento', versao='1.00')
+    evento = etree.Element(f'{{{NS}}}evento', versao='1.00', nsmap={None: NS})
     inf_ev = etree.SubElement(evento, f'{{{NS}}}infEvento', versao='1.00', Id=id_evento)
     _texto(inf_ev, 'cOrgao', c_uf)   # código da UF do emitente (mesmo valor usado em cUF na autorização/inutilização)
     _texto(inf_ev, 'tpAmb', NFE_AMBIENTE)
@@ -85,7 +85,7 @@ def _montar_evento(chave, cnpj, tp_evento, n_seq, det_evento_el, dh_evento, c_uf
     _texto(inf_ev, 'verEvento', '1.00')
     inf_ev.append(det_evento_el)
 
-    env = etree.Element(f'{{{NS}}}envEvento', versao='1.00')
+    env = etree.Element(f'{{{NS}}}envEvento', versao='1.00', nsmap={None: NS})
     _texto(env, 'idLote', str(random.randint(1, 999999999999)))
     env.append(evento)
 
@@ -159,7 +159,7 @@ def cancelar_nfe(dados):
     )
     dh = _now_br()
 
-    det = etree.Element(f'{{{NS}}}detEvento', versao='1.00')
+    det = etree.Element(f'{{{NS}}}detEvento', versao='1.00', nsmap={None: NS})
     _texto(det, 'descEvento', 'Cancelamento')
     _texto(det, 'nProt', dados['protocolo_autorizacao'])
     _texto(det, 'xJust', just)
@@ -199,7 +199,7 @@ def corrigir_nfe(dados):
     )
     dh = _now_br()
 
-    det = etree.Element(f'{{{NS}}}detEvento', versao='1.00')
+    det = etree.Element(f'{{{NS}}}detEvento', versao='1.00', nsmap={None: NS})
     _texto(det, 'descEvento', 'Carta de Correcao')
     _texto(det, 'xCorrecao', correcao)
     _texto(det, 'xCondUso',

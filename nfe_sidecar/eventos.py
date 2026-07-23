@@ -42,14 +42,16 @@ def _parsear_retorno_evento(resp_xml):
     except etree.XMLSyntaxError as e:
         return '999', f'XML inválido SEFAZ: {e}', None
 
-    def find(tag):
-        el = root.find(f'.//{{{NS}}}{tag}')
+    def find(scope, tag):
+        el = scope.find(f'.//{{{NS}}}{tag}')
         return el.text if el is not None else None
 
-    inf_evento = root.find(f'.//{{{NS}}}infEvento')
+    # cStat do lote (retEnvEvento) é só "recebido/processado" — o resultado real do
+    # evento em si fica dentro de retEvento/infEvento, que precisa ser buscado à parte.
+    inf_evento = root.find(f'.//{{{NS}}}retEvento/{{{NS}}}infEvento')
     if inf_evento is not None:
-        return find('cStat'), find('xMotivo'), find('nProt')
-    return find('cStat'), find('xMotivo'), None
+        return find(inf_evento, 'cStat'), find(inf_evento, 'xMotivo'), find(inf_evento, 'nProt')
+    return find(root, 'cStat'), find(root, 'xMotivo'), None
 
 
 def _assinar_evento(evento_el, cert_pem, key_pem, id_evento):
@@ -173,6 +175,7 @@ def cancelar_nfe(dados):
         )
 
         c_stat, x_motivo, n_prot = _parsear_retorno_evento(resp_text)
+        import sys; print(f'[CANCELAR] tentativa n_seq={n_seq} c_stat={c_stat} x_motivo={x_motivo}', file=sys.stderr, flush=True)
         if c_stat == '573':   # Duplicidade de Evento: já existe registro com este nSeqEvento — tenta o próximo
             n_seq += 1
             continue

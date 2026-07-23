@@ -493,11 +493,15 @@ router.post('/:id/cobrar', requireRole('admin'), async (req, res) => {
       if (!orc?.cliente_celular) return;
       let msg;
       if (result.tipo === 'boleto') {
+        const boletos = result.boletos || [];
+        const parcelasTexto = boletos.map(b =>
+          `💰 *Valor${boletos.length > 1 ? ` (parcela ${b.parcela}/${boletos.length})` : ''}:* R$ ${b.valor.toFixed(2).replace('.', ',')}\n` +
+          `📅 *Vencimento:* ${new Date(b.vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}\n` +
+          `*Linha digitável:*\n${b.linhaDigitavel}` +
+          (b.pdfUrl ? `\nPDF: ${b.pdfUrl}` : '')
+        ).join('\n\n');
         msg = `Olá! Segue o boleto referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +
-              `💰 *Valor:* R$ ${result.valor.toFixed(2).replace('.', ',')}\n` +
-              `📅 *Vencimento:* ${new Date(result.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n` +
-              `*Linha digitável:*\n${result.linhaDigitavel}\n\n` +
-              (result.pdfUrl ? `PDF: ${result.pdfUrl}\n\n` : '') +
+              `${parcelasTexto}\n\n` +
               `Em caso de dúvidas, entre em contato conosco. Obrigado! 😊`;
       } else if (result.tipo === 'link_mp') {
         msg = `Olá! Segue o link de pagamento referente ao *Pedido #${orc.pedido_numero || orc.numero}* — Gráfica LKL.\n\n` +

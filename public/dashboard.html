@@ -5630,7 +5630,7 @@ function _pillPag(o) {
   const venc = (o.boletos_parcelas||[]).some(p => _diasAteHoje(p.vencimento) < 0);
   if (o.status_pagamento === 'aguardando_pagamento') return venc
     ? '<span style="font-size:11px;background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:20px">Vencida</span>'
-    : '<span style="font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:20px">Aguardando</span>';
+    : '<span style="font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:20px">Aguardando pagamento</span>';
   return '<span style="font-size:11px;background:#f1f1f1;color:#777;padding:2px 8px;border-radius:20px">Sem cobrança</span>';
 }
 function _iconeCob(o) { const t=o.tipo_cobranca; if (t==='boleto') return '🏷'; if (t==='pix') return '⚡'; if (t==='link_mp') return '💳'; return '💰'; }
@@ -5645,17 +5645,20 @@ function renderCobLista() {
   if (!list.length) { box.innerHTML = '<p style="color:#999;padding:20px">Nenhuma cobrança</p>'; return; }
   box.innerHTML = list.map(o => {
     const linha = (o.boletos_parcelas||[])[0]?.linha_digitavel;
+    const boletoPdfs = o.tipo_cobranca === 'boleto' ? (o.boletos_parcelas||[]).map(p =>
+      `<a class="btn btn-outline" href="/api/v2/orcamentos/${o.id}/boleto/${p.parcela}/pdf" target="_blank" style="padding:6px 8px;text-decoration:none">${(o.boletos_parcelas.length>1) ? 'Boleto '+p.parcela : 'Baixar boleto'}</a>`
+    ).join('') : '';
     let acoes;
-    if (o.status_pagamento === 'pago') acoes = '';
+    if (o.status_pagamento === 'pago') acoes = boletoPdfs;
     else if (o.status_pagamento === 'aguardando_pagamento') {
-      let ref = '';
+      let ref = boletoPdfs;
       if (o.tipo_cobranca === 'link_mp' && o.mp_checkout_url) {
         ref = `<a class="btn btn-outline" href="${o.mp_checkout_url}" target="_blank" rel="noopener" style="padding:6px 8px;text-decoration:none">Abrir link</a>`
             + `<button class="btn btn-outline" onclick="copiarLinha('${o.mp_checkout_url}')" style="padding:6px 8px">Copiar link</button>`;
       } else if (o.tipo_cobranca === 'pix' && o.pix_copia_cola) {
         ref = `<button class="btn btn-outline" onclick="copiarLinha('${o.pix_copia_cola}')" style="padding:6px 8px">Copiar PIX</button>`;
       } else if (linha) {
-        ref = `<button class="btn btn-outline" onclick="copiarLinha('${linha}')" style="padding:6px 8px">Copiar</button>`;
+        ref += `<button class="btn btn-outline" onclick="copiarLinha('${linha}')" style="padding:6px 8px">Copiar</button>`;
       }
       const cancela = o.tipo_cobranca === 'pix' ? 'pix/cancelar' : o.tipo_cobranca === 'link_mp' ? 'link_mp/cancelar' : 'boleto/cancelar';
       acoes = `${ref}<button class="btn btn-outline" onclick="cancelarCob('${o.id}','${cancela}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`;

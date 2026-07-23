@@ -204,7 +204,7 @@ async function criarParcelado({ descricao, fornecedor, fornecedor_id, tipo_despe
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$14)
          RETURNING *`,
         [`${descricao} (${i + 1}/${parcelas.length})`, fornecedor || null, fornecedor_id || null, tipo_despesa_id || null,
-         p.valor, p.vencimento, tipo || 'boleto', p.linha_digitavel || null,
+         p.valor, p.vencimento, tipo || 'boleto', normalizarLinhaDigitavel(p.linha_digitavel) || null,
          competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, statusInicial, observacao || null]
       );
       criadas.push(r.rows[0]);
@@ -259,7 +259,7 @@ async function converterEmParcelado(id, { descricao, fornecedor, fornecedor_id, 
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual','pendente',$13)
          RETURNING *`,
         [`${descricaoFinal} (${i + 1}/${parcelas.length})`, fornecedorFinal || null, fornecedorIdFinal || null,
-         tipoDespesaIdFinal, p.valor, p.vencimento, tipoFinal || 'boleto', p.linha_digitavel || null,
+         tipoDespesaIdFinal, p.valor, p.vencimento, tipoFinal || 'boleto', normalizarLinhaDigitavel(p.linha_digitavel) || null,
          competenciaFinal, parcelaGrupoId, i + 1, parcelas.length, observacaoFinal || null]
       );
       criadas.push(r.rows[0]);

@@ -29,6 +29,7 @@ router.use('/especificacoes', requireAuthApi, require('./especificacoes/router')
 router.use('/formatos', requireAuthApi, require('./formatos/router'));
 router.use('/nfe', requireAuthApi, require('./nfe/router'));
 router.use('/contas-pagar', requireAuthApi, require('./contas-pagar/router'));
+router.use('/conciliacao', requireAuthApi, require('./conciliacao/router'));
 router.use('/analises', requireAuthApi, require('./analises/router'));
 router.use('/users', requireAuthApi, require('./users/router'));
 router.use('/portal-fornecedor', require('./portal-fornecedor/router'));

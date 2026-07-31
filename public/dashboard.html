@@ -575,6 +575,7 @@
       <button class="btn btn-primary" id="btn-cp-lista" onclick="showSubPage('cp-lista')">📋 Lista</button>
       <button class="btn btn-outline" id="btn-cp-lote" onclick="showSubPage('cp-lote')">💳 Lote C6</button>
       <button class="btn btn-outline" id="btn-cp-historico" onclick="showSubPage('cp-historico')">🕓 Histórico</button>
+      <button class="btn btn-outline" id="btn-cp-conciliacao" onclick="showSubPage('cp-conciliacao')">🏦 Conciliação Bancária</button>
     </div>
     <div id="cp-lista">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px">
@@ -669,6 +670,50 @@
     </div>
 
     <div id="cp-historico" style="display:none"></div>
+
+    <div id="cp-conciliacao" style="display:none">
+      <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="cp-btn-sync-conciliacao" onclick="cpSincronizarConciliacao()">🔄 Conciliar agora (últimos 30 dias)</button>
+      </div>
+      <div id="cp-conciliacao-resumo" style="font-size:13px;color:#666;margin-bottom:16px"></div>
+
+      <h3 style="margin:16px 0 8px;font-size:15px">Extrato sem correspondência no sistema</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:8px">Entradas/saídas reais do banco que não bateram automaticamente com nenhuma conta a pagar/orçamento pago. Vincule manualmente ou ignore (ex: tarifa bancária).</p>
+      <div style="overflow-x:auto"><table class="data-table">
+        <thead><tr><th>Data</th><th>Direção</th><th>Título</th><th>Valor</th><th>Ações</th></tr></thead>
+        <tbody id="cp-tabela-conciliacao-pendentes"></tbody>
+      </table></div>
+
+      <h3 style="margin:24px 0 8px;font-size:15px">Pago no sistema sem entrada correspondente no extrato</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:8px">Contas marcadas como pagas/recebidas por aqui que ainda não apareceram no extrato do banco.</p>
+      <div style="overflow-x:auto"><table class="data-table">
+        <thead><tr><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Data</th></tr></thead>
+        <tbody id="cp-tabela-conciliacao-sem-banco"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- MODAL VINCULAR CONCILIAÇÃO -->
+  <div id="cp-modal-vincular" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:white;border-radius:14px;padding:28px;width:100%;max-width:420px">
+      <h2 style="font-size:18px;margin-bottom:20px">Vincular lançamento</h2>
+      <div style="margin-bottom:12px">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Tipo</label>
+        <select id="cp-v-tipo" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px">
+          <option value="conta_pagar">Conta a Pagar</option>
+          <option value="orcamento">Orçamento (recebimento)</option>
+        </select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">ID do registro no sistema</label>
+        <input type="text" id="cp-v-alvo-id" placeholder="Ex: 42 ou UUID do orçamento" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box">
+      </div>
+      <input type="hidden" id="cp-v-lancamento-id">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="cpFecharModalVincular()">Cancelar</button>
+        <button class="btn btn-primary" onclick="cpConfirmarVinculo()">Vincular</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL NOVA/EDITAR CONTA A PAGAR -->
@@ -1180,14 +1225,15 @@ function debounce(fn, ms) {
 }
 
 function showSubPage(id) {
-  ['cp-lista','cp-lote','cp-historico'].forEach(s => {
+  ['cp-lista','cp-lote','cp-historico','cp-conciliacao'].forEach(s => {
     document.getElementById(s).style.display = s === id ? '' : 'none';
     const btn = document.getElementById('btn-' + s);
     if (btn) { btn.classList.toggle('btn-primary', s === id); btn.classList.toggle('btn-outline', s !== id); }
   });
-  if (id === 'cp-lista')     loadContasPagar();
-  if (id === 'cp-lote')      cpCarregarLote();
-  if (id === 'cp-historico') loadHistoricoLotes();
+  if (id === 'cp-lista')       loadContasPagar();
+  if (id === 'cp-lote')        cpCarregarLote();
+  if (id === 'cp-historico')   loadHistoricoLotes();
+  if (id === 'cp-conciliacao') cpCarregarConciliacao();
 }
 
 const SUBNAV = {
@@ -2703,6 +2749,92 @@ async function cpReconciliar() {
   if (r && !r.error) { showToast(`✅ ${r.atualizadas} contas marcadas como pagas`); loadContasPagar(); }
 }
 
+async function cpCarregarConciliacao() {
+  const [pendentes, semBanco] = await Promise.all([
+    api('/api/v2/conciliacao/lancamentos?status=pendente'),
+    api('/api/v2/conciliacao/sem-correspondencia-banco'),
+  ]);
+  cpRenderConciliacaoPendentes(Array.isArray(pendentes) ? pendentes : []);
+  cpRenderConciliacaoSemBanco(semBanco && !semBanco.error ? semBanco : { contasPagar: [], orcamentos: [] });
+}
+
+function fmtMoeda(v) { return 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
+
+function cpRenderConciliacaoPendentes(lista) {
+  const tbody = document.getElementById('cp-tabela-conciliacao-pendentes');
+  if (!lista.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Nada pendente 🎉</td></tr>'; return; }
+  tbody.innerHTML = lista.map(l => `<tr>
+    <td>${new Date(l.entry_date).toLocaleDateString('pt-BR')}</td>
+    <td>${l.operation_type === 'OUTGOING' ? '⬆️ Saída' : '⬇️ Entrada'}</td>
+    <td>${escHtml(l.title || l.description || '—')}</td>
+    <td>${fmtMoeda(l.amount)}</td>
+    <td>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:11px" onclick="cpAbrirModalVincular(${l.id}, '${l.operation_type}')">Vincular</button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-left:4px;color:#dc2626" onclick="cpIgnorarLancamento(${l.id})">Ignorar</button>
+    </td>
+  </tr>`).join('');
+}
+
+function cpRenderConciliacaoSemBanco(d) {
+  const tbody = document.getElementById('cp-tabela-conciliacao-sem-banco');
+  const linhas = [
+    ...(d.contasPagar || []).map(c => ({ tipo: 'Conta a Pagar', descricao: c.descricao, valor: c.valor, data: c.pago_em })),
+    ...(d.orcamentos || []).map(o => ({ tipo: 'Orçamento #' + (o.numero || o.id), descricao: 'Recebimento', valor: o.total, data: o.pago_em })),
+  ];
+  if (!linhas.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">Tudo batido 🎉</td></tr>'; return; }
+  tbody.innerHTML = linhas.map(l => `<tr>
+    <td>${l.tipo}</td>
+    <td>${escHtml(l.descricao || '—')}</td>
+    <td>${fmtMoeda(l.valor)}</td>
+    <td>${l.data ? new Date(l.data).toLocaleDateString('pt-BR') : '—'}</td>
+  </tr>`).join('');
+}
+
+async function cpSincronizarConciliacao() {
+  const btn = document.getElementById('cp-btn-sync-conciliacao');
+  btn.disabled = true; btn.textContent = 'Conciliando…';
+  try {
+    const r = await api('/api/v2/conciliacao/sincronizar', { method: 'POST' });
+    if (r && !r.error) {
+      document.getElementById('cp-conciliacao-resumo').textContent =
+        `${r.total} lançamentos no extrato (${r.novos} novos) — ${r.saidasConciliadas} saídas e ${r.entradasConciliadas} entradas conciliadas automaticamente.`;
+      showToast('✅ Conciliação executada');
+    }
+    await cpCarregarConciliacao();
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 Conciliar agora (últimos 30 dias)';
+  }
+}
+
+function cpAbrirModalVincular(lancamentoId, operationType) {
+  document.getElementById('cp-v-lancamento-id').value = lancamentoId;
+  document.getElementById('cp-v-tipo').value = operationType === 'OUTGOING' ? 'conta_pagar' : 'orcamento';
+  document.getElementById('cp-v-alvo-id').value = '';
+  document.getElementById('cp-modal-vincular').style.display = 'flex';
+}
+
+function cpFecharModalVincular() {
+  document.getElementById('cp-modal-vincular').style.display = 'none';
+}
+
+async function cpConfirmarVinculo() {
+  const lancamentoId = document.getElementById('cp-v-lancamento-id').value;
+  const tipo = document.getElementById('cp-v-tipo').value;
+  const alvoId = document.getElementById('cp-v-alvo-id').value.trim();
+  if (!alvoId) { showToast('Informe o ID do registro'); return; }
+  const r = await api(`/api/v2/conciliacao/${lancamentoId}/vincular`, { method: 'POST', body: JSON.stringify({ tipo, alvo_id: alvoId }) });
+  if (r && !r.error) {
+    showToast('✅ Vinculado');
+    cpFecharModalVincular();
+    await cpCarregarConciliacao();
+  }
+}
+
+async function cpIgnorarLancamento(lancamentoId) {
+  const r = await api(`/api/v2/conciliacao/${lancamentoId}/ignorar`, { method: 'POST' });
+  if (r && !r.error) { showToast('Lançamento ignorado'); await cpCarregarConciliacao(); }
+}
+
 let cpEditandoId = null;
 
 function cpAbrirModalNova() {
@@ -3702,6 +3834,7 @@ function renderNfeLista() {
   box.innerHTML = list.map(o => {
     const acoes = o.nfe_status === 'autorizada'
       ? `<a class="btn btn-outline" href="/api/v2/nfe/danfe/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">DANFE</a>
+         <a class="btn btn-outline" href="/api/v2/nfe/xml/${o.nfe_id}" style="padding:6px 10px;text-decoration:none">XML</a>
          <button class="btn btn-outline" onclick="abrirCceNfe('${o.nfe_id}')" style="padding:6px 10px">CC-e</button>
          <button class="btn btn-outline" onclick="abrirCancelarNfe('${o.nfe_id}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`
       : `<button class="btn btn-primary" onclick="abrirEmitirNfe('${o.id}')" style="padding:6px 10px">Emitir NF-e</button>`;
@@ -3781,18 +3914,40 @@ async function abrirEmitirNfe(orcId) {
       </div>
     </div>
     <div style="border:1px solid #eee;border-radius:6px;padding:12px;margin-bottom:12px">
-      <strong style="display:block;margin-bottom:8px;font-size:13px">Condição de Pagamento (Duplicatas)</strong>
-      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
-        <label style="font-size:12px">Nº parcelas
-          <input type="number" id="nfe-dup-qtd" min="1" max="12" value="1" style="display:block;width:70px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
-        </label>
-        <label style="font-size:12px">Intervalo entre parcelas (dias)
-          <input type="number" id="nfe-dup-intervalo" min="1" value="30" style="display:block;width:100px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
-        </label>
-        <button type="button" class="btn btn-outline" onclick="gerarParcelasNfe()" style="padding:6px 10px">Gerar parcelas</button>
+      <strong style="display:block;margin-bottom:8px;font-size:13px">Condição de Pagamento</strong>
+      <div style="display:flex;gap:16px;margin-bottom:10px">
+        <label style="font-size:13px"><input type="radio" name="nfe-cond-pag" value="vista" onchange="toggleCondPagNfe()"> À vista</label>
+        <label style="font-size:13px"><input type="radio" name="nfe-cond-pag" value="prazo" checked onchange="toggleCondPagNfe()"> A prazo</label>
       </div>
-      <div id="nfe-dup-area"></div>
-      <div id="nfe-dup-total" style="font-size:12px;margin-top:6px;color:#666"></div>
+      <div id="nfe-vista-section" style="display:none">
+        <label style="font-size:12px">Forma de pagamento
+          <select id="nfe-forma-pagamento" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px">
+            <option value="01">Dinheiro</option>
+            <option value="17">PIX</option>
+            <option value="03">Cartão de Crédito</option>
+            <option value="04">Cartão de Débito</option>
+            <option value="18">Transferência Bancária</option>
+          </select>
+        </label>
+      </div>
+      <div id="nfe-prazo-section">
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+          <label style="font-size:12px">Nº parcelas
+            <input type="number" id="nfe-dup-qtd" min="1" max="12" value="1" style="display:block;width:70px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
+          </label>
+          <label style="font-size:12px">Intervalo entre parcelas (dias)
+            <input type="number" id="nfe-dup-intervalo" min="1" value="30" style="display:block;width:100px;margin-top:2px;padding:6px;border:1px solid #ddd;border-radius:4px">
+          </label>
+          <button type="button" class="btn btn-outline" onclick="gerarParcelasNfe()" style="padding:6px 10px">Gerar parcelas</button>
+        </div>
+        <div id="nfe-dup-area"></div>
+        <div id="nfe-dup-total" style="font-size:12px;margin-top:6px;color:#666"></div>
+      </div>
+    </div>
+    <div style="border:1px solid #eee;border-radius:6px;padding:12px;margin-bottom:12px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Informações Complementares (opcional)</label>
+      <textarea id="nfe-info-complementar" rows="3" placeholder="Texto livre a ser incluído no campo Informações Complementares da NF-e…"
+        style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
     </div>
     <div id="nfe-resultado" style="margin-bottom:8px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
@@ -3831,6 +3986,16 @@ function renderNfeDuplicatasTotal(totalNfe) {
   const diff = Math.round((somaDup - totalNfe) * 100) / 100;
   const cor = Math.abs(diff) < 0.01 ? '#2e7d32' : '#c62828';
   el.innerHTML = `Total dos itens: <b>R$ ${totalNfe.toFixed(2)}</b> · Soma das parcelas: <b style="color:${cor}">R$ ${somaDup.toFixed(2)}</b>${Math.abs(diff) >= 0.01 ? ` · <span style="color:${cor}">diferença de R$ ${diff.toFixed(2)}</span>` : ''}`;
+}
+
+function _condPagVistaNfe() {
+  return document.querySelector('input[name="nfe-cond-pag"]:checked')?.value === 'vista';
+}
+
+function toggleCondPagNfe() {
+  const vista = document.querySelector('input[name="nfe-cond-pag"]:checked')?.value === 'vista';
+  document.getElementById('nfe-vista-section').style.display = vista ? 'block' : 'none';
+  document.getElementById('nfe-prazo-section').style.display = vista ? 'none' : 'block';
 }
 
 function gerarParcelasNfe() {
@@ -3893,7 +4058,9 @@ async function submitEmitirNfe(orcId) {
       quantidade: document.getElementById('nfe-transp-qtd')?.value,
       especie: document.getElementById('nfe-transp-especie')?.value,
     } : null,
-    duplicatas: _nfeDuplicatas.filter(d => d.vencimento && parseFloat(d.valor) > 0),
+    duplicatas: _condPagVistaNfe() ? [] : _nfeDuplicatas.filter(d => d.vencimento && parseFloat(d.valor) > 0),
+    forma_pagamento: _condPagVistaNfe() ? document.getElementById('nfe-forma-pagamento')?.value : null,
+    info_complementar: document.getElementById('nfe-info-complementar')?.value?.trim() || null,
   };
   try {
     const data = await api('/api/v2/nfe/' + orcId + '/emitir', { method: 'POST', body: JSON.stringify(body) });
@@ -3903,7 +4070,8 @@ async function submitEmitirNfe(orcId) {
         ✅ <strong>NF-e Autorizada!</strong><br>
         Chave: <code style="font-size:11px">${escHtml(data.chave||'')}</code><br>
         Protocolo: ${escHtml(String(data.protocolo||''))}<br>
-        <a href="${data.danfe_url || '/api/v2/nfe/danfe/' + data.id}" target="_blank" style="color:#1976d2;margin-top:8px;display:inline-block">📄 Download DANFE</a>
+        <a href="${data.danfe_url || '/api/v2/nfe/danfe/' + data.id}" target="_blank" style="color:#1976d2;margin-top:8px;display:inline-block">📄 Download DANFE</a><br>
+        <a href="/api/v2/nfe/xml/${data.id}" style="color:#1976d2;display:inline-block">🧾 Download XML</a>
       </div>`;
       showToast('✅ NF-e autorizada');
       loadNfeMain();

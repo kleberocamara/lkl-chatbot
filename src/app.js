@@ -18,6 +18,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 global.io = io;
 require('./jobs/contas-pagar');
+require('./jobs/conciliacao');
 require('./jobs/conversas-inativas');
 
 // Revenda: sync diária às 04:00 (spawn do job em processo filho — Chromium fora do web)

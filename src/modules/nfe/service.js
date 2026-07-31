@@ -28,7 +28,7 @@ async function proximoNumero(cnpj) {
 }
 
 async function emitir(orcamentoId, body) {
-  const { cnpj_emitente, cfop, ncm_por_item, frete_por_conta, frete_valor, transportador, duplicatas: duplicatasBody } = body;
+  const { cnpj_emitente, cfop, ncm_por_item, frete_por_conta, frete_valor, transportador, duplicatas: duplicatasBody, info_complementar, forma_pagamento } = body;
 
   if (!cnpj_emitente || !cfop || !ncm_por_item) {
     return { erro: ['cnpj_emitente, cfop e ncm_por_item são obrigatórios'] };
@@ -76,21 +76,27 @@ async function emitir(orcamentoId, body) {
   const uf_dest = orc.uf || 'RJ';
   const c_mun_dest = C_MUN_CAPITAL[uf_dest] || '3301702';
 
+  // Pagamento à vista: o atendente marcou explicitamente forma_pagamento (dinheiro/pix/cartão/etc)
+  // — não envia duplicatas nem infere de orc.boleto_vencimento, senão SEFAZ rejeita (853) por
+  // misturar dados de cobrança com pagamento à vista.
+  const pagamentoVista = Boolean(forma_pagamento);
   let duplicatas = [];
-  if (Array.isArray(duplicatasBody) && duplicatasBody.length) {
-    duplicatas = duplicatasBody
-      .filter(d => d && d.vencimento && parseFloat(d.valor) > 0)
-      .map((d, idx) => ({
-        numero: String(d.numero || idx + 1).padStart(3, '0'),
-        vencimento: d.vencimento,
-        valor: parseFloat(d.valor),
-      }));
-  } else if (orc.boleto_vencimento) {
-    duplicatas.push({
-      numero: '001',
-      vencimento: new Date(orc.boleto_vencimento).toISOString().split('T')[0],
-      valor: itens.reduce((s, i) => s + parseFloat(i.valor_total || 0), 0),
-    });
+  if (!pagamentoVista) {
+    if (Array.isArray(duplicatasBody) && duplicatasBody.length) {
+      duplicatas = duplicatasBody
+        .filter(d => d && d.vencimento && parseFloat(d.valor) > 0)
+        .map((d, idx) => ({
+          numero: String(d.numero || idx + 1).padStart(3, '0'),
+          vencimento: d.vencimento,
+          valor: parseFloat(d.valor),
+        }));
+    } else if (orc.boleto_vencimento) {
+      duplicatas.push({
+        numero: '001',
+        vencimento: new Date(orc.boleto_vencimento).toISOString().split('T')[0],
+        valor: itens.reduce((s, i) => s + parseFloat(i.valor_total || 0), 0),
+      });
+    }
   }
 
   const numero = await proximoNumero(cnpj_emitente);
@@ -104,6 +110,8 @@ async function emitir(orcamentoId, body) {
     frete_valor: parseFloat(frete_valor) || 0,
     transportador: transportador || null,
     duplicatas,
+    forma_pagamento: pagamentoVista ? forma_pagamento : null,
+    info_complementar: (info_complementar || '').trim() || null,
     destinatario: {
       nome: orc.cliente_nome || 'NAO IDENTIFICADO',
       cpf_cnpj: (orc.cpf_cnpj || '').replace(/\D/g, ''),

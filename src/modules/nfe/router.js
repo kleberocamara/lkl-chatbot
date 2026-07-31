@@ -81,4 +81,21 @@ router.get('/danfe/:id', requireRole('admin', 'operador'), async (req, res) => {
   }
 });
 
+router.get('/xml/:id', requireRole('admin', 'operador'), async (req, res) => {
+  try {
+    const r = await require('../../db').query(
+      'SELECT xml, chave FROM nfe WHERE id = $1', [req.params.id]
+    );
+    if (!r.rows[0] || !r.rows[0].xml) {
+      return res.status(404).json({ error: 'XML não encontrado' });
+    }
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Disposition', `attachment; filename="NFe-${r.rows[0].chave}.xml"`);
+    res.send(r.rows[0].xml);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

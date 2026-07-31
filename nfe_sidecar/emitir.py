@@ -293,10 +293,19 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
             _texto(el_dup, 'vDup', f"{float(dup['valor']):.2f}")
 
     # pag
+    # SEFAZ rejeita (853) quando o bloco <cobr>/duplicatas é enviado junto com uma
+    # forma de pagamento que indica venda à vista (ex: dinheiro, pix, cartão) — nesses
+    # casos não pode haver cobr. Com duplicatas, usa tPag=15 (Boleto, a prazo); sem
+    # duplicatas, usa a forma de pagamento à vista informada pelo atendente.
+    # xPag (descrição livre) só é aceito quando tPag=99 "Outros" (rejeição 442
+    # "Descricao do pagamento nao permitida" nos demais códigos padronizados).
     pag = etree.SubElement(inf, f'{{{NS}}}pag')
     det_pag = etree.SubElement(pag, f'{{{NS}}}detPag')
-    _texto(det_pag, 'tPag', '99')  # outros
-    _texto(det_pag, 'xPag', 'A PRAZO')  # obrigatório quando tPag=99
+    if dados.get('duplicatas'):
+        _texto(det_pag, 'tPag', '15')  # boleto bancário
+    else:
+        t_pag = dados.get('forma_pagamento') or '90'
+        _texto(det_pag, 'tPag', t_pag)
     _texto(det_pag, 'vPag', f'{v_nf:.2f}')
 
     # infAdic

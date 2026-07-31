@@ -655,13 +655,35 @@ def gerar_danfe(xml_str, output_path):
         for j, ln in enumerate(lines):
             c.drawCentredString(cx + w / 2, start_y - j * lh, ln)
 
-    # Linhas de itens
-    item_h = 5 * mm
+    # Linhas de itens — a descrição quebra em várias linhas (sem truncar) e a
+    # altura da linha do item cresce conforme necessário para caber o texto inteiro.
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    desc_font, desc_size, desc_line_h = 'Helvetica', 6, 2.8 * mm
+    desc_col_w = COL_DEFS[1][1]
+
+    def _quebrar_desc(texto, max_w):
+        palavras = texto.split(' ')
+        linhas, atual = [], ''
+        for palavra in palavras:
+            candidato = f'{atual} {palavra}'.strip()
+            if stringWidth(candidato, desc_font, desc_size) <= max_w:
+                atual = candidato
+            else:
+                if atual:
+                    linhas.append(atual)
+                atual = palavra
+        if atual:
+            linhas.append(atual)
+        return linhas or ['']
+
+    min_item_h = 5 * mm
     # Espaço disponível até o bloco de dados adicionais (reservar ~28mm)
     adic_reserve = 28 * mm
     y_min = can_y + can_h + adic_reserve + 2 * mm
 
     for item in itens:
+        desc_linhas = _quebrar_desc(str(item.get('desc', '')), desc_col_w - 2 * mm)
+        item_h = max(min_item_h, len(desc_linhas) * desc_line_h + 2 * mm)
         if y - item_h < y_min:
             # TODO: multi-página (simplificado: continua na mesma)
             break
@@ -672,18 +694,21 @@ def gerar_danfe(xml_str, output_path):
             cx = col_xs[i]
             if i > 0:
                 c.line(cx, y, cx, y + item_h)
-            txt = vals[key]
             if key == 'desc':
-                # trunca para caber na coluna
-                max_chars = int(w / (3.5 * mm)) + 5
-                txt = txt[:max_chars]
+                c.setFont(desc_font, desc_size)
+                start_y = y + item_h - desc_line_h
+                for j, ln in enumerate(desc_linhas):
+                    c.drawString(cx + 1 * mm, start_y - j * desc_line_h, ln)
+                continue
+            txt = vals[key]
             c.setFont('Helvetica', 6)
+            ty = y + item_h / 2 - 1 * mm
             if align == 'right':
-                c.drawRightString(cx + w - 1 * mm, y + 1.5 * mm, txt)
+                c.drawRightString(cx + w - 1 * mm, ty, txt)
             elif align == 'center':
-                c.drawCentredString(cx + w / 2, y + 1.5 * mm, txt)
+                c.drawCentredString(cx + w / 2, ty, txt)
             else:
-                c.drawString(cx + 1 * mm, y + 1.5 * mm, txt)
+                c.drawString(cx + 1 * mm, ty, txt)
 
     # ---- DADOS ADICIONAIS ----
     adic_h = y - (can_y + can_h + 2 * mm)

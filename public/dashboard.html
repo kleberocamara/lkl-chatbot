@@ -870,6 +870,7 @@
       <div id="meta-barra"></div>
     </div>
     <div id="ag-insights" style="display:none">
+      <div id="ind-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:20px"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <div id="insight-data" style="font-size:12px;color:#777"></div>
         <button class="btn btn-primary" id="insight-btn" onclick="gerarInsightUI()">✨ Gerar nova análise</button>
@@ -5975,8 +5976,54 @@ function analisesSub(secao) {
   });
   if (secao === 'fluxo' && !_fluxoData) loadFluxo();
   if (secao === 'metas') { _initMetaPeriodo(); loadMeta(); }
-  if (secao === 'insights') loadInsight();
+  if (secao === 'insights') { loadIndicadores(); loadInsight(); }
 }
+
+function _indCard(titulo, numero, descricao, extra) {
+  return `<div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${titulo}</div>
+    <div style="font-size:22px;font-weight:700;margin-bottom:6px">${numero}</div>
+    ${descricao ? `<div style="font-size:12px;color:#666">${descricao}</div>` : ''}
+    ${extra || ''}
+  </div>`;
+}
+
+async function loadIndicadores() {
+  const box = document.getElementById('ind-cards');
+  const r = await api('/api/v2/analises/indicadores');
+  if (!r || r.error) { box.innerHTML = ''; return; }
+
+  const fatSerie = r.faturamento.serie.map(s => `${s.mes}: ${fmtMoedaAn(s.valor)}`).join(' · ');
+  const metaTxt = r.faturamento.meta != null
+    ? `Meta do mês: ${fmtMoedaAn(r.faturamento.meta)} (${((r.faturamento.atual / r.faturamento.meta) * 100).toFixed(0)}%)`
+    : 'Meta do mês: não definida';
+
+  const margemPct = (r.margem_contribuicao.percentual * 100).toFixed(1);
+  const custosPct = (r.margem_contribuicao.custos_variaveis_pct * 100).toFixed(1);
+
+  const caixaSerie = r.caixa_operacional.serie.map(s => `${s.semana}: ${fmtMoedaAn(s.saldo)}`).join(' · ') || 'Sem lançamentos pagos nas últimas semanas';
+
+  const peValor = r.ponto_equilibrio.valor != null ? fmtMoedaAn(r.ponto_equilibrio.valor) : '—';
+  const peStatus = r.ponto_equilibrio.valor != null
+    ? (r.ponto_equilibrio.faturamento_atual >= r.ponto_equilibrio.valor ? '✅ Acima do ponto de equilíbrio' : '⚠️ Abaixo do ponto de equilíbrio')
+    : 'Sem margem suficiente para calcular';
+
+  const prazoRec = r.prazos.medio_recebimento != null ? r.prazos.medio_recebimento + ' dias' : '—';
+  const prazoPag = r.prazos.medio_pagamento != null ? r.prazos.medio_pagamento + ' dias' : '—';
+  const alertaPrazo = (r.prazos.medio_recebimento != null && r.prazos.medio_pagamento != null && r.prazos.medio_recebimento > r.prazos.medio_pagamento)
+    ? `<div style="margin-top:6px;font-size:12px;color:#dc2626">⚠️ Recebe ${r.prazos.medio_recebimento - r.prazos.medio_pagamento} dias depois do que paga</div>` : '';
+
+  box.innerHTML = [
+    _indCard('1. Faturamento', fmtMoedaAn(r.faturamento.atual), fatSerie, `<div style="margin-top:6px;font-size:12px;color:#666">${metaTxt}</div>`),
+    _indCard('2. Margem de Contribuição', margemPct + '%', `Custos variáveis: ${custosPct}%`),
+    _indCard('3. Lucro Líquido', fmtMoedaAn(r.lucro_liquido.lucro), `Margem: ${(r.lucro_liquido.percentual * 100).toFixed(1)}%`),
+    _indCard('4. Caixa Operacional', fmtMoedaAn(r.caixa_operacional.saldo_projetado_30d), caixaSerie, `<div style="margin-top:6px;font-size:12px;color:#666">Saldo projetado (30 dias)</div>`),
+    _indCard('5. Ponto de Equilíbrio', peValor, peStatus),
+    _indCard('6. Prazos', `${prazoRec} / ${prazoPag}`, 'Prazo médio de recebimento / pagamento', alertaPrazo),
+  ].join('');
+}
+
+function fmtMoedaAn(v) { return 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
 function _renderInsightMd(txt) {
   let h = (txt || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -6000,6 +6047,7 @@ async function gerarInsightUI() {
   if (!r || r.error || r.errors) { showToast('Erro: ' + (r?.error || r?.errors?.[0] || 'falha na IA')); box.textContent = 'Não foi possível gerar a análise.'; return; }
   box.innerHTML = _renderInsightMd(r.conteudo);
   document.getElementById('insight-data').textContent = 'Gerado em ' + new Date(r.gerado_em).toLocaleString('pt-BR');
+  loadIndicadores();
   showToast('✅ Análise gerada');
 }
 function _initMetaPeriodo() {

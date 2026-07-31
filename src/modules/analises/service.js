@@ -278,6 +278,106 @@ async function metaMes({ ano, mes } = {}) {
   return { ano, mes, meta, realizado, percentual };
 }
 
+// Meses (nome curto) pra série de faturamento, mais recente por último
+function _ultimosMeses(qtd) {
+  const hoje = new Date();
+  const out = [];
+  for (let i = qtd - 1; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    out.push({ ano: d.getFullYear(), mes: d.getMonth() + 1 });
+  }
+  return out;
+}
+
+const NOMES_MES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+
+// Consolida os 6 indicadores gerenciais (faturamento, margem de contribuição,
+// lucro líquido, caixa operacional, ponto de equilíbrio, prazos de recebimento
+// e pagamento) pra alimentar os cards de Insights e o prompt da IA.
+async function indicadores({ ano, mes } = {}) {
+  const n = new Date();
+  ano = ano ? parseInt(ano) : n.getFullYear();
+  mes = mes ? parseInt(mes) : (n.getMonth() + 1);
+  const { inicio, fim } = _intervaloMes(ano, mes);
+
+  const d = await dre({ inicio, fim });
+  const linha = id => d.linhas.find(l => l.id === id) || { valor: 0 };
+
+  const receita_bruta = linha('receita_bruta').valor;
+  const receita_liquida = linha('receita_liquida').valor;
+  const margem_contribuicao = linha('margem_contribuicao').valor;
+  const lucro_liquido = linha('lucro_liquido').valor;
+  const custosVariaveis = receita_liquida - margem_contribuicao; // cpv + desp. comerciais, em valor positivo
+  const margem_pct = receita_liquida > 0 ? margem_contribuicao / receita_liquida : 0;
+
+  const custosFixosProducao = linha('custos_fixos_producao').valor;
+  const despesasOperacionais = linha('despesas_operacionais').valor;
+  const custos_fixos = -(custosFixosProducao + despesasOperacionais);
+  const ponto_equilibrio = margem_pct > 0 ? custos_fixos / margem_pct : null;
+
+  const totalDespesas = -d.linhas.filter(l => l.tipo === 'deducao').reduce((s, l) => s + l.valor, 0);
+
+  // 1) Faturamento — série dos últimos 4 meses + meta do mês corrente
+  const meses = _ultimosMeses(4);
+  const serieFaturamento = [];
+  for (const m of meses) {
+    const per = m.ano === ano && m.mes === mes ? d : await dre(_intervaloMes(m.ano, m.mes));
+    serieFaturamento.push({
+      mes: NOMES_MES[m.mes - 1],
+      valor: (per.linhas.find(l => l.id === 'receita_bruta') || { valor: 0 }).valor,
+    });
+  }
+  const meta = await metaMes({ ano, mes });
+
+  // 4) Caixa operacional — entradas/saídas REALIZADAS (já pagas) das últimas 4 semanas
+  const caixaR = await db.query(
+    `WITH entradas AS (
+       SELECT date_trunc('week', pago_em)::date AS semana, SUM(total) AS valor
+       FROM orcamentos WHERE status_pagamento='pago' AND pago_em >= CURRENT_DATE - INTERVAL '28 days'
+       GROUP BY 1
+     ), saidas AS (
+       SELECT date_trunc('week', pago_em)::date AS semana, SUM(valor) AS valor
+       FROM contas_pagar WHERE status='pago' AND pago_em >= CURRENT_DATE - INTERVAL '28 days'
+       GROUP BY 1
+     )
+     SELECT COALESCE(e.semana, s.semana) AS semana,
+            COALESCE(e.valor,0) AS entradas, COALESCE(s.valor,0) AS saidas
+     FROM entradas e FULL OUTER JOIN saidas s ON s.semana = e.semana
+     ORDER BY 1`
+  );
+  let saldoAcumulado = 0;
+  const serieCaixa = caixaR.rows.map((r, i) => {
+    saldoAcumulado += Number(r.entradas) - Number(r.saidas);
+    return { semana: `SEM ${i + 1}`, saldo: saldoAcumulado };
+  });
+  const proj30 = await fluxoCaixa({ dias: 30 });
+  const saldo_projetado_30d = proj30.total_entradas - proj30.total_saidas;
+
+  // 6) Prazos médios de recebimento/pagamento (dias), sobre o que foi pago no período
+  const prazoRecR = await db.query(
+    `SELECT AVG(pago_em::date - COALESCE(aprovado_em, created_at)::date) AS dias
+     FROM orcamentos WHERE status_pagamento='pago' AND pago_em::date BETWEEN $1 AND $2`,
+    [inicio, fim]
+  );
+  const prazoPagR = await db.query(
+    `SELECT AVG(pago_em::date - created_at::date) AS dias
+     FROM contas_pagar WHERE status='pago' AND pago_em::date BETWEEN $1 AND $2`,
+    [inicio, fim]
+  );
+  const prazo_medio_recebimento = prazoRecR.rows[0].dias != null ? Math.round(Number(prazoRecR.rows[0].dias)) : null;
+  const prazo_medio_pagamento = prazoPagR.rows[0].dias != null ? Math.round(Number(prazoPagR.rows[0].dias)) : null;
+
+  return {
+    periodo: { ano, mes, inicio, fim },
+    faturamento: { serie: serieFaturamento, atual: receita_bruta, meta: meta.meta },
+    margem_contribuicao: { valor: margem_contribuicao, percentual: margem_pct, custos_variaveis: custosVariaveis, custos_variaveis_pct: 1 - margem_pct },
+    lucro_liquido: { receita: receita_bruta, despesas: totalDespesas, lucro: lucro_liquido, percentual: d.margem_liquida },
+    caixa_operacional: { serie: serieCaixa, saldo_projetado_30d },
+    ponto_equilibrio: { valor: ponto_equilibrio, faturamento_atual: receita_bruta, custos_fixos },
+    prazos: { medio_recebimento: prazo_medio_recebimento, medio_pagamento: prazo_medio_pagamento },
+  };
+}
+
 const ANTHROPIC_MODEL = 'claude-haiku-4-5';
 
 async function _chamarClaude(system, user) {
@@ -298,35 +398,42 @@ async function _chamarClaude(system, user) {
 function _brl(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
 
 async function gerarInsight() {
-  const d = await dre({});
+  const ind = await indicadores({});
   const f = await fluxoCaixa({ dias: 90 });
-  const m = await metaMes({});
-  const periodo = `${d.periodo.inicio.slice(0, 7)}`;
+  const periodo = `${ind.periodo.inicio.slice(0, 7)}`;
 
-  const receitaBruta = d.linhas.find(l => l.id === 'receita_bruta').valor;
-  const lucroLiquido = d.linhas.find(l => l.id === 'lucro_liquido').valor;
-  const linhasDeducao = d.linhas.filter(l => l.tipo === 'deducao' && l.valor !== 0);
-  const totalDespesas = -linhasDeducao.reduce((s, l) => s + l.valor, 0);
-  const desp = linhasDeducao.map(x => `  - ${x.label}: ${_brl(-x.valor)}`).join('\n') || '  (sem despesas)';
+  const { faturamento, margem_contribuicao, lucro_liquido, caixa_operacional, ponto_equilibrio, prazos } = ind;
 
   const user =
-`Dados financeiros da Gráfica LKL (mês ${periodo}):
+`Dados financeiros da Gráfica LKL (mês ${periodo}), organizados nos 6 indicadores gerenciais:
 
-DRE (regime de competência):
-- Receita bruta: ${_brl(receitaBruta)}
-- Despesas totais: ${_brl(totalDespesas)}
-${desp}
-- Lucro líquido: ${_brl(lucroLiquido)} (margem ${(d.margem_liquida * 100).toFixed(1)}%)
+1) FATURAMENTO
+- Faturamento do mês: ${_brl(faturamento.atual)}
+- Meta do mês: ${faturamento.meta != null ? _brl(faturamento.meta) : 'não definida'}${faturamento.meta ? ` (${((faturamento.atual / faturamento.meta) * 100).toFixed(1)}% da meta)` : ''}
+- Últimos 4 meses: ${faturamento.serie.map(s => `${s.mes} ${_brl(s.valor)}`).join(', ')}
 
-Metas:
-- Meta do mês: ${m.meta != null ? _brl(m.meta) : 'não definida'}
-- Vendido (orçamentos aprovados): ${_brl(m.realizado)}${m.meta ? ` (${(m.percentual * 100).toFixed(1)}% da meta)` : ''}
+2) MARGEM DE CONTRIBUIÇÃO
+- Margem: ${(margem_contribuicao.percentual * 100).toFixed(1)}% (${_brl(margem_contribuicao.valor)})
+- Custos variáveis: ${(margem_contribuicao.custos_variaveis_pct * 100).toFixed(1)}% (${_brl(margem_contribuicao.custos_variaveis)})
 
-Fluxo de caixa (próx. 90 dias):
-- Total a receber: ${_brl(f.total_entradas)}
-- Total a pagar: ${_brl(f.total_saidas)}
+3) LUCRO LÍQUIDO
+- Receita: ${_brl(lucro_liquido.receita)}
+- Despesas + custos: ${_brl(lucro_liquido.despesas)}
+- Lucro líquido: ${_brl(lucro_liquido.lucro)} (${(lucro_liquido.percentual * 100).toFixed(1)}%)
+
+4) CAIXA OPERACIONAL
+- Saldo projetado (próx. 30 dias): ${_brl(caixa_operacional.saldo_projetado_30d)}
 - Atrasado a receber: ${_brl(f.atrasado_receber)}
 - Atrasado a pagar: ${_brl(f.atrasado_pagar)}
+
+5) PONTO DE EQUILÍBRIO
+- Ponto de equilíbrio: ${ponto_equilibrio.valor != null ? _brl(ponto_equilibrio.valor) : 'não calculável (sem margem)'}
+- Faturamento atual: ${_brl(ponto_equilibrio.faturamento_atual)}
+- ${ponto_equilibrio.valor != null && ponto_equilibrio.faturamento_atual >= ponto_equilibrio.valor ? 'Acima do ponto de equilíbrio' : 'Abaixo do ponto de equilíbrio'}
+
+6) PRAZOS DE RECEBIMENTO E PAGAMENTO
+- Prazo médio de recebimento: ${prazos.medio_recebimento != null ? prazos.medio_recebimento + ' dias' : 'sem dados no período'}
+- Prazo médio de pagamento: ${prazos.medio_pagamento != null ? prazos.medio_pagamento + ' dias' : 'sem dados no período'}
 
 Analise estes números e responda em português, de forma concisa e prática, em 3 blocos curtos:
 1) Situação atual
@@ -338,7 +445,7 @@ Analise estes números e responda em português, de forma concisa e prática, em
 
   const r = await db.query(
     `INSERT INTO insights_financeiros (periodo, conteudo, contexto) VALUES ($1,$2,$3) RETURNING gerado_em`,
-    [periodo, conteudo, JSON.stringify({ dre: d, fluxo: f, meta: m })]);
+    [periodo, conteudo, JSON.stringify({ indicadores: ind, fluxo: f })]);
   return { conteudo, gerado_em: r.rows[0].gerado_em, periodo };
 }
 
@@ -347,4 +454,4 @@ async function ultimoInsight() {
   return r.rows[0] || null;
 }
 
-module.exports = { dre, fluxoCaixa, salvarMeta, metaMes, gerarInsight, ultimoInsight };
+module.exports = { dre, fluxoCaixa, salvarMeta, metaMes, indicadores, gerarInsight, ultimoInsight };

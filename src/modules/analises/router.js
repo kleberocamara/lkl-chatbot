@@ -36,6 +36,14 @@ router.post('/metas', requireRole('admin', 'gestor', 'financeiro'), async (req, 
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+router.get('/indicadores', requireRole('admin', 'gestor', 'financeiro'), async (req, res) => {
+  try {
+    const result = await service.indicadores({ ano: req.query.ano, mes: req.query.mes });
+    if (result.erro) return res.status(400).json({ errors: result.erro });
+    res.json(result);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
 router.get('/insights', requireRole('admin', 'gestor', 'financeiro'), async (req, res) => {
   try {
     res.json(await service.ultimoInsight());

@@ -47,15 +47,15 @@ async function criar(dados) {
     `INSERT INTO clientes_lkl
      (tipo_pessoa, cpf_cnpj, nome, fantasia, email, celular, telefone, cep, logradouro, numero,
       bairro, cidade, uf, segmento, canal_origem, condicao_pagamento, limite_credito,
-      contribuinte_icms, status, score_completude, codigo_sisgraph)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+      contribuinte_icms, status, score_completude, codigo_sisgraph, ie)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      RETURNING *`,
     [dados.tipo_pessoa, dados.cpf_cnpj || null, dados.nome, dados.fantasia || null,
      dados.email || null, dados.celular || null, dados.telefone || null, dados.cep || null,
      dados.logradouro || null, dados.numero || null, dados.bairro || null, dados.cidade || null,
      dados.uf || null, dados.segmento || null, dados.canal_origem || 'balcao',
      dados.condicao_pagamento || null, dados.limite_credito || 0,
-     dados.contribuinte_icms || 'nao', 'ativo', score, dados.codigo_sisgraph || null]
+     dados.contribuinte_icms || 'nao', 'ativo', score, dados.codigo_sisgraph || null, dados.ie || null]
   );
   return { cliente: r.rows[0] };
 }
@@ -71,13 +71,13 @@ async function atualizar(id, dados) {
     `UPDATE clientes_lkl SET tipo_pessoa=$1, cpf_cnpj=$2, nome=$3, fantasia=$4, email=$5,
      celular=$6, telefone=$7, cep=$8, logradouro=$9, numero=$10, bairro=$11, cidade=$12, uf=$13,
      segmento=$14, condicao_pagamento=$15, limite_credito=$16, contribuinte_icms=$17,
-     status=$18, score_completude=$19, updated_at=NOW() WHERE id=$20 RETURNING *`,
+     status=$18, score_completude=$19, ie=$20, updated_at=NOW() WHERE id=$21 RETURNING *`,
     [merged.tipo_pessoa, merged.cpf_cnpj || null, merged.nome, merged.fantasia || null,
      merged.email || null, merged.celular || null, merged.telefone || null, merged.cep || null,
      merged.logradouro || null, merged.numero || null, merged.bairro || null, merged.cidade || null,
      merged.uf || null, merged.segmento || null, merged.condicao_pagamento || null,
      merged.limite_credito || 0, merged.contribuinte_icms || 'nao', merged.status || 'ativo',
-     score, id]
+     score, merged.ie || null, id]
   );
   return { cliente: r.rows[0] };
 }

@@ -30,17 +30,35 @@ function getAgent() {
   return _agent;
 }
 
-// Error wrapper
-async function c6Request(fn) {
-  try {
-    return await fn();
-  } catch (err) {
-    const body = err.response?.data;
-    const msg = body?.mensagem || body?.message || body?.detail
-      || (typeof body === 'string' ? body : null)
-      || err.message;
-    const status = err.response?.status ? ` (HTTP ${err.response.status})` : '';
-    throw new Error(`C6 Bank${status}: ${msg}`);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function _formatError(err) {
+  const body = err.response?.data;
+  const msg = body?.mensagem || body?.message || body?.detail
+    || (typeof body === 'string' ? body : null)
+    || err.message;
+  const status = err.response?.status ? ` (HTTP ${err.response.status})` : '';
+  if (err.response?.status === 401 || err.response?.status === 403) {
+    console.error(`[C6-DEBUG-${err.response.status}] url=`, err.config?.url, 'body=', JSON.stringify(body));
+  }
+  return new Error(`C6 Bank${status}: ${msg}`);
+}
+
+// C6 às vezes rejeita chamadas autenticadas com 401/403 de forma intermitente
+// mesmo com credenciais e token válidos — pede um token novo e tenta de novo
+// antes de desistir (até 3 tentativas no total).
+async function c6Request(buildFn) {
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      const token = await getAccessToken();
+      return await buildFn(token);
+    } catch (err) {
+      const status = err.response?.status;
+      const retryavel = status === 401 || status === 403;
+      if (tentativa === 3 || !retryavel) throw _formatError(err);
+      _tokenCache = { token: null, expiresAt: 0 };
+      await sleep(600 * tentativa);
+    }
   }
 }
 
@@ -61,10 +79,10 @@ async function _fetchToken() {
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
   });
-  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/auth/`, params.toString(), {
+  const res = await axios.post(`${BASE_URL}/v1/auth/`, params.toString(), {
     httpsAgent: getAgent(),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  }));
+  });
   const { access_token, expires_in } = res.data;
   _tokenCache = { token: access_token, expiresAt: Date.now() + (expires_in - 300) * 1000 };
   return access_token;
@@ -108,7 +126,6 @@ function gerarExternalId() {
  * @returns {{ id, externalId, boletoId, linhaDigitavel, barCode, pdfBase64, pdfUrl, dataVencimento }}
  */
 async function emitirBolepix({ seuNumero, nomeSacado, cpfCnpjSacado, email, valor, dataVencimento, endereco }) {
-  const token = await getAccessToken();
   const vencimento = dataVencimento || vencimentoPadrao();
 
   // external_reference_id: 1-10 chars [a-zA-Z0-9], único por emissão
@@ -143,7 +160,7 @@ async function emitirBolepix({ seuNumero, nomeSacado, cpfCnpjSacado, email, valo
     },
   };
 
-  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/bank_slips/`, body, {
+  const res = await c6Request((token) => axios.post(`${BASE_URL}/v1/bank_slips/`, body, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -165,8 +182,7 @@ async function emitirBolepix({ seuNumero, nomeSacado, cpfCnpjSacado, email, valo
  * Consulta boleto pelo id C6 Bank
  */
 async function consultarBoleto(boletoId) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/bank_slips/${boletoId}`, {
+  const res = await c6Request((token) => axios.get(`${BASE_URL}/v1/bank_slips/${boletoId}`, {
     httpsAgent: getAgent(),
     headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
   }));
@@ -177,10 +193,9 @@ async function consultarBoleto(boletoId) {
  * Cancela boleto pelo id C6 Bank
  */
 async function cancelarBoleto(boletoId) {
-  const token = await getAccessToken();
   // C6 (curl documentado): PUT /{id}/cancel SEM corpo, Content-Type x-www-form-urlencoded
   // (enviar corpo retorna "No request body is expected")
-  await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}/cancel`, undefined, {
+  await c6Request((token) => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}/cancel`, undefined, {
     httpsAgent: getAgent(),
     headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
   }));
@@ -191,8 +206,7 @@ async function cancelarBoleto(boletoId) {
  * changes: { due_date, amount, fine, interest, ... } conforme schema C6
  */
 async function alterarBoleto(boletoId, changes) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}`, changes, {
+  const res = await c6Request((token) => axios.put(`${BASE_URL}/v1/bank_slips/${boletoId}`, changes, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -204,13 +218,12 @@ async function alterarBoleto(boletoId, changes) {
  */
 async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, solicitacao }) {
   if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
-  const token = await getAccessToken();
   const cpfCnpj = cpfCnpjDevedor.replace(/\D/g, '');
   const devedor = cpfCnpj.length === 11
     ? { cpf: cpfCnpj, nome: nomeDevedor }
     : { cnpj: cpfCnpj, nome: nomeDevedor };
 
-  const res = await c6Request(() => axios.put(`${BASE_URL}/v2/pix/cob/${txid}`, {
+  const res = await c6Request((token) => axios.put(`${BASE_URL}/v2/pix/cob/${txid}`, {
     calendario: { expiracao: 86400 },
     devedor,
     valor: { original: valor.toFixed(2) },
@@ -232,8 +245,7 @@ async function criarPixCobranca({ txid, valor, nomeDevedor, cpfCnpjDevedor, soli
  * Cancela cobrança PIX imediata — PATCH /v2/pix/cob/{txid}
  */
 async function cancelarPixCobranca(txid) {
-  const token = await getAccessToken();
-  await c6Request(() => axios.patch(`${BASE_URL}/v2/pix/cob/${txid}`, {
+  await c6Request((token) => axios.patch(`${BASE_URL}/v2/pix/cob/${txid}`, {
     status: 'REMOVIDA_PELO_USUARIO_RECEBEDOR',
   }, {
     httpsAgent: getAgent(),
@@ -246,8 +258,7 @@ async function cancelarPixCobranca(txid) {
  * antes de dar baixa em pagamento a partir de um webhook (nunca confiar no body).
  */
 async function consultarPixCobranca(txid) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.get(`${BASE_URL}/v2/pix/cob/${txid}`, {
+  const res = await c6Request((token) => axios.get(`${BASE_URL}/v2/pix/cob/${txid}`, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -256,8 +267,7 @@ async function consultarPixCobranca(txid) {
 
 async function registrarWebhookPix(webhookUrl) {
   if (!PIX_KEY) throw new Error('C6_PIX_KEY não configurado');
-  const token = await getAccessToken();
-  await c6Request(() => axios.put(`${BASE_URL}/v2/pix/webhook/${PIX_KEY}`, { webhookUrl }, {
+  await c6Request((token) => axios.put(`${BASE_URL}/v2/pix/webhook/${PIX_KEY}`, { webhookUrl }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -266,8 +276,7 @@ async function registrarWebhookPix(webhookUrl) {
 // ─── Agendamento de Pagamentos ────────────────────────────────────────────
 
 async function consultarDDA() {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/schedule_payments/query`, {
+  const res = await c6Request((token) => axios.get(`${BASE_URL}/v1/schedule_payments/query`, {
     httpsAgent: getAgent(),
     headers: { ...authHeaders(token), 'Content-Type': 'application/x-www-form-urlencoded' },
   }));
@@ -275,8 +284,7 @@ async function consultarDDA() {
 }
 
 async function criarLote(items) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.post(`${BASE_URL}/v1/schedule_payments/decode`, { items }, {
+  const res = await c6Request((token) => axios.post(`${BASE_URL}/v1/schedule_payments/decode`, { items }, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -284,8 +292,7 @@ async function criarLote(items) {
 }
 
 async function consultarLote(groupId) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/schedule_payments/${groupId}/items`, {
+  const res = await c6Request((token) => axios.get(`${BASE_URL}/v1/schedule_payments/${groupId}/items`, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
@@ -293,16 +300,14 @@ async function consultarLote(groupId) {
 }
 
 async function removerItemLote(groupId, itemId) {
-  const token = await getAccessToken();
-  await c6Request(() => axios.delete(`${BASE_URL}/v1/schedule_payments/${groupId}/items/${itemId}`, {
+  await c6Request((token) => axios.delete(`${BASE_URL}/v1/schedule_payments/${groupId}/items/${itemId}`, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
   }));
 }
 
 async function submeterLote(groupId, uploaderName) {
-  const token = await getAccessToken();
-  await c6Request(() => axios.post(`${BASE_URL}/v1/schedule_payments/submit`, {
+  await c6Request((token) => axios.post(`${BASE_URL}/v1/schedule_payments/submit`, {
     group_id: groupId,
     uploader_name: uploaderName,
   }, {
@@ -312,8 +317,7 @@ async function submeterLote(groupId, uploaderName) {
 }
 
 async function consultarExtrato(startDate, endDate) {
-  const token = await getAccessToken();
-  const res = await c6Request(() => axios.get(`${BASE_URL}/v1/statement/`, {
+  const res = await c6Request((token) => axios.get(`${BASE_URL}/v1/statement/`, {
     httpsAgent: getAgent(),
     headers: authHeaders(token),
     params: { start_date: startDate, end_date: endDate },

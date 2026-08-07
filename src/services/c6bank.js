@@ -81,6 +81,12 @@ async function getAccessToken() {
   return _inflight;
 }
 
+// TTL do cache do token, em segundos — teste para descartar reuso prolongado de
+// token como causa do 401/403 intermitente (default reduzido: 60s em vez de
+// quase o expires_in inteiro do C6, pra aproximar o comportamento do processo
+// contínuo do de um script isolado, que sempre pede token novo).
+const TOKEN_TTL_SECONDS = parseInt(process.env.C6_TOKEN_TTL_SECONDS || '60', 10);
+
 async function _fetchToken() {
   const params = new URLSearchParams({
     grant_type: 'client_credentials',
@@ -92,7 +98,8 @@ async function _fetchToken() {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   const { access_token, expires_in } = res.data;
-  _tokenCache = { token: access_token, expiresAt: Date.now() + (expires_in - 300) * 1000 };
+  const ttlMs = Math.min(TOKEN_TTL_SECONDS, expires_in - 30) * 1000;
+  _tokenCache = { token: access_token, expiresAt: Date.now() + ttlMs };
   return access_token;
 }
 

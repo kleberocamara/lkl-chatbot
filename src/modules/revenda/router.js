@@ -18,6 +18,12 @@ router.get('/produtos', wrap(async (req, res) => res.json(await service.listarPr
 router.get('/produtos/:id', wrap(async (req, res) => {
   const p = await service.detalheProduto(req.params.id); if (!p) return res.status(404).json({ error: 'Produto não encontrado' }); res.json(p);
 }));
+router.post('/produtos', adminGestor, wrap(async (req, res) => {
+  const r = await service.criarProduto(req.body); if (r.erro) return res.status(400).json({ errors: r.erro }); res.status(201).json(r.item);
+}));
+router.put('/produtos/:id', adminGestor, wrap(async (req, res) => {
+  const r = await service.atualizarProduto(req.params.id, req.body); if (r.erro) return res.status(400).json({ errors: r.erro }); res.json(r.item);
+}));
 
 router.post('/sincronizar', adminGestor, wrap(async (req, res) => {
   const r = await service.dispararSync(); if (r.erro) return res.status(409).json({ errors: r.erro }); res.json({ ok: true });

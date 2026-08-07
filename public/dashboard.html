@@ -980,6 +980,23 @@
     <div id="pag-maq" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:16px;font-size:13px"></div>
   </div>
 
+  <!-- PRODUTO/SERVIÇO (catálogo de revenda) -->
+  <div class="page" id="page-produtos-revenda">
+    <div id="subnav-host-produtos-revenda"></div>
+    <div class="page-header">
+      <h1>🏷️ Produto/Serviço</h1>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input type="text" id="busca-prodrev-main" placeholder="Buscar por nome/ref..."
+          oninput="debouncedLoadProdutosRevenda()"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="abrirNovoProdutoRevenda()">+ Novo</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <div id="list-prodrev-main"><div style="text-align:center;padding:40px;color:#999">Carregando...</div></div>
+    </div>
+  </div>
+
   <div class="page" id="page-entradas">
     <div id="subnav-host-entradas"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -1244,13 +1261,14 @@ const SUBNAV = {
     { id: 'materiais',    label: 'Materiais',    roles: ['admin','gestor','analista'] },
     { id: 'funcionarios', label: 'Funcionários', roles: ['admin','gestor'] },
     { id: 'maquinas',     label: 'Máquinas',     roles: ['admin','gestor'] },
+    { id: 'produtos-revenda', label: 'Produto/Serviço', roles: ['admin','gestor'] },
   ],
   nfe: [
     { id: 'nfe',      label: 'Emissão',      roles: ['admin','gestor','financeiro'] },
     { id: 'entradas', label: 'Entrada NF-e', roles: ['admin','gestor'] },
   ],
 };
-const PAGE_GROUP = { clientes:'cadastros', fornecedores:'cadastros', materiais:'cadastros', funcionarios:'cadastros', maquinas:'cadastros', nfe:'nfe', entradas:'nfe' };
+const PAGE_GROUP = { clientes:'cadastros', fornecedores:'cadastros', materiais:'cadastros', funcionarios:'cadastros', maquinas:'cadastros', 'produtos-revenda':'cadastros', nfe:'nfe', entradas:'nfe' };
 function renderSubnav(pageId) {
   const group = PAGE_GROUP[pageId];
   const host = document.getElementById('subnav-host-' + pageId);
@@ -1287,6 +1305,7 @@ function showPage(page, el) {
     materiais:    () => loadMateriaisMain(1),
     funcionarios: () => loadFuncionariosMain(1),
     maquinas:     () => loadMaquinasMain(1),
+    'produtos-revenda': () => loadProdutosRevendaMain(),
     entradas:     () => loadEntradasMain(),
     usuarios:     loadUsuarios2,
     nfe:          () => loadNfeMain(),
@@ -3795,6 +3814,104 @@ function editarMaquina(m) {
     const r = await api(`/api/v2/maquinas/${m.id}`, { method:'PATCH', body: JSON.stringify(_bodyMaquina()) });
     if (r?.error || r?.errors) { showToast(r.error||(Array.isArray(r.errors)?r.errors.join(', '):'Erro ao salvar')); return; }
     showToast('✅ Máquina atualizada'); fecharModalCadastro(); loadMaquinasMain(_maqPag);
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+
+// ── PRODUTO/SERVIÇO (catálogo de revenda) ───────────────────────────────────────
+const TIPOS_SERVICO_PROD = ['OFFSET', 'COMUNICAÇAO VISUAL', 'IMP. DIGITAL'];
+const ESTRATEGIAS_PROD = ['manual', 'interno_m2', 'revenda_matriz'];
+let _prodRevCategorias = [];
+
+async function _carregarCategoriasProdRev() {
+  if (_prodRevCategorias.length) return _prodRevCategorias;
+  const r = await api('/api/v2/revenda/categorias');
+  _prodRevCategorias = Array.isArray(r) ? r : [];
+  return _prodRevCategorias;
+}
+
+const debouncedLoadProdutosRevenda = debounce(() => loadProdutosRevendaMain(), 400);
+
+async function loadProdutosRevendaMain() {
+  const el = document.getElementById('list-prodrev-main');
+  const q = document.getElementById('busca-prodrev-main')?.value || '';
+  const data = await api(`/api/v2/revenda/produtos?busca=${encodeURIComponent(q)}`);
+  if (!data || data.error) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Erro ao carregar</p>'; return; }
+  if (!data.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Nenhum produto</p>'; return; }
+  await _carregarCategoriasProdRev();
+  const catNome = id => _prodRevCategorias.find(c => c.id === id)?.nome || '—';
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Ref</th><th>Nome</th><th>Categoria</th><th>Tipo</th><th>Estratégia</th><th>Preço M²</th><th>Ação</th></tr></thead>
+    <tbody>${data.map(p => `<tr>
+      <td style="font-family:monospace;font-size:12px">${escHtml(p.ref||'—')}</td>
+      <td style="font-weight:600;font-size:12px">${escHtml(p.nome||'—')}</td>
+      <td style="font-size:11px">${escHtml(catNome(p.categoria_id))}</td>
+      <td style="font-size:11px">${escHtml(p.tipo_servico||'—')}</td>
+      <td style="font-size:11px">${escHtml(p.estrategia||'—')}</td>
+      <td style="text-align:right">${p.preco_m2 ? 'R$ ' + parseFloat(p.preco_m2).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'}</td>
+      <td><button onclick="editarProdutoRevenda(${JSON.stringify(p).replace(/"/g,'&quot;')})" style="background:#f5f5f5;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">✏️</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function _formProdutoRevenda(p = {}) {
+  const catOpts = _prodRevCategorias.map(c => `<option value="${c.id}" ${c.id===p.categoria_id?'selected':''}>${escHtml(c.nome)}</option>`).join('');
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${campoEdit('Ref *','pr-ref',p.ref,'text','oninput="this.value=this.value.toLowerCase()"')}
+      ${campoEdit('Produto/Serviço *','pr-nome',p.nome,'text','oninput="this.value=this.value.toUpperCase()"')}
+      <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">Categoria</label>
+        <select id="pr-categoria" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+          <option value="">— sem categoria —</option>${catOpts}
+        </select></div>
+      ${campoSelect('Tipo de Serviço','pr-tiposervico',p.tipo_servico,TIPOS_SERVICO_PROD)}
+      ${campoSelect('Estratégia de Preço','pr-estrategia',p.estrategia||'manual',ESTRATEGIAS_PROD)}
+      ${campoEdit('URL / Origem','pr-url',p.url||'LKL — Interno')}
+      ${campoEdit('Tamanho','pr-tamanho',p.tamanho)}
+      ${campoEdit('Cores','pr-cores',p.cores)}
+      ${campoEdit('Gramatura','pr-gramatura',p.gramatura)}
+      ${campoEdit('Bobina (grupo)','pr-bobina',p.bobina_grupo)}
+      ${campoEdit('Preço M² (R$)','pr-precom2',p.preco_m2,'number')}
+      ${campoEdit('Espaço de Corte (cm)','pr-espacocorte',p.espaco_corte_cm||0,'number')}
+    </div>`;
+}
+function _bodyProdutoRevenda() {
+  return {
+    ref: v('pr-ref').trim(), nome: v('pr-nome').trim(),
+    categoria_id: v('pr-categoria') || null,
+    tipo_servico: v('pr-tiposervico') || null,
+    estrategia: v('pr-estrategia') || 'manual',
+    url: v('pr-url') || null,
+    tamanho: v('pr-tamanho') || null,
+    cores: v('pr-cores') || null,
+    gramatura: v('pr-gramatura') || null,
+    bobina_grupo: v('pr-bobina') || null,
+    preco_m2: v('pr-precom2') ? parseFloat(v('pr-precom2')) : null,
+    espaco_corte_cm: parseFloat(v('pr-espacocorte')) || 0,
+  };
+}
+async function abrirNovoProdutoRevenda() {
+  await _carregarCategoriasProdRev();
+  document.getElementById('modal-cadastro-title').textContent = 'Novo Produto/Serviço';
+  document.getElementById('modal-cadastro-body').innerHTML = _formProdutoRevenda();
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('pr-ref').trim()) { showToast('Ref é obrigatório'); return; }
+    if (!v('pr-nome').trim()) { showToast('Nome é obrigatório'); return; }
+    const r = await api('/api/v2/revenda/produtos', { method:'POST', body: JSON.stringify(_bodyProdutoRevenda()) });
+    if (r?.error || r?.errors) { showToast(r.error||(Array.isArray(r.errors)?r.errors.join(', '):'Erro ao salvar')); return; }
+    showToast('✅ Produto/Serviço cadastrado'); fecharModalCadastro(); loadProdutosRevendaMain();
+  };
+  document.getElementById('modal-cadastro').style.display = 'block';
+}
+async function editarProdutoRevenda(p) {
+  await _carregarCategoriasProdRev();
+  document.getElementById('modal-cadastro-title').textContent = 'Editar Produto/Serviço — ' + p.nome;
+  document.getElementById('modal-cadastro-body').innerHTML = _formProdutoRevenda(p);
+  document.getElementById('modal-cadastro-save').onclick = async () => {
+    if (!v('pr-ref').trim()) { showToast('Ref é obrigatório'); return; }
+    if (!v('pr-nome').trim()) { showToast('Nome é obrigatório'); return; }
+    const r = await api(`/api/v2/revenda/produtos/${p.id}`, { method:'PUT', body: JSON.stringify(_bodyProdutoRevenda()) });
+    if (r?.error || r?.errors) { showToast(r.error||(Array.isArray(r.errors)?r.errors.join(', '):'Erro ao salvar')); return; }
+    showToast('✅ Produto/Serviço atualizado'); fecharModalCadastro(); loadProdutosRevendaMain();
   };
   document.getElementById('modal-cadastro').style.display = 'block';
 }

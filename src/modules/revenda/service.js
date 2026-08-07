@@ -37,6 +37,46 @@ async function detalheProduto(id) {
   return prod;
 }
 
+const ESTRATEGIAS_VALIDAS = ['revenda_matriz', 'interno_m2', 'manual'];
+
+async function criarProduto(d) {
+  if (!d.ref || !d.ref.trim()) return { erro: ['ref é obrigatório'] };
+  if (!d.nome || !d.nome.trim()) return { erro: ['nome é obrigatório'] };
+  const estrategia = d.estrategia || 'manual';
+  if (!ESTRATEGIAS_VALIDAS.includes(estrategia)) return { erro: ['estrategia inválida'] };
+  const existente = await db.query('SELECT id FROM revenda_produtos WHERE ref=$1', [d.ref.trim()]);
+  if (existente.rows.length) return { erro: ['Já existe um produto com essa ref'] };
+  const r = await db.query(
+    `INSERT INTO revenda_produtos
+     (ref, nome, categoria_id, url, tamanho, cores, gramatura, tipo_servico, estrategia, bobina_grupo, preco_m2, espaco_corte_cm, ativo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true) RETURNING *`,
+    [d.ref.trim(), d.nome.trim(), d.categoria_id || null, d.url || null, d.tamanho || null,
+     d.cores || null, d.gramatura || null, d.tipo_servico || null, estrategia,
+     d.bobina_grupo || null, d.preco_m2 || null, d.espaco_corte_cm ?? 0]
+  );
+  return { item: r.rows[0] };
+}
+
+async function atualizarProduto(id, d) {
+  if (d.estrategia && !ESTRATEGIAS_VALIDAS.includes(d.estrategia)) return { erro: ['estrategia inválida'] };
+  const r = await db.query(
+    `UPDATE revenda_produtos SET
+       ref=COALESCE($1,ref), nome=COALESCE($2,nome), categoria_id=COALESCE($3,categoria_id),
+       url=COALESCE($4,url), tamanho=COALESCE($5,tamanho), cores=COALESCE($6,cores),
+       gramatura=COALESCE($7,gramatura), tipo_servico=COALESCE($8,tipo_servico),
+       estrategia=COALESCE($9,estrategia), bobina_grupo=COALESCE($10,bobina_grupo),
+       preco_m2=COALESCE($11,preco_m2), espaco_corte_cm=COALESCE($12,espaco_corte_cm),
+       ativo=COALESCE($13,ativo)
+     WHERE id=$14 RETURNING *`,
+    [d.ref?.trim() || null, d.nome?.trim() || null, d.categoria_id || null, d.url || null,
+     d.tamanho || null, d.cores || null, d.gramatura || null, d.tipo_servico || null,
+     d.estrategia || null, d.bobina_grupo || null, d.preco_m2 ?? null, d.espaco_corte_cm ?? null,
+     d.ativo, id]
+  );
+  if (!r.rows[0]) return { erro: ['Produto não encontrado'] };
+  return { item: r.rows[0] };
+}
+
 // Sync
 async function statusSync() {
   return (await db.query('SELECT * FROM revenda_sync_log ORDER BY iniciado_em DESC LIMIT 1')).rows[0] || null;
@@ -169,7 +209,7 @@ async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_hor
 
 module.exports = {
   listarCategorias, criarCategoria, atualizarCategoria,
-  listarProdutos, detalheProduto,
+  listarProdutos, detalheProduto, criarProduto, atualizarProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
   precificarItemRevenda, pontuarSku, resolverProdutoRevenda, escolherFolheto, resolverFolheto,

@@ -14,20 +14,28 @@ const PIX_KEY = process.env.C6_PIX_KEY;
 // Carteira: 21=sandbox, 15=produção
 const BILLING_SCHEME = C6_ENV === 'production' ? '15' : '21';
 
-// mTLS agent
-let _agent = null;
+// mTLS agent — cria um Agent novo a cada chamada (sem cache) para forçar handshake
+// TLS/mTLS do zero em vez de reaproveitar sessão/conexão. O C6 (atrás de Cloudflare)
+// vem devolvendo 401/403 intermitente especificamente no processo de longa duração
+// que reaproveita o Agent — scripts isolados (Agent novo sempre) nunca reproduziram
+// o erro, então a suspeita é resumo/reuso de sessão TLS ficando dessincronizado
+// do lado do C6.
+const _certContent = { cert: null, key: null };
 function getAgent() {
-  if (!_agent) {
+  if (!_certContent.cert) {
     const certPath = process.env.C6_CERT_PATH;
     const keyPath = process.env.C6_KEY_PATH;
     if (!certPath || !keyPath) throw new Error('C6_CERT_PATH e C6_KEY_PATH não configurados');
-    _agent = new https.Agent({
-      cert: fs.readFileSync(certPath),
-      key: fs.readFileSync(keyPath),
-      rejectUnauthorized: true,
-    });
+    _certContent.cert = fs.readFileSync(certPath);
+    _certContent.key = fs.readFileSync(keyPath);
   }
-  return _agent;
+  return new https.Agent({
+    cert: _certContent.cert,
+    key: _certContent.key,
+    rejectUnauthorized: true,
+    keepAlive: false,
+    maxCachedSessions: 0,
+  });
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

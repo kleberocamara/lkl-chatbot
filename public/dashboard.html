@@ -5291,6 +5291,51 @@ function selectProduto(id, onchange) {
   </div>`;
 }
 
+function selectProdutoBusca(id) {
+  return `<div style="position:relative">
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">PRODUTO / SERVIÇO *</label>
+    <input type="text" id="${id}-busca" placeholder="Digite para buscar..." autocomplete="off"
+      style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box"
+      oninput="_produtoBuscaFiltrar('${id}')"
+      onfocus="_produtoBuscaFiltrar('${id}')"
+      onblur="setTimeout(()=>{ const l=document.getElementById('${id}-lista'); if (l) l.style.display='none'; }, 200)">
+    <input type="hidden" id="${id}" value="">
+    <div id="${id}-lista" style="position:absolute;left:0;right:0;z-index:30;background:white;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow:auto;display:none;margin-top:2px;box-shadow:0 6px 16px rgba(0,0,0,.12)"></div>
+  </div>`;
+}
+
+function _produtoBuscaOpcoes() {
+  const prod = PRODUTOS_LKL.map(p => ({ value: p.produto, label: p.produto }));
+  const serv = SERVICOS_LKL.map(s => ({ value: 'servico:' + s, label: '🧰 ' + s }));
+  const rev = (REVENDA_CATALOGO || []).map(p => ({ value: 'revenda:' + p.id, label: `🛰️ ${p.nome} [${p.ref}]` }));
+  return [...prod, ...serv, ...rev];
+}
+
+function _produtoBuscaFiltrar(id) {
+  const input = document.getElementById(id + '-busca');
+  const lista = document.getElementById(id + '-lista');
+  if (!input || !lista) return;
+  const q = input.value.trim().toUpperCase();
+  const opcoes = _produtoBuscaOpcoes().filter(o => o.label.toUpperCase().includes(q));
+  if (!opcoes.length) { lista.innerHTML = '<div style="padding:10px 12px;color:#999;font-size:12px">Nenhum resultado</div>'; lista.style.display = 'block'; return; }
+  lista.innerHTML = opcoes.slice(0, 60).map(o =>
+    `<div onmousedown="_produtoBuscaSelecionar('${id}', ${JSON.stringify(o.value)}, ${JSON.stringify(o.label)})"
+       style="padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f2f2f2" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='white'">${escHtml(o.label)}</div>`
+  ).join('');
+  lista.style.display = 'block';
+}
+
+function _produtoBuscaSelecionar(id, value, label) {
+  const hidden = document.getElementById(id);
+  const busca = document.getElementById(id + '-busca');
+  const lista = document.getElementById(id + '-lista');
+  if (hidden) hidden.value = value;
+  if (busca) busca.value = label;
+  if (lista) lista.style.display = 'none';
+  const tipoEl = document.getElementById(id.replace('produto', 'tipo'));
+  if (tipoEl) tipoEl.value = tipoPorProduto(value);
+}
+
 function campoTipoProd(id) {
   return `<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:#555;display:block;margin-bottom:4px">TIPO DE PRODUÇÃO</label>
@@ -5586,7 +5631,7 @@ function npItemRowHtml(i) {
         style="background:#e53935;border:none;border-radius:50%;width:22px;height:22px;color:white;font-size:15px;line-height:1;cursor:pointer">−</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      ${selectProduto('np-produto-' + i, "document.getElementById('np-tipo-" + i + "').value = tipoPorProduto(this.value)")}
+      ${selectProdutoBusca('np-produto-' + i)}
       ${campoTipoProd('np-tipo-' + i)}
     </div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:8px">

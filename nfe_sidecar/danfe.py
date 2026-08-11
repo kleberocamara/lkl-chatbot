@@ -481,7 +481,10 @@ def gerar_danfe(xml_str, output_path):
     c.line(M, y + dup_h - 5.5 * mm, M + CW, y + dup_h - 5.5 * mm)
 
     if dups:
-        max_cols = 4
+        # 3 colunas (não 4): com 4, o campo VALOR sobrava só ~6mm de largura e
+        # transbordava por cima do Nº DUPLICATA da coluna seguinte (ex: "1.532,10"
+        # colado em "002"). Com 3 colunas cada uma tem ~66mm, dando ~22mm pro valor.
+        max_cols = 3
         col_dup_w = CW / max_cols
         shown = dups[:max_cols * 2]
         for i, (nd, dv, vd) in enumerate(shown):

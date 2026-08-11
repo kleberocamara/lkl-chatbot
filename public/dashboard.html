@@ -5311,21 +5311,27 @@ function _produtoBuscaOpcoes() {
   return [...prod, ...serv, ...rev];
 }
 
+let _produtoBuscaUltimasOpcoes = [];
+
 function _produtoBuscaFiltrar(id) {
   const input = document.getElementById(id + '-busca');
   const lista = document.getElementById(id + '-lista');
   if (!input || !lista) return;
   const q = input.value.trim().toUpperCase();
-  const opcoes = _produtoBuscaOpcoes().filter(o => o.label.toUpperCase().includes(q));
+  const opcoes = _produtoBuscaOpcoes().filter(o => o.label.toUpperCase().includes(q)).slice(0, 60);
+  _produtoBuscaUltimasOpcoes = opcoes;
   if (!opcoes.length) { lista.innerHTML = '<div style="padding:10px 12px;color:#999;font-size:12px">Nenhum resultado</div>'; lista.style.display = 'block'; return; }
-  lista.innerHTML = opcoes.slice(0, 60).map(o =>
-    `<div onmousedown="_produtoBuscaSelecionar('${id}', ${JSON.stringify(o.value)}, ${JSON.stringify(o.label)})"
+  lista.innerHTML = opcoes.map((o, idx) =>
+    `<div onmousedown="_produtoBuscaSelecionar('${id}', ${idx})"
        style="padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f2f2f2" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='white'">${escHtml(o.label)}</div>`
   ).join('');
   lista.style.display = 'block';
 }
 
-function _produtoBuscaSelecionar(id, value, label) {
+function _produtoBuscaSelecionar(id, idx) {
+  const opcao = _produtoBuscaUltimasOpcoes[idx];
+  if (!opcao) return;
+  const { value, label } = opcao;
   const hidden = document.getElementById(id);
   const busca = document.getElementById(id + '-busca');
   const lista = document.getElementById(id + '-lista');

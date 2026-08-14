@@ -176,6 +176,7 @@ REGRAS:
    - Ao chamar registrar_pedido, preencha "impressao" ("4/0" ou "4/4") e "dobras" (0 para folheto/flyer; 1–3 para folder) no item.
 18. PEDIDO EM ABERTO — leia com atenção se o contexto trouxer "[PEDIDOS EM ABERTO]":
    - Antes de chamar registrar_pedido, verifique se a mensagem do cliente parece estar relacionada a um dos pedidos já em aberto listados (dúvida sobre arte, instalação, prazo, revisão, acompanhamento). Se sim, NÃO chame registrar_pedido — responda a dúvida normalmente, ou inclua [FALAR_HUMANO] se precisar de alguém da equipe.
+   - ATENÇÃO ESPECIAL: se a mensagem do cliente é uma RESPOSTA a uma pergunta feita pela equipe (ex.: "poderia confirmar a quantidade de X/Y?") sobre um pedido que já está na lista de [PEDIDOS EM ABERTO] com o(s) mesmo(s) produto(s), essa resposta é uma CORREÇÃO/COMPLEMENTO do pedido existente, NUNCA um pedido novo. Você NÃO tem uma função para editar um pedido já registrado — nesse caso, NÃO chame registrar_pedido; apenas confirme a informação recebida (ex.: "Entendido, 10 blocos de cada, obrigado!") e inclua [FALAR_HUMANO] para que a equipe atualize o pedido [número] manualmente.
    - Só chame registrar_pedido quando o cliente confirmar EXPLICITAMENTE que é um pedido novo e diferente dos listados. Se não tiver certeza, pergunte antes: "Isso é sobre o pedido [número] que você já tem com a gente, ou é um pedido novo?" Nesse caso, ao chamar registrar_pedido, preencha "pedido_novo_confirmado": true.`;
 
 const TOOLS = [

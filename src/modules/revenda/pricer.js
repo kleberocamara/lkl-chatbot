@@ -19,8 +19,16 @@ function calcularRevenda(ctx, opts) {
     .sort((a, b) => a.quantidade - b.quantidade);
   if (!doPrazo.length) return null;
 
-  const faixa = doPrazo.find((f) => f.quantidade >= qtd) || doPrazo[doPrazo.length - 1];
-  const base = Number(faixa.preco_total);
+  const faixaExata = doPrazo.find((f) => f.quantidade >= qtd);
+  // Quantidade pedida excede a maior faixa cadastrada: escala linearmente a partir do
+  // preço unitário da maior faixa em vez de tratar o preço da faixa como se cobrisse o
+  // pedido inteiro (bug anterior gerava preço muito abaixo do real para qtd > faixa máx).
+  const maiorFaixa = doPrazo[doPrazo.length - 1];
+  const extrapolado = !faixaExata;
+  const faixa = faixaExata || maiorFaixa;
+  const base = extrapolado
+    ? (Number(maiorFaixa.preco_total) / maiorFaixa.quantidade) * qtd
+    : Number(faixa.preco_total);
 
   const selecionados = new Set(opts.selecionados || []);
   const acab = (ctx.acabamentos || [])
@@ -29,18 +37,23 @@ function calcularRevenda(ctx, opts) {
 
   const markup = Number(ctx.markup_percent) || 0;
   const dobra = custoDobraMilheiro({
-    dobras: opts.dobras, quantidade: faixa.quantidade,
+    dobras: opts.dobras, quantidade: extrapolado ? qtd : faixa.quantidade,
     base: ctx.dobra_base != null ? ctx.dobra_base : 10,
     adicional: ctx.dobra_adicional != null ? ctx.dobra_adicional : 5,
   });
   const total = round2((base + acab + dobra) * (1 + markup / 100));
   const valor_unitario = round4(total / qtd);
-  const memoria = `Faixa ${faixa.quantidade}un/${prazo}h R$ ${round2(base)}`
-    + (acab ? ` + acab R$ ${round2(acab)}` : '')
-    + (dobra ? ` + dobra R$ ${round2(dobra)}` : '')
-    + ` ×(1+${markup}%) = R$ ${total} (un R$ ${valor_unitario})`;
+  const memoria = extrapolado
+    ? `Qtd ${qtd}un acima da maior faixa cadastrada (${maiorFaixa.quantidade}un/${prazo}h R$ ${round2(Number(maiorFaixa.preco_total))}) — escalado linearmente para R$ ${round2(base)}`
+      + (acab ? ` + acab R$ ${round2(acab)}` : '')
+      + (dobra ? ` + dobra R$ ${round2(dobra)}` : '')
+      + ` ×(1+${markup}%) = R$ ${total} (un R$ ${valor_unitario})`
+    : `Faixa ${faixa.quantidade}un/${prazo}h R$ ${round2(base)}`
+      + (acab ? ` + acab R$ ${round2(acab)}` : '')
+      + (dobra ? ` + dobra R$ ${round2(dobra)}` : '')
+      + ` ×(1+${markup}%) = R$ ${total} (un R$ ${valor_unitario})`;
 
-  return { valor_unitario, valor_total: total, memoria, faixa_usada: faixa.quantidade };
+  return { valor_unitario, valor_total: total, memoria, faixa_usada: faixa.quantidade, extrapolado };
 }
 
 function calcularInternoM2(ctx, item) {

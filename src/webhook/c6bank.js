@@ -44,7 +44,17 @@ async function handleC6Webhook(req, res) {
     // Formato PIX (padrão BACEN): { pix: [{ txid, valor, horario, ... }] }
     if (body.pix && Array.isArray(body.pix)) {
       for (const pagamento of body.pix) {
-        if (!pagamento.txid) continue;
+        // PIX recebido direto na conta (transferência avulsa, não uma cobrança nossa com
+        // QR Code) vem com txid vazio — não dá pra reconsultar por txid. Nesses casos a
+        // conciliação por extrato (valor + data) é quem identifica a qual orçamento
+        // pertence, então dispara a sincronização em vez de ignorar o pagamento.
+        if (!pagamento.txid) {
+          console.log('[C6-PIX] Pagamento sem txid (PIX direto) — delegando à conciliação por extrato. valor:', pagamento.valor);
+          require('../modules/conciliacao/service').sincronizar()
+            .then((r) => console.log('[C6-PIX] Conciliação pós-webhook:', JSON.stringify(r)))
+            .catch((e) => console.warn('[C6-PIX] Conciliação pós-webhook falhou:', e.message));
+          continue;
+        }
         let cobranca;
         try {
           cobranca = await c6bank.consultarPixCobranca(pagamento.txid);

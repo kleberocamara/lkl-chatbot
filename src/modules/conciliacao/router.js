@@ -38,6 +38,17 @@ router.get('/sem-correspondencia-banco', admin, async (req, res) => {
   }
 });
 
+router.get('/sugestoes-revisao', admin, async (req, res) => {
+  try {
+    const dias = req.query.dias ? parseInt(req.query.dias) : 90;
+    const r = await service.sugestoesRevisao({ dias });
+    res.json(r);
+  } catch (err) {
+    console.error('[CONCILIACAO]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.post('/:id/vincular', admin, async (req, res) => {
   try {
     const { tipo, alvo_id } = req.body || {};

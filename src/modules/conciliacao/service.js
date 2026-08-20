@@ -4,6 +4,46 @@ const c6bank = require('../../services/c6bank');
 const orcamentosService = require('../orcamentos/service');
 const { format, subDays } = require('date-fns');
 
+// Sufixos societários e conectivos que não ajudam a identificar quem pagou.
+const RUIDO_NOME = new Set([
+  'LTDA', 'ME', 'EPP', 'EIRELI', 'SA', 'S/A', 'MEI', 'CIA', 'COMPANHIA',
+  'DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM', 'THE',
+]);
+
+// Normaliza para comparação: sem acento, maiúsculas, só letras/números/espaço.
+function _normalizarNome(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Tokens significativos de um nome (>=4 chars, sem ruído societário).
+function _tokensNome(s) {
+  return _normalizarNome(s).split(' ').filter((t) => t.length >= 4 && !RUIDO_NOME.has(t));
+}
+
+// Extrai o nome do pagador do título do extrato ("Pix recebido de FULANO" → "FULANO").
+// Títulos genéricos ("CREDITO DE BOLETO") não têm pagador — retorna string vazia.
+function extrairPagador(title) {
+  const t = String(title || '');
+  const m = t.match(/(?:recebid[oa]|transferencia|transfer[êe]ncia)\s+d[eo]\s+(.+)$/i);
+  return m ? m[1].trim() : '';
+}
+
+// O pagador do extrato é plausivelmente o mesmo que o cliente do orçamento?
+// Basta um token significativo em comum — cobre "Contraste Marketing" vs
+// "CONTRASTE MARKENTING" (typo no cadastro) e "Andre Luis Alves" vs "André".
+function nomesCompativeis(pagador, cliente) {
+  const a = _tokensNome(pagador);
+  const b = _tokensNome(cliente);
+  if (!a.length || !b.length) return false;
+  const setB = new Set(b);
+  return a.some((t) => setB.has(t));
+}
+
 // Puxa o extrato C6, grava os lançamentos novos (idempotente por external_id)
 // e tenta conciliar automaticamente contra contas_pagar / orcamentos.
 async function sincronizar({ startDate, endDate } = {}) {
@@ -88,20 +128,34 @@ async function tentarConciliarEntrada(lanc) {
     }
   }
 
-  // 2) fallback: orçamento já pago (auditoria) ou aguardando pagamento sem parcela
-  // cadastrada (ex: PIX/link de pagamento) — bate pelo valor total do orçamento.
+  // 2) fallback: orçamento já pago (auditoria), aguardando pagamento sem parcela
+  // cadastrada (ex: PIX/link), ou ainda pendente — o cliente pode pagar por PIX
+  // direto antes de qualquer cobrança formal ser emitida.
   const candidatos = await query(
-    `SELECT id, status_pagamento FROM orcamentos
-     WHERE status_pagamento IN ('pago','aguardando_pagamento') AND total=$1
-       AND (pago_em IS NULL OR pago_em::date BETWEEN $2::date - INTERVAL '1 day' AND $2::date + INTERVAL '1 day')
-       AND id::text NOT IN (
+    `SELECT o.id, o.status_pagamento, c.nome AS cliente_nome
+     FROM orcamentos o
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE o.status_pagamento IN ('pago','aguardando_pagamento','pendente') AND o.total=$1
+       AND (o.pago_em IS NULL OR o.pago_em::date BETWEEN $2::date - INTERVAL '1 day' AND $2::date + INTERVAL '1 day')
+       AND o.id::text NOT IN (
          SELECT conciliado_id FROM extrato_lancamentos
          WHERE conciliado_tipo='orcamento' AND conciliado_id IS NOT NULL
        )`,
     [lanc.amount, lanc.entry_date]
   );
-  if (candidatos.rows.length !== 1) return false;
-  const alvo = candidatos.rows[0];
+  if (!candidatos.rows.length) return false;
+
+  // Orçamento 'pendente' não tem cobrança emitida ligando o pagamento a ele, então
+  // valor igual sozinho não é evidência suficiente (dois clientes podem dever o mesmo
+  // valor, ou um terceiro pode ter pago outra coisa). Só concilia automaticamente
+  // quando o nome do pagador no extrato também bate com o do cliente; caso contrário
+  // o lançamento fica pendente e aparece em sugestoesRevisao() para confirmação manual.
+  const pagador = extrairPagador(lanc.title);
+  const elegiveis = candidatos.rows.filter((o) =>
+    o.status_pagamento !== 'pendente' || nomesCompativeis(pagador, o.cliente_nome));
+  if (elegiveis.length !== 1) return false;
+
+  const alvo = elegiveis[0];
   if (alvo.status_pagamento !== 'pago') {
     await query(
       `UPDATE orcamentos SET status_pagamento='pago', pago_em=$1 WHERE id=$2`,
@@ -110,6 +164,41 @@ async function tentarConciliarEntrada(lanc) {
   }
   await marcarConciliado(lanc.id, 'orcamento', alvo.id, false);
   return true;
+}
+
+// Lançamentos que batem em valor com algum orçamento em aberto, mas que NÃO foram
+// conciliados automaticamente (nome do pagador diverge, ou há mais de um candidato).
+// Alimenta a revisão manual: são palpites, nunca conciliações.
+async function sugestoesRevisao({ dias = 90 } = {}) {
+  const desde = format(subDays(new Date(), dias), 'yyyy-MM-dd');
+  const r = await query(
+    `SELECT e.id AS lancamento_id, e.entry_date, e.amount, e.title,
+            o.id AS orcamento_id, o.numero AS orcamento_numero,
+            o.status_pagamento, c.nome AS cliente_nome
+     FROM extrato_lancamentos e
+     JOIN orcamentos o ON o.total = e.amount
+     LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+     WHERE e.operation_type='INCOMING' AND e.status='pendente'
+       AND e.entry_date >= $1
+       AND o.status_pagamento <> 'pago'
+       AND o.id::text NOT IN (
+         SELECT conciliado_id FROM extrato_lancamentos
+         WHERE conciliado_tipo='orcamento' AND conciliado_id IS NOT NULL
+       )
+     ORDER BY e.entry_date DESC`,
+    [desde]
+  );
+  return r.rows.map((row) => {
+    const pagador = extrairPagador(row.title);
+    return {
+      ...row,
+      pagador: pagador || null,
+      nome_confere: nomesCompativeis(pagador, row.cliente_nome),
+      motivo: pagador
+        ? 'Nome do pagador não confere com o cliente — confirme antes de conciliar'
+        : 'Lançamento sem nome de pagador (ex: crédito de boleto) — confirme a qual orçamento pertence',
+    };
+  });
 }
 
 async function marcarConciliado(lancamentoId, tipo, alvoId, manual) {
@@ -171,6 +260,21 @@ async function vincularManual(lancamentoId, tipo, alvoId) {
   const alvo = await query(`SELECT id FROM ${tabela} WHERE id=$1`, [alvoId]);
   if (!alvo.rows[0]) return { erro: ['Registro alvo não encontrado'] };
 
+  // Vincular manualmente uma entrada do extrato a um orçamento é a confirmação de que
+  // aquele pagamento é dele — reflete isso no status, senão o orçamento continuaria
+  // aparecendo como não pago mesmo depois de conciliado.
+  if (tipo === 'orcamento') {
+    const lancData = await query('SELECT entry_date, operation_type FROM extrato_lancamentos WHERE id=$1', [lancamentoId]);
+    const l = lancData.rows[0];
+    if (l?.operation_type === 'INCOMING') {
+      await query(
+        `UPDATE orcamentos SET status_pagamento='pago', pago_em=$1
+         WHERE id=$2 AND status_pagamento <> 'pago'`,
+        [l.entry_date, alvoId]
+      );
+    }
+  }
+
   await marcarConciliado(lancamentoId, tipo, alvoId, true);
   return { ok: true };
 }
@@ -189,6 +293,9 @@ module.exports = {
   conciliarPendentes,
   listarLancamentos,
   semCorrespondenciaNoBanco,
+  sugestoesRevisao,
   vincularManual,
   ignorar,
+  extrairPagador,
+  nomesCompativeis,
 };

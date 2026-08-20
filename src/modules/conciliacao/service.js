@@ -1,6 +1,7 @@
 // src/modules/conciliacao/service.js
 const { query } = require('../../db');
 const c6bank = require('../../services/c6bank');
+const orcamentosService = require('../orcamentos/service');
 const { format, subDays } = require('date-fns');
 
 // Puxa o extrato C6, grava os lançamentos novos (idempotente por external_id)
@@ -64,11 +65,35 @@ async function tentarConciliarSaida(lanc) {
   return true;
 }
 
+// Tenta bater a entrada do extrato contra um pagamento já conhecido como pago, OU
+// contra uma cobrança ainda em aberto (parcela de boleto ou orçamento aguardando
+// pagamento) — nesse segundo caso, o lançamento do extrato é quem CONFIRMA o
+// pagamento no sistema (o webhook do C6 deveria fazer isso em tempo real, mas
+// se ele falhar/atrasar, a conciliação funciona como rede de segurança).
 async function tentarConciliarEntrada(lanc) {
+  // 1) bate contra uma parcela de boleto aguardando pagamento — a mais comum e mais
+  // precisa, já que casa pelo valor exato da parcela (não do orçamento inteiro).
+  const parcelas = await query(
+    `SELECT ob.id, ob.orcamento_id, ob.boleto_id
+     FROM orcamento_boletos ob
+     WHERE ob.status='aguardando' AND ob.valor=$1
+       AND ob.vencimento BETWEEN $2::date - INTERVAL '10 days' AND $2::date + INTERVAL '60 days'`,
+    [lanc.amount, lanc.entry_date]
+  );
+  if (parcelas.rows.length === 1 && parcelas.rows[0].boleto_id) {
+    const r = await orcamentosService.confirmarPagamento({ tipo: 'boleto', boletoId: parcelas.rows[0].boleto_id });
+    if (!r.erro) {
+      await marcarConciliado(lanc.id, 'orcamento', parcelas.rows[0].orcamento_id, false);
+      return true;
+    }
+  }
+
+  // 2) fallback: orçamento já pago (auditoria) ou aguardando pagamento sem parcela
+  // cadastrada (ex: PIX/link de pagamento) — bate pelo valor total do orçamento.
   const candidatos = await query(
-    `SELECT id FROM orcamentos
-     WHERE status_pagamento='pago' AND total=$1
-       AND pago_em::date BETWEEN $2::date - INTERVAL '1 day' AND $2::date + INTERVAL '1 day'
+    `SELECT id, status_pagamento FROM orcamentos
+     WHERE status_pagamento IN ('pago','aguardando_pagamento') AND total=$1
+       AND (pago_em IS NULL OR pago_em::date BETWEEN $2::date - INTERVAL '1 day' AND $2::date + INTERVAL '1 day')
        AND id::text NOT IN (
          SELECT conciliado_id FROM extrato_lancamentos
          WHERE conciliado_tipo='orcamento' AND conciliado_id IS NOT NULL
@@ -76,7 +101,14 @@ async function tentarConciliarEntrada(lanc) {
     [lanc.amount, lanc.entry_date]
   );
   if (candidatos.rows.length !== 1) return false;
-  await marcarConciliado(lanc.id, 'orcamento', candidatos.rows[0].id, false);
+  const alvo = candidatos.rows[0];
+  if (alvo.status_pagamento !== 'pago') {
+    await query(
+      `UPDATE orcamentos SET status_pagamento='pago', pago_em=$1 WHERE id=$2`,
+      [lanc.entry_date, alvo.id]
+    );
+  }
+  await marcarConciliado(lanc.id, 'orcamento', alvo.id, false);
   return true;
 }
 

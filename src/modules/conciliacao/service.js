@@ -113,10 +113,14 @@ async function tentarConciliarSaida(lanc) {
 async function tentarConciliarEntrada(lanc) {
   // 1) bate contra uma parcela de boleto aguardando pagamento — a mais comum e mais
   // precisa, já que casa pelo valor exato da parcela (não do orçamento inteiro).
+  // O boleto precisa ter sido emitido ATÉ a data do crédito: um boleto criado depois
+  // não pode ter originado um pagamento anterior a ele (sem essa checagem, valores
+  // que se repetem entre pedidos do mesmo cliente casavam com o boleto errado).
   const parcelas = await query(
     `SELECT ob.id, ob.orcamento_id, ob.boleto_id
      FROM orcamento_boletos ob
      WHERE ob.status='aguardando' AND ob.valor=$1
+       AND ob.criado_em::date <= $2::date
        AND ob.vencimento BETWEEN $2::date - INTERVAL '10 days' AND $2::date + INTERVAL '60 days'`,
     [lanc.amount, lanc.entry_date]
   );
@@ -140,6 +144,13 @@ async function tentarConciliarEntrada(lanc) {
        AND o.id::text NOT IN (
          SELECT conciliado_id FROM extrato_lancamentos
          WHERE conciliado_tipo='orcamento' AND conciliado_id IS NOT NULL
+       )
+       -- Se a cobrança formal foi emitida DEPOIS deste crédito e segue em aberto,
+       -- o crédito é de outra coisa: ninguém emite boleto para algo já recebido.
+       AND NOT EXISTS (
+         SELECT 1 FROM orcamento_boletos ob
+         WHERE ob.orcamento_id = o.id AND ob.status='aguardando'
+           AND ob.criado_em::date > $2::date
        )`,
     [lanc.amount, lanc.entry_date]
   );
@@ -279,6 +290,19 @@ async function vincularManual(lancamentoId, tipo, alvoId) {
   return { ok: true };
 }
 
+// Receita que entrou na conta mas não pertence à operação da LKL (ex: boletos
+// emitidos fora do sistema, pelo app do banco). Sai da fila de pendências sem ser
+// vinculada a nenhum orçamento — diferente de 'ignorado', que é para ruído/engano.
+async function marcarReceitaExterna(lancamentoId) {
+  const r = await query(
+    `UPDATE extrato_lancamentos SET status='receita_externa', updated_at=NOW()
+     WHERE id=$1 AND status='pendente' RETURNING id`,
+    [lancamentoId]
+  );
+  if (!r.rowCount) return { erro: ['Lançamento não encontrado ou já classificado'] };
+  return { ok: true };
+}
+
 async function ignorar(lancamentoId) {
   const r = await query(
     `UPDATE extrato_lancamentos SET status='ignorado', updated_at=NOW() WHERE id=$1 AND status='pendente' RETURNING id`,
@@ -295,6 +319,7 @@ module.exports = {
   semCorrespondenciaNoBanco,
   sugestoesRevisao,
   vincularManual,
+  marcarReceitaExterna,
   ignorar,
   extrairPagador,
   nomesCompativeis,

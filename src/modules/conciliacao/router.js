@@ -61,6 +61,17 @@ router.post('/:id/vincular', admin, async (req, res) => {
   }
 });
 
+router.post('/:id/receita-externa', admin, async (req, res) => {
+  try {
+    const r = await service.marcarReceitaExterna(req.params.id);
+    if (r.erro) return res.status(400).json({ erro: r.erro });
+    res.json(r);
+  } catch (err) {
+    console.error('[CONCILIACAO]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.post('/:id/ignorar', admin, async (req, res) => {
   try {
     const r = await service.ignorar(req.params.id);

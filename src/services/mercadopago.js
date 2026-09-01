@@ -24,7 +24,7 @@ function mpHeaders() {
  * @returns {{ preferenceId: string, checkoutUrl: string }}
  */
 async function criarPreference({ titulo, valor, orcamentoNumero, clienteNome, clienteEmail, maxParcelas }) {
-  const appUrl = process.env.APP_URL || 'https://chatbot.klebercamaraconsultoria.cloud';
+  const appUrl = process.env.APP_URL || 'https://app.graficalkl.com.br';
   const body = {
     items: [{
       title: titulo,

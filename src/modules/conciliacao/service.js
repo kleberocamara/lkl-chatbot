@@ -4,10 +4,30 @@ const c6bank = require('../../services/c6bank');
 const orcamentosService = require('../orcamentos/service');
 const { format, subDays } = require('date-fns');
 
-// Sufixos societários e conectivos que não ajudam a identificar quem pagou.
+// Sufixos societários, conectivos e — importante para esta base — o vocabulário
+// que se repete em TODO comitê eleitoral. Sem remover "ELEICAO/DEPUTADO/FEDERAL",
+// qualquer candidato casaria com qualquer outro só por compartilhar esses termos.
 const RUIDO_NOME = new Set([
   'LTDA', 'ME', 'EPP', 'EIRELI', 'SA', 'S/A', 'MEI', 'CIA', 'COMPANHIA',
   'DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM', 'THE',
+  'ELEICAO', 'ELEICOES', 'CANDIDATO', 'CANDIDATA', 'COMITE', 'PARTIDO',
+  'DEPUTADO', 'DEPUTADA', 'SENADOR', 'SENADORA', 'GOVERNADOR', 'GOVERNADORA',
+  'PRESIDENTE', 'VEREADOR', 'VEREADORA', 'PREFEITO', 'PREFEITA',
+  'FEDERAL', 'ESTADUAL', 'DISTRITAL', 'MUNICIPAL', 'NACIONAL',
+  '2022', '2024', '2026', '2028',
+]);
+
+// Sobrenomes muito frequentes: coincidir só nisso não identifica ninguém.
+// Foi o que fez "MATHEUS MOREIRA BORGES" casar com "AUREO LIDIO MOREIRA RIBEIRO".
+const SOBRENOME_COMUM = new Set([
+  'SILVA', 'SANTOS', 'SANTOS', 'SOUZA', 'SOUSA', 'OLIVEIRA', 'PEREIRA', 'LIMA',
+  'CARVALHO', 'FERREIRA', 'RODRIGUES', 'ALMEIDA', 'NASCIMENTO', 'COSTA', 'MARTINS',
+  'ARAUJO', 'MELO', 'MELLO', 'BARBOSA', 'RIBEIRO', 'ALVES', 'MOREIRA', 'CARDOSO',
+  'TEIXEIRA', 'CORREIA', 'CORREA', 'DIAS', 'CAMPOS', 'GOMES', 'VIEIRA', 'MONTEIRO',
+  'MENDES', 'FREITAS', 'BARROS', 'PINTO', 'MACHADO', 'ROCHA', 'FERNANDES',
+  'GONCALVES', 'RAMOS', 'LOPES', 'MARQUES', 'AZEVEDO', 'REIS', 'BATISTA',
+  'MIRANDA', 'CUNHA', 'CASTRO', 'ANDRADE', 'NUNES', 'MOURA', 'SANTANA',
+  'JUNIOR', 'NETO', 'FILHO', 'SOBRINHO',
 ]);
 
 // Normaliza para comparação: sem acento, maiúsculas, só letras/números/espaço.
@@ -34,14 +54,42 @@ function extrairPagador(title) {
 }
 
 // O pagador do extrato é plausivelmente o mesmo que o cliente do orçamento?
-// Basta um token significativo em comum — cobre "Contraste Marketing" vs
-// "CONTRASTE MARKENTING" (typo no cadastro) e "Andre Luis Alves" vs "André".
+// Exige um token realmente distintivo em comum, ou dois tokens quaisquer — um
+// sobrenome frequente sozinho não basta. Na conciliação financeira, deixar de
+// casar (revisão manual) custa muito menos que casar o pagamento no cliente
+// errado, então a regra é deliberadamente conservadora.
 function nomesCompativeis(pagador, cliente) {
   const a = _tokensNome(pagador);
   const b = _tokensNome(cliente);
-  if (!a.length || !b.length) return false;
   const setB = new Set(b);
-  return a.some((t) => setB.has(t));
+  const comuns = a.filter((t) => setB.has(t));
+  if (comuns.length >= 2) return true;
+  if (comuns.length === 1 && !SOBRENOME_COMUM.has(comuns[0])) return true;
+  return _iniciaisConferem(pagador, cliente);
+}
+
+// O PIX de comitê eleitoral costuma chegar com o nome abreviado em iniciais
+// ("ELEICAO M P B T D FEDERAL" para "Marcos Paulo Barbosa Tavares Deputado"),
+// caso em que não sobra nenhum token inteiro para comparar. Aqui as iniciais do
+// pagador são conferidas contra as iniciais do cliente, exigindo pelo menos três
+// em sequência — duas seriam genéricas demais para identificar alguém.
+function _iniciaisConferem(pagador, cliente) {
+  const somenteIniciais = _normalizarNome(pagador).split(' ')
+    .filter((t) => t.length === 1 && /[A-Z]/.test(t));
+  if (somenteIniciais.length < 3) return false;
+
+  const iniciaisCliente = _normalizarNome(cliente).split(' ')
+    .filter((t) => t.length >= 2 && !RUIDO_NOME.has(t) && /^[A-Z]/.test(t))
+    .map((t) => t[0]);
+  if (iniciaisCliente.length < 3) return false;
+
+  // as iniciais do pagador precisam aparecer, na ordem, dentro das do cliente
+  // (o sufixo "D FEDERAL"/"D ESTADUAL" do título é descartado no caminho)
+  let i = 0;
+  for (const ini of iniciaisCliente) {
+    if (i < somenteIniciais.length && somenteIniciais[i] === ini) i++;
+  }
+  return i >= 3 && i >= somenteIniciais.length - 1;
 }
 
 // Puxa o extrato C6, grava os lançamentos novos (idempotente por external_id)

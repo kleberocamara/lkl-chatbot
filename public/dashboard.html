@@ -5649,12 +5649,77 @@ function npItemRowHtml(i) {
       ${campoTipoProd('np-tipo-' + i)}
     </div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:8px">
-      ${campoEdit('QUANTIDADE', 'np-qtd-' + i, '', 'number', 'min="1"')}
+      ${campoEdit('QUANTIDADE', 'np-qtd-' + i, '', 'number', 'min="1" onchange="npChecarSugestaoTamanho(' + i + ')"')}
       <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase">Especificação</label>
         <input id="np-espec-${i}" type="text" placeholder="Ex: 1,20 x 0,80 M · COM ARTE" oninput="this.value=this.value.toUpperCase()"
+          onblur="npChecarSugestaoTamanho(${i})"
           style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;text-transform:uppercase"></div>
     </div>
+    <div id="np-sugestao-${i}" style="display:none;margin-top:8px"></div>
   </div>`;
+}
+
+// Consulta se existe um formato de catálogo ligeiramente menor e mais barato que o
+// que a peça pedida exige. A matriz da Graficonauta cobra por formato fechado, então
+// 1cm a mais pode dobrar o preço — vale oferecer a troca ao cliente antes de fechar.
+async function npChecarSugestaoTamanho(i) {
+  const box = document.getElementById('np-sugestao-' + i);
+  if (!box) return;
+  const produtoRaw = document.getElementById('np-produto-' + i)?.value || '';
+  const espec = document.getElementById('np-espec-' + i)?.value || '';
+  const qtd = parseInt(document.getElementById('np-qtd-' + i)?.value) || 0;
+  const dim = parseDimensoes(espec);
+  if (!produtoRaw || !qtd || !dim) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+  const produto = produtoRaw.startsWith('revenda:')
+    ? (REVENDA_CATALOGO.find(x => String(x.id) === produtoRaw.slice(8))?.nome || '')
+    : produtoRaw.replace(/^servico:/, '');
+
+  let r;
+  try {
+    r = await api('/api/v2/revenda/sugestao-tamanho', {
+      method: 'POST',
+      body: JSON.stringify({ produto, especificacao: espec, quantidade: qtd,
+        largura_cm: dim.largura_cm, altura_cm: dim.altura_cm }),
+    });
+  } catch (e) { box.style.display = 'none'; return; }
+
+  const s = r?.sugestao;
+  if (!s || !s.alternativas?.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+  const linhas = s.alternativas.map((a) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #ffe9b8">
+      <div style="font-size:12px;color:#5c4400">
+        <b>${escHtml(a.largura_cm + 'x' + a.altura_cm + 'cm')}</b>
+        <span style="color:#8a7000">(−${a.reducao_cm}cm)</span> ·
+        ${fmtMoeda(a.valor_total)} <b style="color:#1b7f3b">−${fmtMoeda(a.economia)} (${a.economia_pct}%)</b>
+      </div>
+      <button type="button" onclick="npAplicarTamanho(${i}, ${a.largura_cm}, ${a.altura_cm})"
+        style="background:#43a047;border:none;border-radius:6px;color:white;font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;white-space:nowrap">Usar este</button>
+    </div>`).join('');
+
+  box.innerHTML = `<div style="background:#fff8e1;border:1px solid #ffd54f;border-radius:8px;padding:8px 10px">
+      <div style="font-size:12px;font-weight:600;color:#8a6d00;margin-bottom:2px">
+        💡 Formato menor disponível — ${escHtml(s.atual.nome)} custa ${fmtMoeda(s.atual.valor_total)}
+      </div>
+      <div style="font-size:11px;color:#8a7000;margin-bottom:2px">Confirme com o cliente antes de trocar.</div>
+      ${linhas}
+    </div>`;
+  box.style.display = 'block';
+}
+
+// Reescreve as dimensões na especificação mantendo o resto do texto (ex: "· COM ARTE").
+function npAplicarTamanho(i, larg, alt) {
+  const el = document.getElementById('np-espec-' + i);
+  if (!el) return;
+  const fmt = (cm) => (cm / 100).toFixed(2).replace('.', ',') + ' M';
+  const novo = `${fmt(larg)} X ${fmt(alt)}`;
+  el.value = /(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i.test(el.value)
+    ? el.value.replace(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i, novo)
+    : `${novo}${el.value ? ' · ' + el.value : ''}`;
+  el.value = el.value.toUpperCase();
+  showToast('Tamanho ajustado para ' + novo);
+  npChecarSugestaoTamanho(i);
 }
 
 function npRenumItens() {

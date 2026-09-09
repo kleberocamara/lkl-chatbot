@@ -207,10 +207,78 @@ async function precificarItemRevenda({ revenda_produto_id, quantidade, prazo_hor
   return calc ? { ...calc, prazo_horas: prazo, estrategia: 'revenda_matriz' } : null;
 }
 
+// A matriz da Graficonauta cobra por formato fechado: uma peça de 10x15cm não cabe
+// no SKU de 10x14cm e sobe para o de 14x20cm, que pode custar o dobro. Esta função
+// procura SKUs que ficam a poucos centímetros de comportar a peça e custam menos —
+// para o atendente poder oferecer ao cliente a troca de 1cm por uma economia real.
+// Só se aplica à família folheto/flyer/folder, onde o tamanho é explícito no nome.
+async function sugerirTamanhosAlternativos({
+  produto, material, especificacao, tipo_producao, impressao,
+  largura_cm, altura_cm, quantidade, prazo_horas, toleranciaCm = 2,
+}) {
+  const pl = Number(largura_cm), pa = Number(altura_cm);
+  if (!(pl > 0) || !(pa > 0) || !(Number(quantidade) > 0)) return null;
+
+  const atual = await resolverProdutoRevenda({
+    produto, material, especificacao, tipo_producao, impressao, largura_cm, altura_cm });
+  if (!atual) return null;
+
+  const parse = (nome) => {
+    const m = String(nome).match(/Folheto\s+(\d+)g\s*\|\s*(\d+)\s*x\s*(\d+)\s*cm\s*\|\s*(4\/0|4\/4)/i);
+    return m ? { g: +m[1], w: +m[2], h: +m[3], imp: m[4] } : null;
+  };
+  const atualDim = parse(atual.nome);
+  if (!atualDim) return null; // fora da família folheto: sem comparação dimensional
+
+  const precoAtual = await precificarItemRevenda({
+    revenda_produto_id: atual.id, quantidade, largura_cm, altura_cm, prazo_horas });
+  if (!precoAtual) return null;
+
+  const { rows } = await db.query(
+    `SELECT id, nome FROM revenda_produtos WHERE ativo=TRUE AND estrategia='revenda_matriz' AND nome ILIKE 'Folheto %'`);
+
+  const alternativas = [];
+  for (const r of rows) {
+    if (r.id === atual.id) continue;
+    const d = parse(r.nome);
+    if (!d || d.imp !== atualDim.imp || d.g !== atualDim.g) continue;
+
+    // quanto a peça precisaria encolher para caber neste SKU (melhor das 2 orientações)
+    const faltaA = Math.max(0, pl - d.w) + Math.max(0, pa - d.h);
+    const faltaB = Math.max(0, pa - d.w) + Math.max(0, pl - d.h);
+    const reducao = Math.min(faltaA, faltaB);
+    if (reducao <= 0 || reducao > toleranciaCm) continue; // já cabe, ou encolhe demais
+
+    const preco = await precificarItemRevenda({
+      revenda_produto_id: r.id, quantidade, largura_cm: d.w, altura_cm: d.h, prazo_horas });
+    if (!preco || Number(preco.valor_total) >= Number(precoAtual.valor_total)) continue;
+
+    const economia = Number(precoAtual.valor_total) - Number(preco.valor_total);
+    alternativas.push({
+      revenda_produto_id: r.id,
+      nome: r.nome,
+      largura_cm: d.w,
+      altura_cm: d.h,
+      reducao_cm: Math.round(reducao * 100) / 100,
+      valor_total: Number(preco.valor_total),
+      economia: Math.round(economia * 100) / 100,
+      economia_pct: Math.round((economia / Number(precoAtual.valor_total)) * 100),
+    });
+  }
+  if (!alternativas.length) return null;
+
+  alternativas.sort((a, b) => b.economia - a.economia);
+  return {
+    atual: { revenda_produto_id: atual.id, nome: atual.nome, valor_total: Number(precoAtual.valor_total) },
+    alternativas: alternativas.slice(0, 3),
+  };
+}
+
 module.exports = {
   listarCategorias, criarCategoria, atualizarCategoria,
   listarProdutos, detalheProduto, criarProduto, atualizarProduto,
   statusSync, dispararSync,
   getConfig, setConfig,
   precificarItemRevenda, pontuarSku, resolverProdutoRevenda, escolherFolheto, resolverFolheto,
+  sugerirTamanhosAlternativos,
 };

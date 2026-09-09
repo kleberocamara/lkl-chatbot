@@ -25,6 +25,14 @@ router.put('/produtos/:id', adminGestor, wrap(async (req, res) => {
   const r = await service.atualizarProduto(req.params.id, req.body); if (r.erro) return res.status(400).json({ errors: r.erro }); res.json(r.item);
 }));
 
+// Sugestões de tamanho ligeiramente menor e mais barato (ver service).
+// Consultado na tela de Novo Pedido antes de salvar, para o atendente poder
+// oferecer a troca ao cliente. Sem alternativa vantajosa, responde { sugestao: null }.
+router.post('/sugestao-tamanho', wrap(async (req, res) => {
+  const r = await service.sugerirTamanhosAlternativos(req.body || {});
+  res.json({ sugestao: r });
+}));
+
 router.post('/sincronizar', adminGestor, wrap(async (req, res) => {
   const r = await service.dispararSync(); if (r.erro) return res.status(409).json({ errors: r.erro }); res.json({ ok: true });
 }));

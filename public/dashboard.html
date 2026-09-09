@@ -3952,6 +3952,7 @@ function renderNfeLista() {
   box.innerHTML = list.map(o => {
     const acoes = o.nfe_status === 'autorizada'
       ? `<a class="btn btn-outline" href="/api/v2/nfe/danfe/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">DANFE</a>
+         ${o.tem_cce ? `<a class="btn btn-outline" href="/api/v2/nfe/cce/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">Carta</a>` : ''}
          <a class="btn btn-outline" href="/api/v2/nfe/xml/${o.nfe_id}" style="padding:6px 10px;text-decoration:none">XML</a>
          <button class="btn btn-outline" onclick="abrirCceNfe('${o.nfe_id}')" style="padding:6px 10px">CC-e</button>
          <button class="btn btn-outline" onclick="abrirCancelarNfe('${o.nfe_id}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`
@@ -4263,7 +4264,8 @@ async function submitCceNfe(nfeId) {
     if (btn) { btn.disabled = false; btn.textContent = 'Enviar CC-e'; }
     return;
   }
-  if (el) el.innerHTML = `<div style="background:#e8f5e9;border-radius:4px;padding:10px;font-size:12px">✅ CC-e registrada! Protocolo: <strong>${escHtml(String(res?.protocolo||''))}</strong> (Seq. ${escHtml(String(res?.n_seq||''))})</div>`;
+  if (el) el.innerHTML = `<div style="background:#e8f5e9;border-radius:4px;padding:10px;font-size:12px">✅ CC-e registrada! Protocolo: <strong>${escHtml(String(res?.protocolo||''))}</strong> (Seq. ${escHtml(String(res?.n_seq||''))})<br>
+    <a href="/api/v2/nfe/cce/${nfeId}" target="_blank" style="color:#1976d2;display:inline-block;margin-top:6px">📄 Baixar carta em PDF</a></div>`;
   showToast('CC-e enviada');
   loadNfeMain();
 }

@@ -81,6 +81,65 @@ router.get('/danfe/:id', requireRole('admin', 'operador'), async (req, res) => {
   }
 });
 
+// PDF da carta de correção (DACCE). Gera na hora e reaproveita o arquivo em
+// chamadas seguintes; sem `seq`, entrega a carta mais recente da NF-e.
+router.get('/cce/:id', requireRole('admin', 'operador'), async (req, res) => {
+  try {
+    const db = require('../../db');
+    const r = await db.query(
+      `SELECT n.chave, n.cnpj_emitente, n.xml,
+              e.xml_evento, e.protocolo,
+              ROW_NUMBER() OVER (ORDER BY e.id) AS n_seq
+         FROM nfe n JOIN nfe_eventos e ON e.nfe_id = n.id
+        WHERE n.id = $1 AND e.tipo = 'cc_e' AND e.c_stat = '135'
+        ORDER BY e.id`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'CC-e não encontrada' });
+
+    const seq = req.query.seq ? parseInt(req.query.seq, 10) : null;
+    const evento = seq
+      ? r.rows.find((row) => Number(row.n_seq) === seq)
+      : r.rows[r.rows.length - 1];
+    if (!evento) return res.status(404).json({ error: 'Sequência de CC-e não encontrada' });
+    if (!evento.xml_evento) return res.status(404).json({ error: 'XML do evento não armazenado' });
+
+    const { gerarDacce } = require('../../services/nfe');
+    const filePath = await gerarDacce({
+      xmlEvento: evento.xml_evento,
+      chave: evento.chave,
+      nSeq: evento.n_seq,
+      cnpjEmitente: evento.cnpj_emitente,
+      destinatario: destinatarioDoXml(evento.xml),
+      protocolo: evento.protocolo,
+    });
+    res.download(filePath, `CCe-${evento.chave}-${evento.n_seq}.pdf`);
+  } catch (err) {
+    console.error('[NFE-CCE-PDF]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// O XML do evento só traz a chave da NF-e, então o destinatário vem do XML da nota.
+function destinatarioDoXml(xml) {
+  if (!xml) return null;
+  const dest = /<dest\b[\s\S]*?<\/dest>/.exec(xml)?.[0];
+  if (!dest) return null;
+  const tag = (nome) => {
+    const m = new RegExp(`<${nome}>([^<]*)</${nome}>`).exec(dest);
+    return m ? m[1].trim() : '';
+  };
+  return {
+    nome: tag('xNome'),
+    cpf_cnpj: tag('CNPJ') || tag('CPF'),
+    logradouro: tag('xLgr'),
+    numero: tag('nro'),
+    bairro: tag('xBairro'),
+    municipio: tag('xMun'),
+    uf: tag('UF'),
+  };
+}
+
 router.get('/xml/:id', requireRole('admin', 'operador'), async (req, res) => {
   try {
     const r = await require('../../db').query(

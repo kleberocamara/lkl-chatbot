@@ -4,7 +4,9 @@ import json
 from flask import Flask, request, jsonify, send_file
 from emitir import emitir_nfe
 from danfe import gerar_danfe
+from dacce import gerar_dacce
 from eventos import cancelar_nfe, corrigir_nfe, inutilizar_nfe
+from emitentes import EMITENTES
 
 app = Flask(__name__)
 
@@ -26,6 +28,21 @@ def danfe():
     try:
         dados = request.get_json(force=True)
         pdf_path = gerar_danfe(dados['xml'], dados['output_path'])
+        return send_file(pdf_path, mimetype='application/pdf')
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/dacce', methods=['POST'])
+def dacce():
+    try:
+        dados = request.get_json(force=True)
+        pdf_path = gerar_dacce(
+            dados['xml_evento'],
+            dados['output_path'],
+            emitente=EMITENTES.get(dados.get('cnpj_emitente')),
+            destinatario=dados.get('destinatario'),
+            protocolo=dados.get('protocolo'),
+        )
         return send_file(pdf_path, mimetype='application/pdf')
     except Exception as e:
         return jsonify({'erro': str(e)}), 500

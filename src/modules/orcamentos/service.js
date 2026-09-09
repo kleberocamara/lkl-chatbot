@@ -529,7 +529,11 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
                 )
               ) AS tem_os_entregue,
               (SELECT n.status FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_status,
-              (SELECT n.id FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_id
+              (SELECT n.id FROM nfe n WHERE n.orcamento_id = o.id AND n.status = 'autorizada' LIMIT 1) AS nfe_id,
+              EXISTS(
+                SELECT 1 FROM nfe n JOIN nfe_eventos e ON e.nfe_id = n.id
+                 WHERE n.orcamento_id = o.id AND e.tipo = 'cc_e' AND e.c_stat = '135'
+              ) AS tem_cce
        FROM orcamentos o
        LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
        LEFT JOIN users u ON u.id = o.vendedor_id

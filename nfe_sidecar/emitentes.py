@@ -35,6 +35,13 @@ EMITENTES = {
         'c_uf': '33',
         'cert_path': os.environ.get('SEFAZ_CERT_FACTOR', '/var/www/lkl-chatbot/certs/sefaz/factor_44448899000185.pfx'),
         'cert_password': os.environ.get('SEFAZ_CERT_PASSWORD', '12345678'),
+        # Impresso nas Informações Complementares quando a venda é à vista em PIX
+        # (tPag=17), para o cliente ter onde pagar. O separador ' | ' é o que o
+        # DANFE usa para quebrar linha — o XML não aceita quebra de verdade.
+        'dados_bancarios': (
+            'DADOS BANCARIOS | BANCO C6 S.A | AG: 0001 | C/C: 29166224-2 | '
+            'CHAVE PIX: 44.448.899/0001-85 | NOME: FACTOR COMUNICACAO VISUAL.'
+        ),
     },
 }
 

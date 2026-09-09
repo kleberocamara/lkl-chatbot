@@ -316,6 +316,10 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
             'DO ART 23 DA LEI COMPLEMENTAR 123".')
     if dados.get('info_complementar'):
         info += ' ' + dados['info_complementar']
+    # Venda à vista em PIX (tPag=17): imprime os dados bancários do emitente para
+    # o cliente pagar. Só entra se o emitente tiver esses dados cadastrados.
+    if dados.get('forma_pagamento') == '17' and emitente.get('dados_bancarios'):
+        info += ' | ' + emitente['dados_bancarios']
     _texto(inf_adic, 'infCpl', info)
 
     return nfe, chave

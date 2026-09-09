@@ -98,22 +98,31 @@ def _cell(c, x, y, w, h, label='', value='', lsize=4.5, vsize=6.5, align='left')
 
 
 def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm):
-    """Desenha texto com quebra de linha dentro de uma área."""
+    """Desenha texto com quebra de linha dentro de uma área.
+
+    O ' | ' força quebra de linha: o XML da NF-e não aceita quebra de verdade
+    (o pattern TString exclui caracteres de controle), então esse separador é a
+    convenção usada para formatar blocos como os dados bancários no DANFE.
+    """
     c.setFont('Helvetica', size)
-    words = (text or '').split()
-    line = ''
     cur_y = y + max_h - size * 0.37 * mm - 1 * mm
-    for word in words:
-        test = (line + ' ' + word).strip()
-        if c.stringWidth(test, 'Helvetica', size) > max_w - 2 * mm:
-            if cur_y > y + 1 * mm:
-                c.drawString(x + 1 * mm, cur_y, line)
-                cur_y -= line_h
-            line = word
-        else:
-            line = test
-    if line and cur_y > y + 1 * mm:
-        c.drawString(x + 1 * mm, cur_y, line)
+
+    def escrever(linha):
+        nonlocal cur_y
+        if linha and cur_y > y + 1 * mm:
+            c.drawString(x + 1 * mm, cur_y, linha)
+            cur_y -= line_h
+
+    for bloco in (text or '').split('|'):
+        line = ''
+        for word in bloco.split():
+            test = (line + ' ' + word).strip()
+            if c.stringWidth(test, 'Helvetica', size) > max_w - 2 * mm:
+                escrever(line)
+                line = word
+            else:
+                line = test
+        escrever(line)
 
 
 def gerar_danfe(xml_str, output_path):

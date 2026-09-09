@@ -68,6 +68,15 @@ function nomesCompativeis(pagador, cliente) {
   return _iniciaisConferem(pagador, cliente);
 }
 
+// Quantos tokens significativos o pagador tem em comum com o cliente. Serve para
+// desempatar quando mais de um cliente é compatível: "RENATO DE ABREU" casa tanto
+// com "Renato de Abreu" (2 tokens) quanto com "Renato Costa Valverde" (1), e o
+// primeiro é claramente o dono do pagamento.
+function _forcaMatchNome(pagador, cliente) {
+  const b = new Set(_tokensNome(cliente));
+  return _tokensNome(pagador).filter((t) => b.has(t)).length;
+}
+
 // O PIX de comitê eleitoral costuma chegar com o nome abreviado em iniciais
 // ("ELEICAO M P B T D FEDERAL" para "Marcos Paulo Barbosa Tavares Deputado"),
 // caso em que não sobra nenhum token inteiro para comparar. Aqui as iniciais do
@@ -212,9 +221,21 @@ async function tentarConciliarEntrada(lanc) {
   const pagador = extrairPagador(lanc.title);
   const elegiveis = candidatos.rows.filter((o) =>
     o.status_pagamento !== 'pendente' || nomesCompativeis(pagador, o.cliente_nome));
-  if (elegiveis.length !== 1) return false;
+  if (!elegiveis.length) return false;
 
-  const alvo = elegiveis[0];
+  let alvo;
+  if (elegiveis.length === 1) {
+    alvo = elegiveis[0];
+  } else {
+    // Vários clientes compatíveis (nomes que compartilham um primeiro nome, por
+    // exemplo). Só resolve quando um deles casa estritamente melhor que todos os
+    // outros; empate continua indo para revisão manual.
+    const ranking = elegiveis
+      .map((o) => ({ o, forca: _forcaMatchNome(pagador, o.cliente_nome) }))
+      .sort((x, y) => y.forca - x.forca);
+    if (!(ranking[0].forca > ranking[1].forca)) return false;
+    alvo = ranking[0].o;
+  }
   if (alvo.status_pagamento !== 'pago') {
     await query(
       `UPDATE orcamentos SET status_pagamento='pago', pago_em=$1 WHERE id=$2`,

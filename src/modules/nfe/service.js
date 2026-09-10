@@ -2,12 +2,7 @@
 const db = require('../../db');
 const { pool } = require('../../db');
 const { emitirNfe, gerarDanfe } = require('../../services/nfe');
-
-const C_MUN_CAPITAL = {
-  RJ: '3304557', SP: '3550308', MG: '3106200', ES: '3205309',
-  BA: '2927408', PE: '2611606', CE: '2304400', RS: '4314902',
-  PR: '4106902', SC: '4205407',
-};
+const { resolverMunicipio } = require('../../services/municipios');
 
 async function proximoNumero(cnpj) {
   const client = await pool.connect();
@@ -74,7 +69,12 @@ async function emitir(orcamentoId, body) {
   }
 
   const uf_dest = orc.uf || 'RJ';
-  const c_mun_dest = C_MUN_CAPITAL[uf_dest] || '3301702';
+  const municipio_dest = orc.municipio || 'Duque de Caxias';
+  const { c_mun: c_mun_dest, exato: municipioExato } = resolverMunicipio(municipio_dest, uf_dest);
+  if (!municipioExato) {
+    console.warn(`[NFE] municipio "${municipio_dest}/${uf_dest}" nao encontrado na tabela IBGE `
+      + `(orcamento ${orc.numero}) — usando o codigo da capital; confira o cadastro do cliente`);
+  }
 
   // Pagamento à vista: o atendente marcou explicitamente forma_pagamento (dinheiro/pix/cartão/etc)
   // — não envia duplicatas nem infere de orc.boleto_vencimento, senão SEFAZ rejeita (853) por
@@ -120,7 +120,7 @@ async function emitir(orcamentoId, body) {
       complemento: '',
       bairro: orc.bairro || 'NAO INFORMADO',
       cep: (orc.cep || '').replace(/\D/g, ''),
-      municipio: orc.municipio || 'Duque de Caxias',
+      municipio: municipio_dest,
       uf: uf_dest,
       c_mun: c_mun_dest,
       fone: orc.celular || '',

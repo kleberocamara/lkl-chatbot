@@ -1,6 +1,11 @@
 # nfe_sidecar/emitentes.py
 import os
 
+# Marca o BR Code do PIX dentro do infCpl. O emitir.py escreve com esse prefixo
+# e o danfe.py o usa para achar o payload e desenhar o QR — e o unico contrato
+# entre os dois, ja que o XML nao tem campo proprio para isso.
+PIX_PREFIXO = 'PIX COPIA E COLA: '
+
 EMITENTES = {
     '19296723000108': {
         'razao_social': 'GRUPO DE GRAFICAS LKL LTDA',

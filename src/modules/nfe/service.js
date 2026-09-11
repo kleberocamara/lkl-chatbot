@@ -36,7 +36,7 @@ async function emitir(orcamentoId, body) {
 
   const orcR = await db.query(
     `SELECT o.id, o.numero, o.status, o.status_pagamento,
-            o.boleto_vencimento, o.pago_em,
+            o.boleto_vencimento, o.pago_em, o.pix_copia_cola,
             c.nome AS cliente_nome, c.cpf_cnpj, c.celular,
             c.logradouro, c.numero AS c_numero,
             c.bairro, c.cep, c.cidade AS municipio, c.uf,
@@ -112,6 +112,9 @@ async function emitir(orcamentoId, body) {
     duplicatas,
     forma_pagamento: pagamentoVista ? forma_pagamento : null,
     info_complementar: (info_complementar || '').trim() || null,
+    // BR Code do PIX, quando houver cobrança gerada: vai como texto no infCpl e
+    // vira QR no DANFE. Só faz sentido em venda à vista em PIX (tPag=17).
+    pix_copia_cola: (pagamentoVista && forma_pagamento === '17') ? (orc.pix_copia_cola || null) : null,
     destinatario: {
       nome: orc.cliente_nome || 'NAO IDENTIFICADO',
       cpf_cnpj: (orc.cpf_cnpj || '').replace(/\D/g, ''),

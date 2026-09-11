@@ -5,10 +5,14 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.graphics.barcode import code128
+from reportlab.graphics.barcode import code128, qr
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 from reportlab.platypus import Paragraph
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
+
+from emitentes import PIX_PREFIXO
 
 _LOGO_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
 
@@ -95,6 +99,30 @@ def _cell(c, x, y, w, h, label='', value='', lsize=4.5, vsize=6.5, align='left')
         _lbl(c, x, y, w, h, label, lsize)
     if value is not None:
         _val(c, x, y, w, h, str(value), vsize, align)
+
+
+def _separar_pix(inf_adic):
+    """Tira o BR Code do texto das informacoes complementares.
+
+    O payload e uma linha longa de caracteres sem sentido para quem le; no DANFE
+    ele vira o QR. Devolve (texto sem o payload, payload ou None).
+    """
+    texto = inf_adic or ''
+    if PIX_PREFIXO not in texto:
+        return texto, None
+    antes, _, depois = texto.partition(PIX_PREFIXO)
+    payload, sep, resto = depois.partition('|')
+    limpo = (antes.rstrip().rstrip('|').rstrip() + (' | ' + resto.strip() if sep and resto.strip() else ''))
+    return limpo, payload.strip() or None
+
+
+def _desenhar_qr(c, payload, x, y, lado):
+    """Desenha o QR do PIX ocupando um quadrado de `lado` a partir de (x, y)."""
+    widget = qr.QrCodeWidget(payload, barLevel='M')
+    x0, y0, x1, y1 = widget.getBounds()
+    d = Drawing(lado, lado, transform=[lado / (x1 - x0), 0, 0, lado / (y1 - y0), 0, 0])
+    d.add(widget)
+    renderPDF.draw(d, c, x, y)
 
 
 def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm):
@@ -736,8 +764,22 @@ def gerar_danfe(xml_str, output_path):
     c.drawString(M + 1 * mm, y_adic + adic_h - 8.5 * mm, 'INFORMAÇÕES COMPLEMENTARES')
     c.drawString(M + inf_w + 1 * mm, y_adic + adic_h - 8.5 * mm, 'RESERVADO AO FISCO')
 
-    if inf_adic:
-        _wrap_text(c, inf_adic, M, y_adic, inf_w, adic_h - 9 * mm, size=5.5, line_h=3.5 * mm)
+    # QR do PIX: o payload viaja no infCpl (o XML nao tem campo de imagem), e a
+    # imagem so existe aqui, no DANFE. Texto e QR dividem o mesmo quadro.
+    texto_adic, pix_payload = _separar_pix(inf_adic)
+    texto_w = inf_w
+    if pix_payload:
+        lado = min(adic_h - 10 * mm, 26 * mm)
+        if lado >= 14 * mm:
+            texto_w = inf_w - lado - 4 * mm
+            qx = M + inf_w - lado - 2 * mm
+            qy = y_adic + (adic_h - 5.5 * mm - lado) / 2
+            _desenhar_qr(c, pix_payload, qx, qy, lado)
+            c.setFont('Helvetica-Bold', 4.5)
+            c.drawCentredString(qx + lado / 2, qy - 2.6 * mm, 'PAGUE COM PIX')
+
+    if texto_adic:
+        _wrap_text(c, texto_adic, M, y_adic, texto_w, adic_h - 9 * mm, size=5.5, line_h=3.5 * mm)
 
     # Rodapé de impressão
     c.setFont('Helvetica', 5)

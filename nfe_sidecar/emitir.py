@@ -14,7 +14,7 @@ class _XMLSignerSHA1(XMLSigner):
     def check_deprecated_methods(self):
         pass
 import requests
-from emitentes import EMITENTES, SEFAZ_URL, NFE_AMBIENTE
+from emitentes import EMITENTES, SEFAZ_URL, NFE_AMBIENTE, PIX_PREFIXO
 
 NS = 'http://www.portalfiscal.inf.br/nfe'
 
@@ -320,6 +320,10 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
     # o cliente pagar. Só entra se o emitente tiver esses dados cadastrados.
     if dados.get('forma_pagamento') == '17' and emitente.get('dados_bancarios'):
         info += ' | ' + emitente['dados_bancarios']
+        # O BR Code (copia e cola) e texto, entao cabe no infCpl; o QR em imagem
+        # nao cabe no XML e e desenhado pelo DANFE a partir daqui.
+        if dados.get('pix_copia_cola'):
+            info += ' | ' + PIX_PREFIXO + dados['pix_copia_cola']
     _texto(inf_adic, 'infCpl', info)
 
     return nfe, chave

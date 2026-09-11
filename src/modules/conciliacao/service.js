@@ -53,6 +53,19 @@ function extrairPagador(title) {
   return m ? m[1].trim() : '';
 }
 
+// Números de NF citados pelo pagador na descrição do PIX ("Pagto nf 926").
+// É o sinal mais forte que o extrato oferece: o próprio cliente diz o que está
+// pagando, sem depender do nome que o banco abrevia. Aceita 3 ou 4 dígitos —
+// abaixo disso pega ano, parcela e outros números soltos.
+function nfsCitadas(...textos) {
+  const achados = new Set();
+  const re = /\bnf-?e?\s*\.?\s*n?[ºo°]?\s*:?\s*(\d{3,4})\b/gi;
+  for (const t of textos) {
+    for (const m of String(t || '').matchAll(re)) achados.add(m[1]);
+  }
+  return [...achados];
+}
+
 // O pagador do extrato é plausivelmente o mesmo que o cliente do orçamento?
 // Exige um token realmente distintivo em comum, ou dois tokens quaisquer — um
 // sobrenome frequente sozinho não basta. Na conciliação financeira, deixar de
@@ -168,6 +181,31 @@ async function tentarConciliarSaida(lanc) {
 // pagamento no sistema (o webhook do C6 deveria fazer isso em tempo real, mas
 // se ele falhar/atrasar, a conciliação funciona como rede de segurança).
 async function tentarConciliarEntrada(lanc) {
+  // 0) o pagador citou o número da NF na descrição. Só vale com o valor batendo
+  // exatamente: o número sozinho pode ser de um pagamento parcial ou de outra
+  // nota, e conciliar errado custa mais do que deixar para a revisão manual.
+  for (const numero of nfsCitadas(lanc.description, lanc.reference, lanc.title)) {
+    const r = await query(
+      `SELECT o.id, o.status_pagamento
+         FROM nfe n
+         JOIN orcamentos o ON o.id = n.orcamento_id
+        WHERE n.numero = $1 AND n.status = 'autorizada' AND o.total = $2
+          AND o.id::text NOT IN (
+            SELECT conciliado_id FROM extrato_lancamentos
+            WHERE conciliado_tipo = 'orcamento' AND conciliado_id IS NOT NULL
+          )`,
+      [numero, lanc.amount]
+    );
+    if (r.rows.length !== 1) continue;
+    const alvo = r.rows[0];
+    if (alvo.status_pagamento !== 'pago') {
+      await query(`UPDATE orcamentos SET status_pagamento='pago', pago_em=$1 WHERE id=$2`,
+        [lanc.entry_date, alvo.id]);
+    }
+    await marcarConciliado(lanc.id, 'orcamento', alvo.id, false);
+    return true;
+  }
+
   // 1) bate contra uma parcela de boleto aguardando pagamento — a mais comum e mais
   // precisa, já que casa pelo valor exato da parcela (não do orçamento inteiro).
   // O boleto precisa ter sido emitido ATÉ a data do crédito: um boleto criado depois

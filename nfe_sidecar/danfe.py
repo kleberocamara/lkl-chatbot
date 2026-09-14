@@ -14,10 +14,12 @@ from reportlab.lib.utils import ImageReader
 
 from emitentes import PIX_PREFIXO
 
-# Posicao e tamanho do QR do PIX dentro do quadro de informacoes complementares,
-# medidos a partir da margem esquerda da folha. O quadro de texto vai ate aqui.
-QR_PIX_X = 92 * mm
+# Tamanho maximo do QR do PIX e legenda impressa sob ele. O QR sai centralizado
+# na faixa de informacoes complementares, abaixo do texto.
 QR_PIX_LADO_MAX = 40 * mm
+LEGENDA_PIX = 'PAGUE PELO PIX COM ESSE QR CODE'
+LEGENDA_PIX_H = 5 * mm    # espaco reservado para a legenda sob o QR
+QR_PIX_LADO_MIN = 14 * mm  # abaixo disso o QR nao e legivel — melhor nao imprimir
 
 _LOGO_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
 
@@ -130,7 +132,7 @@ def _desenhar_qr(c, payload, x, y, lado):
     renderPDF.draw(d, c, x, y)
 
 
-def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm):
+def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm, desenhar=True):
     """Desenha texto com quebra de linha dentro de uma área.
 
     O ' | ' força quebra de linha: o XML da NF-e não aceita quebra de verdade
@@ -143,7 +145,8 @@ def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm):
     def escrever(linha):
         nonlocal cur_y
         if linha and cur_y > y + 1 * mm:
-            c.drawString(x + 1 * mm, cur_y, linha)
+            if desenhar:
+                c.drawString(x + 1 * mm, cur_y, linha)
             cur_y -= line_h
 
     for bloco in (text or '').split('|'):
@@ -156,6 +159,7 @@ def _wrap_text(c, text, x, y, max_w, max_h, size=5.5, line_h=3.5 * mm):
             else:
                 line = test
         escrever(line)
+    return cur_y
 
 
 def gerar_danfe(xml_str, output_path):
@@ -772,23 +776,36 @@ def gerar_danfe(xml_str, output_path):
     # QR do PIX: o payload viaja no infCpl (o XML nao tem campo de imagem), e a
     # imagem so existe aqui, no DANFE. Texto e QR dividem o mesmo quadro.
     texto_adic, pix_payload = _separar_pix(inf_adic)
-    texto_w = inf_w
+
+    # O QR fica centralizado no campo, abaixo do texto. Mas o texto pode ser longo
+    # (nota cheia com observacao do operador) e nao sobrar altura — por isso mede
+    # primeiro: se nao couber embaixo, ele volta para o lado direito, com o texto
+    # numa coluna mais estreita. Um QR que some sem avisar seria pior.
+    altura_texto = adic_h - 9 * mm
+    texto_w, qr = inf_w, None
     if pix_payload:
-        # A altura do quadro varia com a quantidade de itens: em nota curta sobra
-        # muito espaco, em nota cheia sobra pouco. O QR cresce ate o teto e
-        # encolhe quando precisa, mas a borda esquerda fica fixa para ele nao
-        # passear pela folha conforme o tamanho.
-        lado = min(adic_h - 10 * mm, QR_PIX_LADO_MAX)
-        if lado >= 14 * mm:
-            texto_w = QR_PIX_X - 2 * mm
-            qx = M + QR_PIX_X
-            qy = y_adic + (adic_h - 5.5 * mm - lado) / 2
-            _desenhar_qr(c, pix_payload, qx, qy, lado)
-            c.setFont('Helvetica-Bold', 5.5)
-            c.drawCentredString(qx + lado / 2, qy - 3.2 * mm, 'PAGUE COM PIX')
+        y_seco = _wrap_text(c, texto_adic, M, y_adic, inf_w, altura_texto,
+                            size=5.5, line_h=3.5 * mm, desenhar=False)
+        base = y_adic + 2 * mm
+        livre = (y_seco - 2 * mm) - base
+        lado = min(livre - LEGENDA_PIX_H, QR_PIX_LADO_MAX)
+        if lado >= QR_PIX_LADO_MIN:
+            qr = (M + (inf_w - lado) / 2, base + (livre - lado - LEGENDA_PIX_H) / 2, lado)
+        else:
+            lado = min(adic_h - 10 * mm - LEGENDA_PIX_H, QR_PIX_LADO_MAX)
+            if lado >= QR_PIX_LADO_MIN:
+                texto_w = inf_w - lado - 4 * mm
+                qr = (M + inf_w - lado - 2 * mm,
+                      y_adic + (adic_h - 5.5 * mm - lado - LEGENDA_PIX_H) / 2, lado)
 
     if texto_adic:
-        _wrap_text(c, texto_adic, M, y_adic, texto_w, adic_h - 9 * mm, size=5.5, line_h=3.5 * mm)
+        _wrap_text(c, texto_adic, M, y_adic, texto_w, altura_texto, size=5.5, line_h=3.5 * mm)
+
+    if qr:
+        qx, y_grupo, lado = qr
+        _desenhar_qr(c, pix_payload, qx, y_grupo + LEGENDA_PIX_H, lado)
+        c.setFont('Helvetica-Bold', 5.5)
+        c.drawCentredString(qx + lado / 2, y_grupo + 1.6 * mm, LEGENDA_PIX)
 
     # Rodapé de impressão
     c.setFont('Helvetica', 5)

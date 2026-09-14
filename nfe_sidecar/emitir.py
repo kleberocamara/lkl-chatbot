@@ -318,12 +318,16 @@ def _montar_xml(dados, emitente, n_nf, c_nf, dh_emi, tp_amb):
         info += ' ' + dados['info_complementar']
     # Venda à vista em PIX (tPag=17): imprime os dados bancários do emitente para
     # o cliente pagar. Só entra se o emitente tiver esses dados cadastrados.
-    if dados.get('forma_pagamento') == '17' and emitente.get('dados_bancarios'):
-        info += ' | ' + emitente['dados_bancarios']
+    if dados.get('forma_pagamento') == '17':
         # O BR Code (copia e cola) e texto, entao cabe no infCpl; o QR em imagem
-        # nao cabe no XML e e desenhado pelo DANFE a partir daqui.
+        # nao cabe no XML e e desenhado pelo DANFE a partir daqui. Com o QR na
+        # nota, os dados bancarios em texto viram ruido — o cliente escaneia.
+        # Sem ele (cobranca nao gerada), o texto volta para o cliente nao ficar
+        # sem saber para onde pagar.
         if dados.get('pix_copia_cola'):
             info += ' | ' + PIX_PREFIXO + dados['pix_copia_cola']
+        elif emitente.get('dados_bancarios'):
+            info += ' | ' + emitente['dados_bancarios']
     _texto(inf_adic, 'infCpl', info)
 
     return nfe, chave

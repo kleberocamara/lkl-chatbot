@@ -99,6 +99,28 @@ async function emitir(orcamentoId, body) {
     }
   }
 
+  // Venda à vista em PIX: gera a cobrança agora, para o BR Code entrar no infCpl
+  // desta nota. Depois de autorizada não há mais como — o XML está assinado.
+  // A falha do banco não pode travar emissão fiscal: sem cobrança, a nota sai com
+  // os dados bancários em texto, como antes.
+  let pixCopiaCola = (pagamentoVista && forma_pagamento === '17')
+    ? (orc.pix_copia_cola || null) : null;
+  if (pagamentoVista && forma_pagamento === '17' && !pixCopiaCola
+      && orc.status_pagamento !== 'pago') {
+    try {
+      const cob = await require('../orcamentos/service').cobrar(orcamentoId, 'pix');
+      if (cob && cob.pixCopiaECola) {
+        pixCopiaCola = cob.pixCopiaECola;
+        console.log(`[NFE] cobranca PIX gerada para o orcamento ${orc.numero} (txid ${cob.txid})`);
+      } else if (cob && cob.erro) {
+        console.warn(`[NFE] cobranca PIX recusada no orcamento ${orc.numero}: ${cob.erro.join('; ')}`);
+      }
+    } catch (e) {
+      console.warn(`[NFE] falha ao gerar cobranca PIX do orcamento ${orc.numero}: ${e.message}`
+        + ' — a NF sai com os dados bancarios em texto');
+    }
+  }
+
   const numero = await proximoNumero(cnpj_emitente);
 
   const dadosSidecar = {
@@ -112,9 +134,8 @@ async function emitir(orcamentoId, body) {
     duplicatas,
     forma_pagamento: pagamentoVista ? forma_pagamento : null,
     info_complementar: (info_complementar || '').trim() || null,
-    // BR Code do PIX, quando houver cobrança gerada: vai como texto no infCpl e
-    // vira QR no DANFE. Só faz sentido em venda à vista em PIX (tPag=17).
-    pix_copia_cola: (pagamentoVista && forma_pagamento === '17') ? (orc.pix_copia_cola || null) : null,
+    // BR Code do PIX: vai como texto no infCpl e vira QR no DANFE.
+    pix_copia_cola: pixCopiaCola,
     destinatario: {
       nome: orc.cliente_nome || 'NAO IDENTIFICADO',
       cpf_cnpj: (orc.cpf_cnpj || '').replace(/\D/g, ''),

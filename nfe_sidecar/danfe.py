@@ -14,6 +14,11 @@ from reportlab.lib.utils import ImageReader
 
 from emitentes import PIX_PREFIXO
 
+# Posicao e tamanho do QR do PIX dentro do quadro de informacoes complementares,
+# medidos a partir da margem esquerda da folha. O quadro de texto vai ate aqui.
+QR_PIX_X = 92 * mm
+QR_PIX_LADO_MAX = 40 * mm
+
 _LOGO_DIR = os.path.join(os.path.dirname(__file__), '..', 'public')
 
 _LOGOS_BY_CNPJ = {
@@ -769,14 +774,18 @@ def gerar_danfe(xml_str, output_path):
     texto_adic, pix_payload = _separar_pix(inf_adic)
     texto_w = inf_w
     if pix_payload:
-        lado = min(adic_h - 10 * mm, 26 * mm)
+        # A altura do quadro varia com a quantidade de itens: em nota curta sobra
+        # muito espaco, em nota cheia sobra pouco. O QR cresce ate o teto e
+        # encolhe quando precisa, mas a borda esquerda fica fixa para ele nao
+        # passear pela folha conforme o tamanho.
+        lado = min(adic_h - 10 * mm, QR_PIX_LADO_MAX)
         if lado >= 14 * mm:
-            texto_w = inf_w - lado - 4 * mm
-            qx = M + inf_w - lado - 2 * mm
+            texto_w = QR_PIX_X - 2 * mm
+            qx = M + QR_PIX_X
             qy = y_adic + (adic_h - 5.5 * mm - lado) / 2
             _desenhar_qr(c, pix_payload, qx, qy, lado)
-            c.setFont('Helvetica-Bold', 4.5)
-            c.drawCentredString(qx + lado / 2, qy - 2.6 * mm, 'PAGUE COM PIX')
+            c.setFont('Helvetica-Bold', 5.5)
+            c.drawCentredString(qx + lado / 2, qy - 3.2 * mm, 'PAGUE COM PIX')
 
     if texto_adic:
         _wrap_text(c, texto_adic, M, y_adic, texto_w, adic_h - 9 * mm, size=5.5, line_h=3.5 * mm)

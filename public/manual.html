@@ -72,6 +72,18 @@
     background:#eef0fb;color:var(--navy);font-size:11px;font-weight:700;
     padding:3px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:.3px
   }
+  /* Selo de controle do processo: quem le sabe que versao esta vendo e quando
+     ela passa a valer uma revisao — sem isso, treinamento antigo e novo se
+     confundem. */
+  section.chapter .selo{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    margin:0 0 18px 46px;font-size:11px;color:var(--muted)
+  }
+  section.chapter .selo .cod{
+    background:var(--navy);color:#fff;font-weight:700;letter-spacing:.5px;
+    padding:3px 9px;border-radius:4px
+  }
+  @media (max-width:900px){ section.chapter .selo{margin-left:0} }
   section.chapter .body-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
   @media (max-width:900px){ section.chapter .body-grid{grid-template-columns:1fr} }
 
@@ -164,13 +176,20 @@
 </div>
 
 <footer class="end">
-  Manual do Sistema — Gráfica LKL · Painel interno · Última atualização automática
+  Manual do Sistema — Gráfica LKL · Módulo de treinamento
+  <div style="margin-top:6px;font-size:12px" id="rodapeVersao"></div>
+  <div style="margin-top:8px;font-size:12px;max-width:620px;margin-left:auto;margin-right:auto;line-height:1.6">
+    Cada capítulo é um processo com código e versão próprios. Alterações são
+    registradas em <code>docs/processos/README.md</code>, junto com a data e o
+    responsável — consulte lá para saber o que mudou entre duas versões.
+  </div>
   <div style="margin-top:8px"><a href="/dashboard" style="color:var(--navy);font-weight:700;text-decoration:none">← Voltar ao painel</a></div>
 </footer>
 
 <script>
 const CHAPTERS = [
 {
+  codigo:'PO-02', versao:'1.0', atualizado:'2026-09-15',
   id:'conversas', emoji:'💬', title:'Conversas com o bot', roles:['Admin','Gestor','Atendente'],
   subtitle:'O primeiro contato do cliente — o chatbot de IA atende no WhatsApp, coleta os dados do pedido e já registra tudo no sistema.',
   steps:[
@@ -192,6 +211,7 @@ const CHAPTERS = [
     </div>`,
 },
 {
+  codigo:'PO-03', versao:'1.0', atualizado:'2026-09-15',
   id:'pedidos', emoji:'🛒', title:'Pedido manual (balcão / vendedor)', roles:['Admin','Gestor','Atendente'],
   subtitle:'Quando o pedido não vem do bot — cliente no balcão, telefone ou vendedor externo — a equipe cadastra direto no painel.',
   steps:[
@@ -212,6 +232,7 @@ const CHAPTERS = [
     <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#2e7d32"></div><div style="flex:1"><div class="mockup-bar" style="width:55%"></div></div><span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Aprovado</span></div></div>`,
 },
 {
+  codigo:'PO-04', versao:'1.0', atualizado:'2026-09-15',
   id:'orcamentos', emoji:'📋', title:'Validação, edição e envio do orçamento', roles:['Admin','Gestor','Atendente'],
   subtitle:'Todo pedido — venha do bot ou manual — passa por aqui antes de virar produção.',
   steps:[
@@ -239,6 +260,7 @@ const CHAPTERS = [
     </div></div>`,
 },
 {
+  codigo:'PO-05', versao:'1.0', atualizado:'2026-09-15',
   id:'artes', emoji:'🎨', title:'Criação e envio de arte', roles:['Admin','Gestor','Atendente','Analista'],
   subtitle:'Só os itens que realmente precisam de arte gráfica entram nessa fila — serviços como instalação ficam de fora.',
   steps:[
@@ -260,6 +282,7 @@ const CHAPTERS = [
     </div></div>`,
 },
 {
+  codigo:'PO-06', versao:'1.0', atualizado:'2026-09-15',
   id:'os', emoji:'📝', title:'Criação da Ordem de Serviço (OS)', roles:['Admin','Gestor','Analista'],
   subtitle:'A OS é o documento que a produção usa pra executar o serviço — pode nascer sozinha ou ser criada manualmente.',
   steps:[
@@ -280,6 +303,7 @@ const CHAPTERS = [
     </div></div>`,
 },
 {
+  codigo:'PO-07', versao:'1.0', atualizado:'2026-09-15',
   id:'formato', emoji:'🔍', title:'Melhor corte e baixa de materiais', roles:['Admin','Gestor','Analista'],
   subtitle:'Antes de imprimir, o sistema calcula qual formato de papel/bobina aproveita melhor o material pra aquela peça.',
   steps:[
@@ -302,6 +326,7 @@ const CHAPTERS = [
     <div class="mockup-card"><span style="font-size:12px;font-weight:700;color:#2e7d32">✓ Melhor aproveitamento: 92%</span></div>`,
 },
 {
+  codigo:'PO-08', versao:'1.0', atualizado:'2026-09-15',
   id:'producao', emoji:'🏭', title:'Esteira de produção', roles:['Admin','Gestor','Analista','Operador'],
   subtitle:'Board visual das fases — o operador arrasta ou avança cada OS conforme o trabalho acontece na gráfica.',
   steps:[
@@ -320,6 +345,7 @@ const CHAPTERS = [
     </div>`,
 },
 {
+  codigo:'PO-09', versao:'1.0', atualizado:'2026-09-15',
   id:'contas-pagar', emoji:'📤', title:'Contas a pagar', roles:['Admin','Gestor','Financeiro','Atendente'],
   subtitle:'Notas de fornecedores viram conta a pagar automaticamente — inclusive por foto direto no WhatsApp do financeiro.',
   steps:[
@@ -337,6 +363,7 @@ const CHAPTERS = [
     <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between"><span style="font-size:11px">Papel A4 — Distribuidora XPTO</span><span class="mockup-chip" style="background:#fff3e0;color:#e65100">Pendente</span></div></div>`,
 },
 {
+  codigo:'PO-10', versao:'1.0', atualizado:'2026-09-15',
   id:'cobrancas', emoji:'💳', title:'Cobranças — boleto, PIX e Mercado Pago', roles:['Admin','Gestor','Financeiro'],
   subtitle:'Depois do orçamento aprovado, gere a cobrança no formato que o cliente preferir.',
   steps:[
@@ -359,6 +386,7 @@ const CHAPTERS = [
     </div></div>`,
 },
 {
+  codigo:'PO-11', versao:'1.0', atualizado:'2026-09-15',
   id:'nfe', emoji:'📄', title:'Geração de NF-e', roles:['Admin','Gestor','Financeiro'],
   subtitle:'Emissão fiscal direto do orçamento, já validada com a SEFAZ.',
   steps:[
@@ -378,6 +406,7 @@ const CHAPTERS = [
     <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between"><span style="font-size:11px">NF 111</span><span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Autorizada</span></div></div>`,
 },
 {
+  codigo:'PO-12', versao:'1.0', atualizado:'2026-09-15',
   id:'cadastros', emoji:'🗂️', title:'Cadastros — fornecedores, clientes, materiais, funcionários e máquinas', roles:['Admin','Gestor','Analista','Atendente'],
   subtitle:'Toda a base de apoio do sistema fica reunida em <b>Cadastros</b>, com sub-abas pra cada tipo.',
   steps:[
@@ -400,6 +429,7 @@ const CHAPTERS = [
     <div class="mockup-card"><div class="mockup-row"><div class="mockup-dot" style="background:#5c6bc0"></div><div style="flex:1"><div class="mockup-bar" style="width:60%"></div></div></div></div>`,
 },
 {
+  codigo:'PO-13', versao:'1.0', atualizado:'2026-09-15',
   id:'usuarios', emoji:'👤', title:'Liberação de acesso a usuários', roles:['Admin'],
   subtitle:'O acesso ao sistema sempre parte de um funcionário já cadastrado — sem duplicar dados de nome, celular ou matrícula.',
   steps:[
@@ -423,6 +453,11 @@ const CHAPTERS = [
 },
 ];
 
+function _dataBr(iso){
+  const [a,m,d] = String(iso||'').split('-');
+  return d ? `${d}/${m}/${a}` : iso;
+}
+
 function render(){
   const tocList = document.getElementById('tocList');
   const content = document.getElementById('content');
@@ -432,6 +467,12 @@ function render(){
       <div class="kicker"><span class="num">${i+1}</span><span class="emoji">${c.emoji}</span><h2>${c.title}</h2></div>
       <p class="subtitle">${c.subtitle}</p>
       <div class="roles">${c.roles.map(r=>`<span>${r}</span>`).join('')}</div>
+      <div class="selo">
+        <span class="cod">${c.codigo}</span>
+        <span>versão ${c.versao}</span>
+        <span>·</span>
+        <span>atualizado em ${_dataBr(c.atualizado)}</span>
+      </div>
       <div class="body-grid">
         <ol class="steps">${c.steps.map(s=>`<li>${s}</li>`).join('')}${c.tip?`<li style="padding-bottom:0"><span class="tip">💡 ${c.tip}</span></li>`:''}</ol>
         <div class="visual">${c.visual}</div>
@@ -439,6 +480,14 @@ function render(){
     </section>`).join('');
 }
 render();
+
+// Rodape resume o estado do conjunto: quantos processos e qual a revisao mais recente.
+(function(){
+  const el = document.getElementById('rodapeVersao');
+  if (!el) return;
+  const maisRecente = CHAPTERS.map(c=>c.atualizado).sort().pop();
+  el.textContent = `${CHAPTERS.length} processos documentados · revisão mais recente em ${_dataBr(maisRecente)}`;
+})();
 
 const links = [...document.querySelectorAll('#tocList a')];
 const sections = [...document.querySelectorAll('section.chapter')];

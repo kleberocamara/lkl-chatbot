@@ -3,28 +3,52 @@
 Repositório dos processos documentados para treinamento de colaboradores e
 fornecedores.
 
-## Onde cada coisa mora
+## Os dois formatos
 
-| | Onde | Para quê |
-|---|---|---|
-| **Fonte da verdade** | `docs/processos/PO-XX-*.md`, neste repositório | Guarda o conteúdo. Toda alteração vira commit, com autor, data e histórico completo — é o que permite auditar o que mudou, quando e por quem. |
-| **Documento distribuído** | `docs/processos/PO-XX-*.pdf`, gerado do Markdown | O que vai para o colaborador e o fornecedor. Nunca editar o PDF direto: ele é descartável e se refaz do Markdown. |
+Um processo vive em **um** dos dois formatos, nunca nos dois — conteúdo duplicado
+sempre acaba divergindo.
 
-O PDF carimba versão, vigência e data da próxima revisão em **todas as páginas**.
-Quem tiver uma cópia antiga em mãos consegue perceber, sem consultar ninguém, que
-existe versão mais nova.
+### Manual (treinamento interno)
+
+O **Manual do Sistema**, em `public/manual.html`, é o módulo de treinamento dos
+colaboradores, acessível pelo item **📚 Treinamento** do painel. Cada capítulo é um
+processo, com código, versão e data de atualização exibidos no próprio capítulo.
+
+O conteúdo vive no array `CHAPTERS` do arquivo — já versionado em git, como o resto
+do sistema. Este índice é o registro formal: é aqui que se vê qual a versão vigente
+de cada processo e quando cada um deve ser revisto.
+
+### PDF (público externo ou material impresso)
+
+Para quem não tem acesso ao painel — fornecedores, por exemplo — o processo vira um
+`.md` neste diretório e um PDF gerado dele. O PDF carimba versão e vigência em todas
+as páginas, para que uma cópia antiga se denuncie sozinha.
+
+**Nunca edite o PDF direto**: ele se refaz do Markdown.
 
 ## Índice
 
-| Código | Processo | Versão | Vigência | Próxima revisão | Responsável |
-|---|---|---|---|---|---|
-| PO-01 | [Liberação de Acesso e Utilização do Portal do Fornecedor](PO-01-portal-fornecedor.md) | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| Código | Processo | Onde vive | Versão | Vigência | Próxima revisão | Responsável |
+|---|---|---|---|---|---|---|
+| PO-01 | [Liberação de Acesso e Utilização do Portal do Fornecedor](PO-01-portal-fornecedor.md) | PDF | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-02 | [Conversas com o bot](/manual#conversas) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-03 | [Pedido manual (balcão / vendedor)](/manual#pedidos) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-04 | [Validação, edição e envio do orçamento](/manual#orcamentos) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-05 | [Criação e envio de arte](/manual#artes) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-06 | [Criação da Ordem de Serviço (OS)](/manual#os) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-07 | [Melhor corte e baixa de materiais](/manual#formato) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-08 | [Esteira de produção](/manual#producao) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-09 | [Contas a pagar](/manual#contas-pagar) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-10 | [Cobranças — boleto, PIX e Mercado Pago](/manual#cobrancas) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-11 | [Geração de NF-e](/manual#nfe) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-12 | [Cadastros — fornecedores, clientes, materiais, funcionários e máquinas](/manual#cadastros) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-13 | [Liberação de acesso a usuários](/manual#usuarios) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 
 **A numeração nunca é reaproveitada.** Processo descontinuado permanece no índice
 marcado como tal; o próximo documento recebe o número seguinte. Reutilizar um
 código quebraria a rastreabilidade de treinamentos já realizados.
 
-## Como criar um processo novo
+## Como criar um processo novo (formato PDF)
 
 1. Reserve o próximo código livre acrescentando a linha no índice acima, antes de
    escrever — evita dois processos nascerem com o mesmo número.
@@ -42,14 +66,25 @@ python3 scripts/gerar-processo-pdf.py docs/processos/PO-XX-nome.md
 5. Commit do `.md` e do `.pdf` juntos, para que a versão distribuída sempre tenha a
    fonte correspondente no mesmo ponto do histórico.
 
+## Como criar um processo novo (formato Manual)
+
+1. Reserve o próximo código livre no índice acima.
+2. Acrescente o capítulo ao array `CHAPTERS` em `public/manual.html`, com
+   `codigo`, `versao:'1.0'`, `atualizado` (data de hoje), `roles`, `subtitle`,
+   `steps`, `tip` e `visual`.
+3. A posição no array define a ordem de leitura e a numeração exibida.
+
 ## Como revisar um processo existente
 
-Edite o `.md`, **suba a versão** no front matter, acrescente a linha no *Registro de
-revisões* ao final do documento dizendo o que mudou, regenere o PDF e atualize o
-índice acima.
+**No manual:** edite o capítulo, **suba o `versao`** e atualize o campo `atualizado`.
+Depois atualize a linha correspondente neste índice.
 
-Revisar sem subir a versão é o erro a evitar: passam a existir dois PDFs diferentes
-com o mesmo número de versão, e não há como saber qual está em uso.
+**Em PDF:** edite o `.md`, **suba a versão** no front matter, acrescente a linha no
+*Registro de revisões* ao final do documento, regenere o PDF e atualize o índice.
+
+Revisar sem subir a versão é o erro a evitar: passam a existir duas versões
+diferentes com o mesmo número, e ninguém consegue saber qual está valendo — nem
+quem treinou com qual.
 
 ## Convenções de escrita
 
@@ -62,9 +97,8 @@ com o mesmo número de versão, e não há como saber qual está em uso.
 
 ## Distribuição e acesso
 
-Os PDFs são enviados aos destinatários (colaboradores em treinamento, fornecedores
-no momento da liberação de acesso). Este repositório é o arquivo permanente, não o
-canal de distribuição: quem precisa da versão vigente consulta o índice acima.
+**Colaboradores** acessam o Manual pelo item **📚 Treinamento** do painel. É sempre a
+versão vigente, sem cópias circulando por e-mail.
 
-Fornecedor não tem acesso a este repositório — recebe apenas o PDF do processo que
-lhe diz respeito.
+**Fornecedores** não têm acesso ao painel nem a este repositório: recebem apenas o
+PDF do processo que lhes diz respeito, no momento da liberação de acesso.

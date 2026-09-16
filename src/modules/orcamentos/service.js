@@ -509,11 +509,26 @@ async function aprovar(id, aprovado_via) {
   return { orcamento };
 }
 
-async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } = {}) {
+// Sem acento e em minusculas, para "Estefania" achar "Estefânia". Feito em SQL
+// com translate() de proposito: nao depende da extensao unaccent estar instalada.
+const _SEM_ACENTO = (col) =>
+  `lower(translate(${col}, 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',`
+  + ` 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))`;
+
+async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id, busca } = {}) {
   const offset = (page - 1) * limit;
   const params = [];
   let where = 'WHERE 1=1';
 
+  // Busca no banco, e nao na lista ja carregada: o filtro antigo so enxergava a
+  // primeira pagina, entao orcamento antigo nunca aparecia por mais que se
+  // digitasse o nome certo.
+  if (busca && String(busca).trim()) {
+    params.push(`%${String(busca).trim()}%`);
+    const i = params.length;
+    where += ` AND (${_SEM_ACENTO('COALESCE(c.nome, \'\')')} LIKE ${_SEM_ACENTO(`$${i}`)}`
+      + ` OR o.numero::text LIKE $${i})`;
+  }
   if (status) { params.push(status); where += ` AND o.status = $${params.length}`; }
   if (vendedor_id) { params.push(vendedor_id); where += ` AND o.vendedor_id = $${params.length}`; }
   if (cliente_id) { params.push(cliente_id); where += ` AND o.cliente_id = $${params.length}`; }
@@ -540,7 +555,9 @@ async function listar({ page = 1, limit = 20, status, vendedor_id, cliente_id } 
        ${where} ORDER BY o.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, offset]
     ),
-    db.query(`SELECT COUNT(*) FROM orcamentos o ${where}`, params),
+    db.query(
+      `SELECT COUNT(*) FROM orcamentos o
+       LEFT JOIN clientes_lkl c ON c.id = o.cliente_id ${where}`, params),
   ]);
 
   // Inclui parcelas de boleto para cada orçamento

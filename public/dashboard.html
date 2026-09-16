@@ -1558,7 +1558,7 @@ function renderOrcChips() {
   if (!bar) return;
   bar.innerHTML = ORC_FILTER_CHIPS.map(c => {
     const n = c.key === 'todos'
-      ? orcamentosMainData.length
+      ? (_orcTotal || orcamentosMainData.length)
       : orcamentosMainData.filter(o => o.status === c.key).length;
     const active = orcStatusFilter === c.key;
     return `<button onclick="setOrcStatusFilter('${c.key}')"
@@ -1576,14 +1576,10 @@ function setOrcStatusFilter(key) {
 }
 
 function aplicarFiltrosOrc() {
-  const q = (document.getElementById('orc-search')?.value || '').toLowerCase().trim();
+  // A busca por texto é feita no servidor (ver loadOrcamentosMain); aqui fica só
+  // o filtro de status, que opera sobre o que já veio.
   let data = orcamentosMainData;
   if (orcStatusFilter !== 'todos') data = data.filter(o => o.status === orcStatusFilter);
-  if (q) data = data.filter(o =>
-    String(o.numero||'').includes(q) ||
-    (o.cliente_nome||'').toLowerCase().includes(q) ||
-    (o.status||'').includes(q)
-  );
   renderOrcamentoCards(data);
 }
 
@@ -2014,20 +2010,29 @@ async function adicionarItemOrc(orcId) {
   } else { showToast('❌ Erro ao adicionar: ' + (res?.erro?.[0]||'')); }
 }
 
-function filtrarOrcamentos() {
+async function loadOrcamentosMain({ manterBusca = false } = {}) {
+  const list = document.getElementById('orc-list-main');
+  const search = document.getElementById('orc-search');
+  if (!manterBusca && search) search.value = '';
+  const busca = (search?.value || '').trim();
+  list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Carregando...</p>';
+  // A busca vai para o servidor: filtrar só a página carregada escondia qualquer
+  // orçamento fora das 100 primeiras linhas, por mais certo que fosse o termo.
+  const url = '/api/v2/orcamentos?limit=100' + (busca ? '&busca=' + encodeURIComponent(busca) : '');
+  const res = await api(url);
+  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#c00;padding:40px">Erro ao carregar</p>'; return; }
+  orcamentosMainData = res.data || res;
+  _orcTotal = res.total != null ? res.total : orcamentosMainData.length;
+  renderOrcChips();
   aplicarFiltrosOrc();
 }
 
-async function loadOrcamentosMain() {
-  const list = document.getElementById('orc-list-main');
-  list.innerHTML = '<p style="text-align:center;color:#999;padding:40px">Carregando...</p>';
-  const res = await api('/api/v2/orcamentos?limit=100');
-  if (!res || res.error) { list.innerHTML = '<p style="text-align:center;color:#c00;padding:40px">Erro ao carregar</p>'; return; }
-  orcamentosMainData = res.data || res;
-  const search = document.getElementById('orc-search');
-  if (search) search.value = '';
-  renderOrcChips();
-  aplicarFiltrosOrc();
+// Digitar dispara consulta ao servidor; o atraso evita uma consulta por tecla.
+let _orcBuscaTimer = null;
+let _orcTotal = 0;
+function filtrarOrcamentos() {
+  clearTimeout(_orcBuscaTimer);
+  _orcBuscaTimer = setTimeout(() => loadOrcamentosMain({ manterBusca: true }), 350);
 }
 
 // ── OS (na nova página) ────────────────────────────────────────────────────────

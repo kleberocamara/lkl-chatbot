@@ -198,7 +198,7 @@ router.post('/', async (req, res) => {
 // GET / — list; vendedor sees only their own
 router.get('/', async (req, res) => {
   try {
-    const { page, limit, status, cliente_id } = req.query;
+    const { page, limit, status, cliente_id, busca } = req.query;
     let vendedor_id;
     if (req.user.role === 'vendedor') {
       vendedor_id = req.user.id;
@@ -209,6 +209,7 @@ router.get('/', async (req, res) => {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       status,
+      busca,
       vendedor_id,
       cliente_id,
     });

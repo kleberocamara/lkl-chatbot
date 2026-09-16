@@ -451,6 +451,42 @@ const CHAPTERS = [
     </div>
     <div class="mockup-card"><span class="mockup-btn" style="background:#1a237e">Criar Usuário</span></div>`,
 },
+{
+  codigo:'PO-14', versao:'1.0', atualizado:'2026-09-15',
+  id:'portal-fornecedor', emoji:'🤝', title:'Portal do Fornecedor — liberação e conferência', roles:['Admin','Gestor','Financeiro','Atendente'],
+  subtitle:'O lado da gráfica: liberar o acesso do fornecedor, conferir o que ele envia e transformar a entrega em conta a pagar.',
+  steps:[
+    'Cadastre o fornecedor em <b>Cadastros → Fornecedores</b>. O <b>e-mail é obrigatório</b> — é o login dele no portal, e sem ele o sistema recusa a liberação. Confira antes de seguir: e-mail errado manda o convite de acesso para terceiros.',
+    'No cadastro, acione <b>liberar acesso ao portal</b>. O sistema gera um convite de uso único, válido por <b>7 dias</b>, e envia por e-mail e — havendo celular cadastrado — também por WhatsApp. O fornecedor define a própria senha; a gráfica nunca a conhece nem deve pedi-la.',
+    'Convite vencido? Basta liberar de novo: o anterior é substituído, sem duplicar cadastro.',
+    'O fornecedor envia NF e boletos pelo portal. Cada envio é conferido na hora e entra na aba <b>Submissões de Fornecedores</b> já classificado: <i>Aguardando entrega</i> quando está tudo certo, <i>Pendente</i> quando há chave PIX ou linha digitável inválida ou NF repetida.',
+    'Se os dados bancários <b>divergirem da última submissão aceita</b>, a submissão trava em <i>Alerta de dado bancário</i> e só avança com aprovação de Admin ou Gestor.',
+    'Antes de aprovar um alerta, <b>confirme a mudança com o fornecedor pelo telefone que consta no cadastro</b> — nunca por um contato informado na mensagem que comunicou a alteração. É o principal controle antifraude do processo.',
+    'Quando a mercadoria chegar, lance a entrada em <b>Entrada NF-e</b> vinculada à submissão. Só nesse momento a submissão vira <i>aceita</i> e a <b>conta a pagar é gerada</b>, com valor, vencimento e linha digitável do boleto.',
+  ],
+  tip:'NF enviada não vira obrigação de pagamento — a conta a pagar só nasce na confirmação da entrega. Cobrança de fornecedor antes disso se responde com esta regra. O documento do fornecedor é o <b>PO-01</b>, entregue a ele na liberação do acesso.',
+  visual:`<div class="mockup-title">📥 Submissões de Fornecedores</div>
+    <div class="mockup-card"><div class="mockup-row">
+      <div class="mockup-dot" style="background:#c62828"></div>
+      <div style="flex:1"><div class="mockup-bar" style="width:62%"></div></div>
+      <span class="mockup-chip" style="background:#ffebee;color:#c62828">Alerta bancário</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row">
+      <div class="mockup-dot" style="background:#f57f17"></div>
+      <div style="flex:1"><div class="mockup-bar" style="width:74%"></div></div>
+      <span class="mockup-chip" style="background:#fff9c4;color:#f57f17">Pendente</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row">
+      <div class="mockup-dot" style="background:#1565c0"></div>
+      <div style="flex:1"><div class="mockup-bar" style="width:55%"></div></div>
+      <span class="mockup-chip" style="background:#e3f2fd;color:#1565c0">Aguardando entrega</span>
+    </div></div>
+    <div class="mockup-card"><div class="mockup-row">
+      <div class="mockup-dot" style="background:#2e7d32"></div>
+      <div style="flex:1"><div class="mockup-bar" style="width:48%"></div></div>
+      <span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Aceita</span>
+    </div></div>`,
+},
 ];
 
 function _dataBr(iso){

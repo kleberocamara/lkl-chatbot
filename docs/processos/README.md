@@ -43,6 +43,13 @@ as páginas, para que uma cópia antiga se denuncie sozinha.
 | PO-11 | [Geração de NF-e](/manual#nfe) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-12 | [Cadastros — fornecedores, clientes, materiais, funcionários e máquinas](/manual#cadastros) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-13 | [Liberação de acesso a usuários](/manual#usuarios) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-14 | [Portal do Fornecedor — liberação e conferência](/manual#portal-fornecedor) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+
+O **PO-01** e o **PO-14** cobrem o mesmo fluxo por lados opostos: o PO-01 é o
+documento entregue ao fornecedor, com os passos dele; o PO-14 é o capítulo de
+treinamento da equipe, com o que a gráfica faz. **Revisar um exige conferir o
+outro** — os dois descrevem as mesmas regras de negócio (prazo do convite, trava de
+dado bancário, conta a pagar só na entrega).
 
 **A numeração nunca é reaproveitada.** Processo descontinuado permanece no índice
 marcado como tal; o próximo documento recebe o número seguinte. Reutilizar um

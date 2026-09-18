@@ -40,7 +40,7 @@ as páginas, para que uma cópia antiga se denuncie sozinha.
 | PO-08 | [Esteira de produção](/manual#producao) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-09 | [Contas a pagar](/manual#contas-pagar) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-10 | [Cobranças — boleto, PIX e Mercado Pago](/manual#cobrancas) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
-| PO-11 | [Geração de NF-e](/manual#nfe) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
+| PO-11 | [Emissão, correção e cancelamento de NF-e](/manual#nfe) | Manual | 1.1 | 18/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-12 | [Cadastros — fornecedores, clientes, materiais, funcionários e máquinas](/manual#cadastros) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-13 | [Liberação de acesso a usuários](/manual#usuarios) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
 | PO-14 | [Portal do Fornecedor — liberação e conferência](/manual#portal-fornecedor) | Manual | 1.0 | 15/09/2026 | 15/03/2027 | Kleber Câmara |
@@ -109,3 +109,11 @@ versão vigente, sem cópias circulando por e-mail.
 
 **Fornecedores** não têm acesso ao painel nem a este repositório: recebem apenas o
 PDF do processo que lhes diz respeito, no momento da liberação de acesso.
+
+## Registro de revisões
+
+Alterações de processos do Manual (os PDFs têm registro próprio, no fim de cada documento).
+
+| Processo | Versão | Data | Alteração | Responsável |
+|---|---|---|---|---|
+| PO-11 | 1.1 | 18/09/2026 | Aba NF-e passa a listar por número da nota; incluídos PIX automático com QR, CC-e e cancelamento. Corrigida a dica que dizia que o sistema operava em homologação — as notas são de produção. | Kleber Câmara |

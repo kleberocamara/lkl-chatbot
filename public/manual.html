@@ -386,24 +386,33 @@ const CHAPTERS = [
     </div></div>`,
 },
 {
-  codigo:'PO-11', versao:'1.0', atualizado:'2026-09-15',
-  id:'nfe', emoji:'📄', title:'Geração de NF-e', roles:['Admin','Gestor','Financeiro'],
-  subtitle:'Emissão fiscal direto do orçamento, já validada com a SEFAZ.',
+  codigo:'PO-11', versao:'1.1', atualizado:'2026-09-18',
+  id:'nfe', emoji:'📄', title:'Emissão, correção e cancelamento de NF-e', roles:['Admin','Gestor','Financeiro'],
+  subtitle:'Emissão fiscal direto do orçamento aprovado, transmitida à SEFAZ em ambiente de produção — toda nota autorizada tem valor fiscal.',
   steps:[
-    'No orçamento (ou na aba <b>NF-e</b>), clique em <b>Emitir NF-e</b>.',
-    'Confira os itens, o CFOP e os dados do destinatário puxados automaticamente do cadastro do cliente.',
-    'Clique em <b>Emitir NF-e</b> no modal — o sistema monta o XML, assina digitalmente e transmite pra SEFAZ.',
-    'Acompanhe o status: <i>pendente → autorizada</i> (ou <i>erro</i>, com o motivo da rejeição pra corrigir e reemitir).',
-    'Depois de autorizada, baixe o <b>DANFE</b> (PDF) pra impressão ou envio ao cliente.',
+    'Na aba <b>NF-e</b>, os orçamentos aprovados ainda sem nota aparecem em <b>A faturar</b>. Clique em <b>Emitir NF-e</b>.',
+    'Escolha o <b>emitente</b> (Factor ou LKL), o CFOP e o frete, e informe a <b>condição de pagamento</b>. Confira o NCM de cada item e os dados do destinatário, puxados do cadastro do cliente.',
+    'Em venda <b>à vista por PIX</b>, a cobrança é gerada no C6 automaticamente na emissão e o <b>QR code sai impresso no DANFE</b> — não é preciso gerar o PIX antes. Se o banco não responder, a nota sai assim mesmo, com os dados bancários em texto no lugar do QR.',
+    'Depois de autorizada, a nota entra em <b>Notas emitidas</b>, identificada pelo <b>número da NF</b>. Para achar uma nota, busque pelo número, pelo nome do cliente, pelo número do orçamento ou do pedido, ou pelo CNPJ.',
+    'Erro que não altera valores (descrição, especificação do item, dados complementares)? Use <b>CC-e</b> — carta de correção. Ela <b>não pode</b> mudar valores, base de cálculo, alíquota, remetente, destinatário ou data. O PDF da carta fica no botão <b>Carta</b>.',
+    'Erro de valor, quantidade ou destinatário exige <b>Cancelar</b> e reemitir. O cancelamento só é aceito em até <b>24 horas</b> da autorização e pede justificativa de pelo menos 15 caracteres. Ajuste o orçamento e emita de novo — a nota cancelada continua na lista, riscada, para o histórico.',
   ],
-  tip:'O sistema já roda em homologação até a virada oficial pra produção — notas emitidas nesse modo não têm valor fiscal.',
+  tip:'Nota autorizada tem valor fiscal: confira valores e quantidades antes de emitir, porque depois disso a correção de valor só existe por cancelamento, e só dentro de 24 horas.',
   visual:`<div class="mockup-title">📄 NF-e</div>
-    <div class="mockup-card">
-      <div style="font-size:11px;font-weight:700;margin-bottom:8px">Emitir NF-e — Pedido #58</div>
-      <div class="mockup-row" style="margin-bottom:6px"><div class="mockup-bar" style="width:60%"></div></div>
-      <div class="mockup-row"><span class="mockup-btn" style="background:#1a237e">Emitir NF-e</span></div>
+    <div class="mockup-card" style="background:#fffaf2">
+      <div class="mockup-row" style="justify-content:space-between">
+        <span style="font-size:11px;font-weight:700">A faturar · Orç. 213</span>
+        <span class="mockup-btn" style="background:#1a237e">Emitir NF-e</span>
+      </div>
     </div>
-    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between"><span style="font-size:11px">NF 111</span><span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Autorizada</span></div></div>`,
+    <div class="mockup-card"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:15px;font-weight:700;color:#1a237e">952</span>
+      <span class="mockup-chip" style="background:#e8f5e9;color:#2e7d32">Autorizada</span>
+    </div></div>
+    <div class="mockup-card" style="opacity:.6"><div class="mockup-row" style="justify-content:space-between">
+      <span style="font-size:15px;font-weight:700;color:#1a237e;text-decoration:line-through">950</span>
+      <span class="mockup-chip" style="background:#fce4ec;color:#c62828">Cancelada</span>
+    </div></div>`,
 },
 {
   codigo:'PO-12', versao:'1.0', atualizado:'2026-09-15',

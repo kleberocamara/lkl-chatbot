@@ -884,7 +884,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📄</span><h2 style="margin:0">NF-e</h2></div>
       <div style="display:flex;gap:8px">
-        <input id="nfe-busca" placeholder="Buscar cliente / nº" oninput="renderNfeLista()" style="width:180px">
+        <input id="nfe-busca" placeholder="Nº da NF, cliente, orçamento ou CNPJ" oninput="buscarNfe()" style="width:280px">
         <button class="btn btn-outline" onclick="abrirInutilizarNfe()">Inutilizar numeração</button>
       </div>
     </div>
@@ -3929,56 +3929,113 @@ async function editarProdutoRevenda(p) {
 }
 
 // ── NF-e ───────────────────────────────────────────────────────────────────────
-let _nfeOrcs = [];
+// A aba lista as NOTAS, pelo número — que é como se procura uma NF para corrigir
+// ou cancelar. Orçamento aprovado ainda sem nota aparece à parte, em "A faturar".
+let _nfeNotas = [];
+let _nfeAFaturar = [];
 function _kpiCard(label, valor, cor) {
   return `<div style="background:var(--bg-secondary,#f5f5f7);border-radius:8px;padding:14px 16px">
     <div style="font-size:13px;color:#777">${label}</div>
     <div style="font-size:24px;font-weight:600;${cor?`color:${cor}`:''}">${valor}</div></div>`;
 }
 function _mesCorrente(d) { if (!d) return false; const x=new Date(d); const n=new Date(); return x.getMonth()===n.getMonth() && x.getFullYear()===n.getFullYear(); }
+
+const _EMITENTE_NFE = { '44448899000185': 'FACTOR', '19296723000108': 'LKL' };
+const _brl = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+const _dataBr = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
 async function loadNfeMain() {
-  const r = await api('/api/v2/orcamentos?limit=500');
-  if (!r || r.error) { document.getElementById('nfe-lista').innerHTML = '<p style="color:#c00;padding:20px">Erro ao carregar</p>'; return; }
-  const all = r.data || r;
-  _nfeOrcs = (Array.isArray(all) ? all : []).filter(o => ['concluido','entregue','aprovado'].includes(o.status) || o.tem_os_entregue || o.nfe_status);
+  const busca = (document.getElementById('nfe-busca')?.value || '').trim();
+  const [notas, orcs] = await Promise.all([
+    api('/api/v2/nfe?limit=300' + (busca ? '&busca=' + encodeURIComponent(busca) : '')),
+    api('/api/v2/orcamentos?limit=500'),
+  ]);
+  if (!Array.isArray(notas)) {
+    document.getElementById('nfe-lista').innerHTML = '<p style="color:#c00;padding:20px">Erro ao carregar as notas</p>';
+    return;
+  }
+  _nfeNotas = notas;
+  const todos = orcs?.data || (Array.isArray(orcs) ? orcs : []);
+  _nfeAFaturar = todos.filter(o => !o.nfe_status &&
+    (['concluido','entregue','aprovado'].includes(o.status) || o.tem_os_entregue));
   renderNfeKpis(); renderNfeLista();
 }
+
+// Digitar consulta o servidor: a busca alcança todas as notas, não só as carregadas.
+let _nfeBuscaTimer = null;
+function buscarNfe() {
+  clearTimeout(_nfeBuscaTimer);
+  _nfeBuscaTimer = setTimeout(loadNfeMain, 350);
+}
+
 function renderNfeKpis() {
-  const emitidas = _nfeOrcs.filter(o => o.nfe_status === 'autorizada');
-  const faturadoMes = emitidas.filter(o => _mesCorrente(o.updated_at || o.created_at)).reduce((s,o)=>s+Number(o.total||0),0);
-  const aFaturar = _nfeOrcs.filter(o => !o.nfe_status).length;
-  document.getElementById('nfe-kpis').innerHTML =
-    _kpiCard('Faturado no mês', 'R$ ' + faturadoMes.toLocaleString('pt-BR',{minimumFractionDigits:2})) +
-    _kpiCard('NF-e emitidas', emitidas.length) +
-    _kpiCard('A faturar', aFaturar, '#e65100');
+  // Com busca ativa os totais descreveriam só o recorte — por isso vêm do conjunto
+  // retornado apenas quando a busca está vazia.
+  const busca = (document.getElementById('nfe-busca')?.value || '').trim();
+  const aut = _nfeNotas.filter(n => n.status === 'autorizada');
+  const doMes = aut.filter(n => _mesCorrente(n.emitido_em));
+  document.getElementById('nfe-kpis').innerHTML = busca ? '' :
+    _kpiCard('Faturado no mês', _brl(doMes.reduce((s,n)=>s+Number(n.valor||0),0))) +
+    _kpiCard('NF-e emitidas no mês', doMes.length) +
+    _kpiCard('A faturar', _nfeAFaturar.length, '#e65100');
 }
-function _pillNfe(o) {
-  if (o.nfe_status === 'autorizada') return '<span style="font-size:11px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:20px">Emitida</span>';
-  return '<span style="font-size:11px;background:#f1f1f1;color:#777;padding:2px 8px;border-radius:20px">Sem NF</span>';
-}
-function renderNfeLista() {
-  const q = (document.getElementById('nfe-busca')?.value || '').toLowerCase();
-  const list = _nfeOrcs.filter(o => !q || (`${o.numero} ${o.cliente_nome||''}`.toLowerCase().includes(q)));
-  const box = document.getElementById('nfe-lista');
-  if (!list.length) { box.innerHTML = '<p style="color:#999;padding:20px">Nenhum orçamento a faturar</p>'; return; }
-  box.innerHTML = list.map(o => {
-    const acoes = o.nfe_status === 'autorizada'
-      ? `<a class="btn btn-outline" href="/api/v2/nfe/danfe/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">DANFE</a>
-         ${o.tem_cce ? `<a class="btn btn-outline" href="/api/v2/nfe/cce/${o.nfe_id}" target="_blank" style="padding:6px 10px;text-decoration:none">Carta</a>` : ''}
-         <a class="btn btn-outline" href="/api/v2/nfe/xml/${o.nfe_id}" style="padding:6px 10px;text-decoration:none">XML</a>
-         <button class="btn btn-outline" onclick="abrirCceNfe('${o.nfe_id}')" style="padding:6px 10px">CC-e</button>
-         <button class="btn btn-outline" onclick="abrirCancelarNfe('${o.nfe_id}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`
-      : `<button class="btn btn-primary" onclick="abrirEmitirNfe('${o.id}')" style="padding:6px 10px">Emitir NF-e</button>`;
-    return `<div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-bottom:8px">
-      <div style="width:40px;height:40px;border-radius:50%;background:#eef;display:flex;align-items:center;justify-content:center">📄</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600">#${o.numero||'—'} · ${escHtml(o.cliente_nome||'—')}</div>
-        <div style="font-size:12px;color:#777">${o.status} ${_pillNfe(o)}</div>
+
+function _linhaNota(n) {
+  const cancelada = n.status === 'cancelada';
+  const emit = _EMITENTE_NFE[n.cnpj_emitente] || n.cnpj_emitente;
+  const pill = cancelada
+    ? `<span style="font-size:11px;background:#fce4ec;color:#c62828;padding:2px 8px;border-radius:20px">Cancelada${n.cancelada_em ? ' em ' + _dataBr(n.cancelada_em) : ''}</span>`
+    : '<span style="font-size:11px;background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:20px">Autorizada</span>';
+  const cce = n.tem_cce ? '<span style="font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:20px">CC-e</span>' : '';
+  const origem = [n.orcamento_numero ? 'Orç. ' + n.orcamento_numero : '', n.pedido_numero ? 'Pedido ' + n.pedido_numero : '']
+    .filter(Boolean).join(' · ');
+  const btn = 'padding:6px 10px;text-decoration:none';
+  const acoes = `
+    <a class="btn btn-outline" href="/api/v2/nfe/danfe/${n.id}" target="_blank" style="${btn}">DANFE</a>
+    <a class="btn btn-outline" href="/api/v2/nfe/xml/${n.id}" style="${btn}">XML</a>
+    ${n.tem_cce ? `<a class="btn btn-outline" href="/api/v2/nfe/cce/${n.id}" target="_blank" style="${btn}">Carta</a>` : ''}
+    ${cancelada ? '' : `
+      <button class="btn btn-outline" onclick="abrirCceNfe('${n.id}')" style="padding:6px 10px">CC-e</button>
+      <button class="btn btn-outline" onclick="abrirCancelarNfe('${n.id}')" style="padding:6px 10px;color:#c62828">Cancelar</button>`}`;
+  return `<div style="background:#fff;border:0.5px solid #e8eaf6;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:16px;margin-bottom:8px;${cancelada ? 'opacity:.62' : ''}">
+    <div style="min-width:78px;text-align:center">
+      <div style="font-size:10px;color:#888;letter-spacing:.5px">NF-e · ${escHtml(emit)}</div>
+      <div style="font-size:22px;font-weight:700;color:#1a237e;line-height:1.1;${cancelada ? 'text-decoration:line-through' : ''}">${n.numero}</div>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(n.cliente_nome||'—')}</div>
+      <div style="font-size:12px;color:#777;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span>${_dataBr(n.emitido_em)}</span>${origem ? `<span>· ${origem}</span>` : ''} ${pill} ${cce}
       </div>
-      <div style="font-weight:600;white-space:nowrap">R$ ${Number(o.total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-      <div style="display:flex;gap:6px">${acoes}</div>
-    </div>`;
-  }).join('');
+    </div>
+    <div style="font-weight:600;white-space:nowrap">${_brl(n.valor)}</div>
+    <div style="display:flex;gap:6px">${acoes}</div>
+  </div>`;
+}
+
+function renderNfeLista() {
+  const q = (document.getElementById('nfe-busca')?.value || '').trim().toLowerCase();
+  const box = document.getElementById('nfe-lista');
+  // "A faturar" filtra localmente (poucas linhas); as notas já vêm filtradas do servidor
+  const aFaturar = _nfeAFaturar.filter(o => !q || `${o.numero} ${o.cliente_nome||''}`.toLowerCase().includes(q));
+  const titulo = t => `<div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px">${t}</div>`;
+  let html = '';
+  if (aFaturar.length) {
+    html += titulo(`A faturar (${aFaturar.length})`) + aFaturar.map(o => `
+      <div style="background:#fffaf2;border:0.5px solid #ffe0b2;border-radius:12px;padding:10px 16px;display:flex;align-items:center;gap:14px;margin-bottom:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600">Orç. ${o.numero||'—'} · ${escHtml(o.cliente_nome||'—')}</div>
+          <div style="font-size:12px;color:#777">${o.status}${o.pedido_numero ? ' · Pedido ' + o.pedido_numero : ''}</div>
+        </div>
+        <div style="font-weight:600;white-space:nowrap">${_brl(o.total)}</div>
+        <button class="btn btn-primary" onclick="abrirEmitirNfe('${o.id}')" style="padding:6px 10px">Emitir NF-e</button>
+      </div>`).join('');
+  }
+  html += titulo(q ? `Notas encontradas (${_nfeNotas.length})` : 'Notas emitidas');
+  html += _nfeNotas.length
+    ? _nfeNotas.map(_linhaNota).join('')
+    : '<p style="color:#999;padding:12px 4px">Nenhuma nota encontrada</p>';
+  box.innerHTML = html;
 }
 
 // ── NF-e AÇÕES ────────────────────────────────────────────────────────────────

@@ -196,6 +196,62 @@ async function emitir(orcamentoId, body) {
   }
 }
 
+// Lista as notas pelo que elas são — número, data, destinatário e valor — e não
+// pelo orçamento que as originou. O valor vem do vNF do XML autorizado, e não da
+// soma dos itens do orçamento: se o orçamento for ajustado depois de uma nota
+// cancelada (como o 213, cuja NF 950 saiu com R$ 20.025 e a substituta com
+// R$ 11.961), a nota antiga continua mostrando o que de fato foi declarado.
+const _SEM_ACENTO_NFE = (col) =>
+  `lower(translate(${col}, 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',`
+  + ` 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))`;
+
+async function listar({ busca, limit = 200 } = {}) {
+  const params = [];
+  let where = "WHERE n.status IN ('autorizada','cancelada')";
+  const termo = String(busca || '').trim();
+  if (/^\d{1,6}$/.test(termo)) {
+    // Número curto é número de NF, orçamento ou pedido — comparação exata. Um
+    // LIKE aqui também casaria qualquer chave de acesso que contenha os dígitos,
+    // e "950" traria uma lista de notas sem relação nenhuma.
+    params.push(Number(termo));
+    const i = params.length;
+    where += ` AND (n.numero = $${i} OR o.numero = $${i}`
+      + ` OR EXISTS (SELECT 1 FROM orders p WHERE p.orcamento_id = o.id AND p.numero_os = $${i}))`;
+  } else if (termo) {
+    const digitos = termo.replace(/\D/g, '');
+    params.push(`%${termo}%`);
+    const i = params.length;
+    let cond = `${_SEM_ACENTO_NFE("COALESCE(c.nome, '')")} LIKE ${_SEM_ACENTO_NFE(`$${i}`)}`;
+    if (digitos.length >= 7) {
+      // trecho de chave de acesso ou de CNPJ do destinatário
+      params.push(`%${digitos}%`);
+      const j = params.length;
+      cond += ` OR n.chave LIKE $${j} OR regexp_replace(COALESCE(c.cpf_cnpj,''), '\\D', '', 'g') LIKE $${j}`;
+    }
+    where += ` AND (${cond})`;
+  }
+  params.push(Math.min(parseInt(limit) || 200, 1000));
+  const r = await db.query(
+    `SELECT n.id, n.numero, n.serie, n.chave, n.protocolo, n.status, n.cnpj_emitente,
+            n.emitido_em, n.danfe_path,
+            NULLIF(substring(n.xml from '<vNF>([^<]+)</vNF>'), '')::numeric AS valor,
+            o.id AS orcamento_id, o.numero AS orcamento_numero,
+            (SELECT numero_os FROM orders WHERE orcamento_id = o.id ORDER BY created_at LIMIT 1) AS pedido_numero,
+            c.nome AS cliente_nome, c.cpf_cnpj AS cliente_documento,
+            EXISTS(SELECT 1 FROM nfe_eventos e WHERE e.nfe_id = n.id AND e.tipo = 'cc_e' AND e.c_stat = '135') AS tem_cce,
+            (SELECT e.criado_em FROM nfe_eventos e WHERE e.nfe_id = n.id AND e.tipo = 'cancelamento'
+               AND e.c_stat = '135' ORDER BY e.id DESC LIMIT 1) AS cancelada_em
+       FROM nfe n
+       LEFT JOIN orcamentos o ON o.id = n.orcamento_id
+       LEFT JOIN clientes_lkl c ON c.id = o.cliente_id
+       ${where}
+      ORDER BY n.emitido_em DESC NULLS LAST, n.numero DESC
+      LIMIT $${params.length}`,
+    params
+  );
+  return r.rows;
+}
+
 async function listarPorOrcamento(orcamentoId) {
   const r = await db.query(
     `SELECT id, cnpj_emitente, numero, serie, chave, protocolo, status,
@@ -316,4 +372,4 @@ async function inutilizar(body) {
   return { erro: [`SEFAZ ${resultado.c_stat}: ${resultado.x_motivo}`] };
 }
 
-module.exports = { emitir, listarPorOrcamento, cancelar, corrigir, inutilizar };
+module.exports = { emitir, listar, listarPorOrcamento, cancelar, corrigir, inutilizar };

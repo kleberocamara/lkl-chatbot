@@ -30,6 +30,16 @@ router.post('/:orcamento_id/emitir', requireRole('admin', 'operador'), async (re
   }
 });
 
+// Listagem das notas por número (aba NF-e). Fica antes de /:orcamento_id.
+router.get('/', requireRole('admin', 'operador'), async (req, res) => {
+  try {
+    res.json(await service.listar({ busca: req.query.busca, limit: req.query.limit }));
+  } catch (err) {
+    console.error('[NFE-LISTAR]', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.get('/:orcamento_id', requireRole('admin', 'operador'), async (req, res) => {
   try {
     const notas = await service.listarPorOrcamento(req.params.orcamento_id);

@@ -6,7 +6,7 @@ import tempfile
 from lxml import etree
 from signxml import XMLSigner, methods
 import requests
-from emitir import _extrair_cert_key, _XMLSignerSHA1
+from emitir import _extrair_cert_key, _XMLSignerSHA1, _sanitizar
 from emitentes import EMITENTES, NFE_AMBIENTE
 
 NS = 'http://www.portalfiscal.inf.br/nfe'
@@ -23,6 +23,31 @@ _CA_BUNDLE = os.path.join(os.path.dirname(__file__), 'sefaz_ca_bundle.pem')
 
 def _now_br():
     return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3)))
+
+
+def _texto_livre(texto, minimo, maximo, rotulo, separador=' '):
+    """Prepara texto digitado pelo usuario para um campo livre de evento.
+
+    xCorrecao e xJust seguem o pattern TString da SEFAZ: sem caractere de
+    controle. Quebra de linha do textarea derrubava o evento com Rejeicao 493
+    (CC-e da NF 840, com uma correcao por linha). Cada linha e limpa como no
+    xProd da emissao e as linhas sao unidas pelo separador — na CC-e, ' | ',
+    que preserva a leitura item a item e e o que o DACCE usa para quebrar linha.
+
+    Devolve (texto, erro). Texto acima do limite e recusado, nunca cortado: um
+    texto legal truncado registraria na SEFAZ uma correcao pela metade.
+    """
+    linhas = [_sanitizar(l) for l in str(texto or '').splitlines()]
+    final = separador.join(l for l in linhas if l)
+    if len(final) < minimo:
+        return None, f'{rotulo} deve ter pelo menos {minimo} caracteres'
+    if len(final) > maximo:
+        return None, (f'{rotulo} tem {len(final)} caracteres; o limite da SEFAZ e {maximo}. '
+                      'Abrevie o texto — uma CC-e posterior substitui a anterior por inteiro, '
+                      'entao nao da para dividir as correcoes em varias cartas.'
+                      if rotulo == 'Correção' else
+                      f'{rotulo} tem {len(final)} caracteres; o limite da SEFAZ e {maximo}.')
+    return final, None
 
 
 def _texto(parent, tag, text):
@@ -220,9 +245,9 @@ def cancelar_nfe(dados):
     """
     chave = dados['chave']
     cnpj  = dados['cnpj_emitente']
-    just  = dados['justificativa'].strip()
-    if len(just) < 15:
-        return {'erro': 'Justificativa deve ter pelo menos 15 caracteres'}
+    just, erro = _texto_livre(dados.get('justificativa'), 15, 255, 'Justificativa')
+    if erro:
+        return {'erro': erro}
 
     emitente = EMITENTES.get(cnpj)
     if not emitente:
@@ -273,11 +298,10 @@ def corrigir_nfe(dados):
     """
     chave    = dados['chave']
     cnpj     = dados['cnpj_emitente']
-    correcao = dados['correcao'].strip()
     n_seq    = int(dados.get('n_seq_evento', 1))
-
-    if len(correcao) < 15:
-        return {'erro': 'Correção deve ter pelo menos 15 caracteres'}
+    correcao, erro = _texto_livre(dados.get('correcao'), 15, 1000, 'Correção', separador=' | ')
+    if erro:
+        return {'erro': erro}
 
     emitente = EMITENTES.get(cnpj)
     if not emitente:
@@ -322,10 +346,9 @@ def inutilizar_nfe(dados):
     serie     = str(dados['serie']).zfill(3)
     n_ini     = int(dados['n_nf_ini'])
     n_fin     = int(dados['n_nf_fin'])
-    just      = dados['justificativa'].strip()
-
-    if len(just) < 15:
-        return {'erro': 'Justificativa deve ter pelo menos 15 caracteres'}
+    just, erro = _texto_livre(dados.get('justificativa'), 15, 255, 'Justificativa')
+    if erro:
+        return {'erro': erro}
     if n_fin < n_ini:
         return {'erro': 'n_nf_fin deve ser >= n_nf_ini'}
 

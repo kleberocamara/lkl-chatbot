@@ -54,22 +54,44 @@ def _bloco(c, y, altura, titulo):
 def _texto_quebrado(c, texto, x, y, max_w, size=7.5, line_h=4 * mm, max_linhas=None):
     """Escreve com quebra por largura; devolve o y após a última linha."""
     c.setFont('Helvetica', size)
-    linha, n = '', 0
-    for palavra in (texto or '').split():
-        teste = f'{linha} {palavra}'.strip()
-        if c.stringWidth(teste, 'Helvetica', size) > max_w:
+    n = 0
+    # ' | ' separa blocos (uma correcao por item): o XML nao aceita quebra de
+    # linha, entao e assim que a estrutura chega ate aqui.
+    for bloco in (texto or '').split(' | '):
+        linha = ''
+        for palavra in bloco.split():
+            teste = f'{linha} {palavra}'.strip()
+            if c.stringWidth(teste, 'Helvetica', size) > max_w:
+                c.drawString(x, y, linha)
+                y -= line_h
+                n += 1
+                linha = palavra
+                if max_linhas and n >= max_linhas:
+                    return y
+            else:
+                linha = teste
+        if linha:
             c.drawString(x, y, linha)
             y -= line_h
             n += 1
-            linha = palavra
-            if max_linhas and n >= max_linhas:
-                return y
-        else:
-            linha = teste
-    if linha:
-        c.drawString(x, y, linha)
-        y -= line_h
     return y
+
+
+def _contar_linhas(c, texto, max_w, size):
+    """Quantas linhas _texto_quebrado vai ocupar — para dimensionar o quadro."""
+    n = 0
+    for bloco in (texto or '').split(' | '):
+        linha = ''
+        for palavra in bloco.split():
+            teste = f'{linha} {palavra}'.strip()
+            if c.stringWidth(teste, 'Helvetica', size) > max_w:
+                n += 1
+                linha = palavra
+            else:
+                linha = teste
+        if linha:
+            n += 1
+    return n
 
 
 def gerar_dacce(xml_evento, output_path, emitente=None, destinatario=None, protocolo=None):
@@ -176,7 +198,10 @@ def gerar_dacce(xml_evento, output_path, emitente=None, destinatario=None, proto
     y -= alt + 3 * mm
 
     # ── correção (destaque) ──
-    alt = 34 * mm
+    # Altura pelo texto: uma CC-e com varias correcoes (uma por item) passava do
+    # quadro fixo e era desenhada por cima das condicoes de uso.
+    linhas = _contar_linhas(c, correcao, CW - 4 * mm, 9)
+    alt = max(34 * mm, 10 * mm + linhas * 5 * mm)
     yi = _bloco(c, y, alt, 'CORREÇÃO')
     _texto_quebrado(c, correcao, M + 2 * mm, yi, CW - 4 * mm, size=9, line_h=5 * mm)
     y -= alt + 3 * mm
